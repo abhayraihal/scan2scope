@@ -164,6 +164,38 @@ def to_world(xy: np.ndarray, yaw_deg: float = 0.0, shift: tuple[float, float] = 
     return xy @ np.array([[c, s], [-s, c]]) + np.asarray(shift)
 
 
+def truth_polygon(syn: Synth, room: str, yaw_deg: float = 0.0, shift: tuple[float, float] = (0.0, 0.0)):
+    """Union of a room's rectangles as a shapely polygon in world coordinates."""
+    from shapely.geometry import Polygon
+    from shapely.ops import unary_union
+
+    rects = [Polygon(to_world([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], yaw_deg, shift))
+             for x0, y0, x1, y1 in syn.rooms[room]]
+    return unary_union(rects)
+
+
+def opening_center(op: Opening, yaw_deg: float = 0.0, shift: tuple[float, float] = (0.0, 0.0)) -> np.ndarray:
+    mid = 0.5 * (op.u0 + op.u1)
+    xy = (op.wall_coord, mid) if op.wall_axis == "x" else (mid, op.wall_coord)
+    return to_world(np.array([xy]), yaw_deg, shift)[0]
+
+
+def cyclic_match(found: list[float], truth: list[float]) -> float:
+    """Largest error of found wall lengths against truth under the best cyclic shift (inf on a count mismatch)."""
+    if len(found) != len(truth):
+        return float("inf")
+    f, t = np.asarray(found), np.asarray(truth)
+    return float(min(np.abs(np.roll(f, k) - t).max() for k in range(len(f))))
+
+
+def overlap_area(polys: list[np.ndarray]) -> float:
+    from shapely.geometry import Polygon
+
+    shapes = [Polygon(p) for p in polys]
+    return float(sum(shapes[i].intersection(shapes[j]).area for i in range(len(shapes))
+                     for j in range(i + 1, len(shapes))))
+
+
 H = 2.6
 
 
