@@ -60,7 +60,7 @@ def m(v: float, kind: str = "length", unit: str = "m") -> Measurement:
 
 def layout(k_width: float = 0.8, b_width: float = 0.8, w_width: float = 0.7, entry: float = 0.9,
            swap_hall_doors: bool = False) -> list[Spec]:
-    """Hallway with a kitchen and a bedroom to the north, a bathroom to the south and an exterior entry door."""
+    """Hallway with a kitchen and a bedroom to the north, a bathroom to the south and an exterior door."""
     hall_doors = [
         (2, 6.0 - 1.0 - k_width, k_width, "02 kitchen"),
         (2, 6.0 - 4.0 - b_width, b_width, "03 bedroom"),
@@ -71,7 +71,8 @@ def layout(k_width: float = 0.8, b_width: float = 0.8, w_width: float = 0.7, ent
         hall_doors[0], hall_doors[1] = hall_doors[1], hall_doors[0]
     return [
         Spec("01 hallway", (0.0, 0.0, 6.0, 1.4), hall_doors),
-        Spec("02 kitchen", (0.0, 1.52, 3.0, 4.82), [(0, 1.0, k_width, "01 hallway")], windows=[(2, 1.0, 1.2)]),
+        Spec("02 kitchen", (0.0, 1.52, 3.0, 4.82), [(0, 1.0, k_width, "01 hallway")],
+             windows=[(2, 1.0, 1.2)]),
         Spec("03 bedroom", (3.12, 1.52, 6.6, 5.12), [(0, 4.0 - 3.12, b_width, "01 hallway")]),
         Spec("04 bathroom", (3.6, -2.32, 6.0, -0.12), [(2, 6.0 - 4.4 - w_width, w_width, "01 hallway")]),
     ]
@@ -80,7 +81,8 @@ def layout(k_width: float = 0.8, b_width: float = 0.8, w_width: float = 0.7, ent
 def symmetric_layout() -> list[Spec]:
     """Two rooms of the same size with identical doors, so swapping them is also a valid layout."""
     return [
-        Spec("01 hallway", (0.0, 0.0, 6.24, 1.4), [(2, 6.24 - 1.9, 0.8, "02 room"), (2, 6.24 - 5.14, 0.8, "03 room")]),
+        Spec("01 hallway", (0.0, 0.0, 6.24, 1.4),
+             [(2, 6.24 - 1.9, 0.8, "02 room"), (2, 6.24 - 5.14, 0.8, "03 room")]),
         Spec("02 room", (0.0, 1.52, 3.06, 4.52), [(0, 1.1, 0.8, "01 hallway")]),
         Spec("03 room", (3.18, 1.52, 6.24, 4.52), [(0, 4.34 - 3.18, 0.8, "01 hallway")]),
     ]
@@ -94,7 +96,13 @@ class Capture:
     local_from_true: dict[str, tuple[np.ndarray, float, float]]  # hint -> (2-D similarity, z0, scale)
 
 
-def make_capture(specs: list[Spec], seed: int, *, scale: dict[str, float] | None = None) -> Capture:
+def make_capture(specs: list[Spec], seed: int, *, scale: dict[str, float] | None = None,
+                 wall_noise: float = 0.0, door_noise: float = 0.0) -> Capture:
+    """Scenes and single-room plans in random per-room frames.
+
+    wall_noise and door_noise (metres, 1 sigma) perturb what the layout reports (each wall position, door
+    centre along the wall, door width), not reality.
+    """
     rng = np.random.default_rng(seed)
     cap = Capture([], [], {}, {})
     for spec in specs:
@@ -109,9 +117,11 @@ def make_capture(specs: list[Spec], seed: int, *, scale: dict[str, float] | None
             return apply2(S, p)
 
         poly = rect_polygon(spec.rect)
+        rect_p = tuple(np.asarray(spec.rect) + rng.normal(0.0, wall_noise, 4)) if wall_noise else spec.rect
+        poly_p = rect_polygon(rect_p)
         walls = []
         for k in range(4):
-            a, b = poly[k], poly[(k + 1) % 4]
+            a, b = poly_p[k], poly_p[(k + 1) % 4]
             d = (b - a) / np.linalg.norm(b - a)
             walls.append(Wall(f"R1-W{k + 1}", "R1", loc(a), loc(b), m(s * np.linalg.norm(b - a)),
                               m(s * CEILING, "height"), Rotation.from_euler("z", theta).as_matrix()[:2, :2]
@@ -123,9 +133,12 @@ def make_capture(specs: list[Spec], seed: int, *, scale: dict[str, float] | None
             d = (b - a) / np.linalg.norm(b - a)
             n_in = np.array([-d[1], d[0]])
             c = a + d * (off + width / 2)
-            openings.append(Opening(f"R1-O{k + 1}", "R1", f"R1-W{wi + 1}", "door", m(s * off, "offset"),
-                                    m(s * width, "width"), m(s * DOOR_H, "height"), center=loc(c),
-                                    confidence=0.9))
+            a_p = poly_p[wi]
+            w_p = width + (rng.normal(0.0, door_noise / 2) if door_noise else 0.0)
+            along = (c - a_p) @ d + (rng.normal(0.0, door_noise) if door_noise else 0.0)
+            openings.append(Opening(f"R1-O{k + 1}", "R1", f"R1-W{wi + 1}", "door",
+                                    m(s * (along - w_p / 2), "offset"), m(s * w_p, "width"),
+                                    m(s * DOOR_H, "height"), center=loc(a_p + d * along), confidence=0.9))
             depth = min(1.5, abs((poly - a) @ n_in).max() - 0.3)
             cam = np.r_[c + depth * n_in, 1.4]
             door_views.append((look_at(cam, np.r_[c - 1.0 * n_in, 1.3]), leads))
@@ -163,10 +176,11 @@ def make_capture(specs: list[Spec], seed: int, *, scale: dict[str, float] | None
         P = np.asarray(pts) @ S3[:3, :3].T + S3[:3, 3]
         N = np.asarray(nrm) @ Rotation.from_euler("z", theta).as_matrix().T
         cap.scenes.append(Scene("photo", views, P.astype(np.float32), N.astype(np.float32), np.ones(len(P)),
-                                np.zeros(len(P), int), room_hint=spec.hint, meta={"quality": {"n_views": len(views)}}))
-        area = (spec.rect[2] - spec.rect[0]) * (spec.rect[3] - spec.rect[1])
-        x0, y0, x1, y1 = spec.rect
-        room = Room("R1", spec.hint.split(" ", 1)[1], loc(poly), walls, openings, z0, z0 + s * CEILING,
+                                np.zeros(len(P), int), room_hint=spec.hint,
+                                meta={"quality": {"n_views": len(views)}}))
+        x0, y0, x1, y1 = rect_p
+        area = (x1 - x0) * (y1 - y0)
+        room = Room("R1", spec.hint.split(" ", 1)[1], loc(poly_p), walls, openings, z0, z0 + s * CEILING,
                     m(s * CEILING, "height"), m(s * s * area, "area", "m2"),
                     m(s * 2 * ((x1 - x0) + (y1 - y0))), view_ids=[v.id for v in views], source_hint=spec.hint)
         cap.plans.append(Plan([room], [], m(s * s * area, "area", "m2"), m(0.0), m(0.0), flags=["layout_ok"],
@@ -213,7 +227,7 @@ def no_runner(views, key, cache):
     raise AssertionError("the runner must not be called")
 
 
-# --- checks ----------------------------------------------------------------------------------------------------
+# --- checks ------------------------------------------------------------------------------------------
 
 def align_to_truth(plan: Plan, specs: list[Spec]) -> np.ndarray:
     by_hint = {r.source_hint: r for r in plan.rooms}
@@ -228,8 +242,8 @@ def align_to_truth(plan: Plan, specs: list[Spec]) -> np.ndarray:
 def centre_errors(plan: Plan, specs: list[Spec]) -> dict[str, float]:
     T = align_to_truth(plan, specs)
     by_hint = {r.source_hint: r for r in plan.rooms}
-    return {s.hint: float(np.linalg.norm(apply2(T, by_hint[s.hint].polygon).mean(0) - rect_polygon(s.rect).mean(0)))
-            for s in specs}
+    return {s.hint: float(np.linalg.norm(apply2(T, by_hint[s.hint].polygon).mean(0)
+                                         - rect_polygon(s.rect).mean(0))) for s in specs}
 
 
 def max_overlap(plan: Plan) -> float:
@@ -251,7 +265,7 @@ def uncertain_rooms(plan: Plan) -> set[str]:
     return {hint[f.split(":", 1)[1]] for f in plan.flags if f.startswith("placement_uncertain:")}
 
 
-# --- end-to-end ------------------------------------------------------------------------------------------------
+# --- end-to-end --------------------------------------------------------------------------------------
 
 def test_doorway_photos_recover_layout(tmp_path):
     specs = layout()  # kitchen and bedroom doors are identical, so door matching alone cannot tell them apart
@@ -377,7 +391,8 @@ def test_room_geometry_resolves_identical_doors_and_repairs_greedy_choice():
 
 def test_unplaceable_rooms_are_flagged_and_placed_without_overlap():
     specs = layout(k_width=0.8, b_width=1.02, w_width=0.62, entry=1.2)
-    specs.append(Spec("05 closet", (0.0, 0.0, 1.0, 1.0), [(0, 0.3, 0.45, None)]))  # no compatible door anywhere
+    # the closet has no compatible door anywhere
+    specs.append(Spec("05 closet", (0.0, 0.0, 1.0, 1.0), [(0, 0.3, 0.45, None)]))
     # the study's door only matches doors that are taken, and matches them worse than the rooms behind them
     specs.append(Spec("06 study", (0.0, 0.0, 4.0, 4.0), [(0, 1.0, 0.74, None)]))
     cap = make_capture(specs, seed=5)
@@ -405,6 +420,61 @@ def test_relative_scale_disagreement_is_flagged_not_applied():
     assert bath.floor_area.value == pytest.approx(1.25 ** 2 * 2.4 * 2.2)  # not rescaled
     assert plan.meta["stitch"]["relative_scale"]["R4"] == pytest.approx(1.25, rel=0.05)
     assert adjacency_hints(plan) == true_adjacency(specs)
+
+
+def test_layout_noise_keeps_adjacency_and_raw_polygons_apart():
+    specs = layout()
+    cap = make_capture(specs, seed=128, wall_noise=0.06, door_noise=0.05)
+    runner = fake_runner(cap, specs, seed=28, noise_pos=0.05, noise_deg=2.0)
+    plan, _ = stitch_rooms(cap.scenes, cap.plans, None, runner=runner)
+    assert adjacency_hints(plan) == true_adjacency(specs)
+    assert not uncertain_rooms(plan), plan.flags
+    assert max_overlap(plan) <= 0.05
+    assert max(centre_errors(plan, specs).values()) < 0.25
+
+
+def test_overlap_from_an_oversized_room_is_nudged_and_flagged():
+    specs = layout(k_width=0.8, b_width=1.02, w_width=0.62, entry=0.92)
+    cap = make_capture(specs, seed=15)
+    # the layout made the kitchen 25 cm too wide on the bedroom side: the bedroom has to slide to fit
+    wide = [Spec(s.hint, (s.rect[0], s.rect[1], s.rect[2] + 0.25, s.rect[3]), s.doors, s.windows)
+            if s.hint == "02 kitchen" else s for s in specs]
+    cap.plans[1] = make_capture(wide, seed=15).plans[1]
+    plan, _ = stitch_rooms(cap.scenes, cap.plans, None, use_doorway_photos=False)
+    assert adjacency_hints(plan) == true_adjacency(specs)
+    assert "placement_adjusted:R3" in plan.flags or "placement_adjusted:R2" in plan.flags, plan.flags
+    assert max_overlap(plan) <= 0.05
+    edge = next(e for e in plan.meta["stitch"]["edges"] if "placement_adjusted:" + e["child"] in plan.flags)
+    assert 0.0 < edge["nudge_m"] <= 0.36
+
+
+def test_facing_doors_after_placement_add_loop_adjacency():
+    # kitchen and bedroom also share a door, which no tree edge uses
+    specs = layout(k_width=0.8, b_width=1.02, w_width=0.62, entry=0.92)
+    specs[1] = Spec("02 kitchen", (0.0, 1.52, 3.0, 4.82),
+                    [(0, 1.0, 0.8, "01 hallway"), (1, 2.0, 0.7, "03 bedroom")])
+    specs[2] = Spec("03 bedroom", (3.12, 1.52, 6.6, 5.12),
+                    [(0, 0.88, 1.02, "01 hallway"), (3, 3.6 - 2.7, 0.7, "02 kitchen")])
+    cap = make_capture(specs, seed=16)
+    plan, _ = stitch_rooms(cap.scenes, cap.plans, None, use_doorway_photos=False)
+    assert adjacency_hints(plan) == true_adjacency(specs)
+    assert len(plan.adjacency) == 4
+    kb = [a for a in plan.adjacency if {a.room_a, a.room_b} == {"R2", "R3"}]
+    assert len(kb) == 1 and kb[0].opening_a == "R2-O2" and kb[0].opening_b == "R3-O2"
+    assert plan.rooms[1].openings[1].connects_to == "R3" and plan.rooms[2].openings[1].connects_to == "R2"
+
+
+def test_doorway_photo_places_a_room_whose_layout_missed_the_door():
+    specs = layout(k_width=0.8, b_width=1.02, w_width=0.62, entry=0.92)
+    cap = make_capture(specs, seed=17)
+    cap.plans[3].rooms[0].openings = []  # the bathroom's layout found no door
+    plan, _ = stitch_rooms(cap.scenes, cap.plans, None, runner=fake_runner(cap, specs, seed=3))
+    assert adjacency_hints(plan) == true_adjacency(specs)
+    bath = next(a for a in plan.adjacency if "R4" in (a.room_a, a.room_b))
+    assert bath.source == "doorway_photo" and bath.opening_b is None and bath.opening_a == "R1-O3"
+    assert plan.rooms[0].openings[2].connects_to == "R4"
+    assert max(centre_errors(plan, specs).values()) < 0.15
+    assert max_overlap(plan) <= 0.05
 
 
 def test_runner_failure_falls_back_to_door_matching():
@@ -448,7 +518,7 @@ def test_degenerate_inputs_do_not_crash():
     assert scenes[2].meta["stitch"]["room_id"] is None
 
 
-# --- unit tests ------------------------------------------------------------------------------------------------
+# --- unit tests --------------------------------------------------------------------------------------
 
 def _door(c, n, w=0.8, kind="door") -> Door:
     return Door("X", kind, np.asarray(c, float), np.asarray(n, float) / np.linalg.norm(n), w, 2.0, 0.9)
@@ -513,7 +583,8 @@ def test_doorway_photo_detection_picks_the_view_through_each_door():
     cap = make_capture(specs, seed=13)
     for spec, scene, plan in zip(specs, cap.scenes, cap.plans):
         r = plan.rooms[0]
-        sr = StitchRoom(0, "R1", spec.hint, r, scene, room_manhattan(r), room_doors(r), np.asarray(r.polygon).mean(0))
+        sr = StitchRoom(0, "R1", spec.hint, r, scene, room_manhattan(r), room_doors(r),
+                        np.asarray(r.polygon).mean(0))
         photos = find_doorway_photos(sr)
         assert len(photos) == len(spec.doors)
         for p in photos:
@@ -554,6 +625,38 @@ def test_as_predictions_accepts_objects_dicts_and_batches():
         assert len(preds) == 3 and preds[0].T_wc.shape == (4, 4) and preds[0].pts3d.shape == (4, 5, 3)
     assert as_predictions([SimpleNamespace(T_wc=np.eye(4))] * 2, 3) is None
     assert as_predictions(None, 3) is None
+
+
+@pytest.mark.ml
+def test_default_runner_returns_one_pose_per_view(tmp_path):
+    pytest.importorskip("scan2scope.geometry.mapanything_backend")
+    from PIL import Image
+
+    from scan2scope.config import setup_env
+    from scan2scope.stitch.doorway import mapanything_runner, run_key
+
+    setup_env()
+    try:
+        from scan2scope.cache import OutputCache
+
+        cache = OutputCache(mode="off", root=tmp_path / "cache")
+    except ImportError:
+        cache = None
+    rng = np.random.default_rng(0)
+    views = []
+    yy, xx = np.mgrid[0:240, 0:320]
+    for i in range(3):
+        img = np.stack([(xx + 20 * i) % 256, (yy * 2) % 256, (xx + yy) % 256], -1).astype(np.uint8)
+        rows = rng.integers(0, 200, 30)[:, None] + np.arange(8)
+        cols = rng.integers(0, 300, 30)[:, None] + np.arange(8)
+        img[rows, cols] = 255
+        path = tmp_path / f"{i}.png"
+        Image.fromarray(img).save(path)
+        K = np.array([[260.0, 0.0, 160.0], [0.0, 260.0, 120.0], [0.0, 0.0, 1.0]])
+        views.append(CameraView(f"v{i}", path, 320, 240, K, np.eye(4)))
+    preds = as_predictions(mapanything_runner(views, run_key(views), cache), 3)
+    assert preds is not None and len(preds) == 3
+    assert all(p.T_wc.shape == (4, 4) and np.isfinite(p.T_wc).all() for p in preds)
 
 
 def test_inverse_and_rigid_helpers():
