@@ -240,6 +240,21 @@ def test_soft_class_merge_takes_the_class_with_the_most_evidence():
     assert m.score == pytest.approx(1 - 0.6 * 0.65 * 0.7)  # noisy-OR of the crack scores of the three views
 
 
+def test_pieces_of_one_long_crack_merge_into_its_whole_length():
+    # three views each see part of a 1.6 m crack under the ceiling; the thin boxes barely overlap by area
+    pieces = [((0.5, 1.1), (2.40, 2.46)), ((1.08, 1.6), (2.42, 2.47)), ((1.62, 2.1), (2.41, 2.45))]
+    obs = []
+    for k, (u, v) in enumerate(pieces):
+        o = _obs(f"v{k}", cls="crack", u=u, v=v, score=0.3)
+        o.length = u[1] - u[0]
+        obs.append(o)
+    merged, _ = merge_damage(obs)
+    assert len(merged) == 1 and merged[0].evidence["n_views"] == 3
+    assert merged[0].length == pytest.approx(1.6, abs=1e-6) and merged[0].u_range == pytest.approx((0.5, 2.1))
+    far = _obs("v3", cls="crack", u=(3.0, 3.4), v=(2.4, 2.45), score=0.6)  # 0.9 m further along: another crack
+    assert sorted(m.u_range[0] for m in merge_damage(obs + [far])[0]) == pytest.approx([0.5, 3.0])
+
+
 def test_soft_class_merge_needs_more_overlap_across_classes():
     # a crack and a stain next to each other on one wall (centres 0.25 m apart, IoU 0) stay apart
     a = _obs("v1", cls="crack", u=(1.0, 1.1), v=(1.0, 1.3), score=0.6)

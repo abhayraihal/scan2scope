@@ -29,6 +29,9 @@ class MergeConfig:
     drop_single_view_objects: bool = True
     soft_class: bool = True  # observations of different classes may merge; summed class scores pick the class
     cross_class_min_iou: float = 0.3  # uv box IoU needed to merge observations of different classes
+    # cracks are thin, so their boxes rarely overlap by area: two crack observations merge when their boxes,
+    # grown by this much, touch, and the merged crack is at least as long as the longer side of their union
+    crack_touch_m: float = 0.05
 
 
 @dataclass
@@ -132,6 +135,9 @@ def _match(a: DamageObservation, b: DamageObservation, cfg: MergeConfig) -> floa
     dist = float(np.linalg.norm(a.center - b.center))
     if a.cls != b.cls:
         return iou - 0.01 * dist if cfg.soft_class and iou >= cfg.cross_class_min_iou else None
+    if a.cls == "crack":
+        g = np.array([-1.0, -1.0, 1.0, 1.0]) * cfg.crack_touch_m
+        return iou - 0.01 * dist if box_iou(a.box + g, b.box + g) > 0 else None
     if iou > cfg.min_iou or dist <= cfg.max_center_dist:
         return iou - 0.01 * dist
     return None
@@ -232,10 +238,14 @@ def merge_damage(obs: list[DamageObservation], cfg: MergeConfig | None = None
         }
         if best.phrase_scores:
             evidence["phrase_scores"] = [round(float(x), 4) for x in np.mean([o.phrase_scores for o in ms], 0)]
+        length = float(np.median([o.length for o in ms]))
+        width, height = float(np.median([o.width for o in ms])), float(np.median([o.height for o in ms]))
+        if cls == "crack":  # views see different pieces of a long crack: the union is the crack
+            length = max(length, u1 - u0, v1 - v0)
+            width, height = u1 - u0, v1 - v0
         merged.append(MergedDamage(
             cls=cls, room_id=best.room_id, surface_id=best.surface_id, kind=best.kind, score=score,
-            area=float(np.median(areas)), width=float(np.median([o.width for o in ms])),
-            height=float(np.median([o.height for o in ms])), length=float(np.median([o.length for o in ms])),
+            area=float(np.median(areas)), width=width, height=height, length=length,
             u_range=(u0, u1), v_range=(v0, v1), view_ids=[o.view_id for o in ms], evidence=evidence))
     return merged, dropped
 
