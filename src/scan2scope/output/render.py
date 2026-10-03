@@ -41,7 +41,8 @@ SOFT = "#5a5a5a"
 DAMAGE = "#d0021b"
 UNCERTAIN = "#c26a00"
 WINDOW_FILL = "#e3f0fb"
-RC = {"svg.fonttype": "none", "font.family": "DejaVu Sans", "hatch.linewidth": 0.6}
+# A fixed hash salt and no date keep the SVG files byte-identical between runs of the same result.
+RC = {"svg.fonttype": "none", "svg.hashsalt": "scan2scope", "font.family": "DejaVu Sans", "hatch.linewidth": 0.6}
 LABEL_BOX = {"boxstyle": "square,pad=0.12", "fc": "white", "ec": "none", "alpha": 0.8}
 
 
@@ -534,12 +535,17 @@ def render_all(result: dict[str, Any], out_dir: str | Path) -> dict[str, Any]:
             try:  # matplotlib draws inside savefig, so saving is part of the guarded work
                 fig = _figure(result, shown, shapes if sheet is None else [], sheet=sheet, skip_swing=skip)
                 for path, fmt in targets:
-                    fig.savefig(path, format=fmt, dpi=PNG_DPI, facecolor="white")
+                    _save(fig, path, fmt)
             except Exception as exc:  # a drawing that fails must not stop the run
                 errors.append(f"{name}: {type(exc).__name__}: {exc}")
                 log.warning("drawing %s failed: %s", name, exc, exc_info=log.isEnabledFor(logging.DEBUG))
                 fig = _error_figure(f"{type(exc).__name__}: {exc}")
                 for path, fmt in targets:
-                    fig.savefig(path, format=fmt, dpi=PNG_DPI, facecolor="white")
+                    _save(fig, path, fmt)
             files += [path for path, _ in targets]
     return {"files": files, "errors": errors}
+
+
+def _save(fig: Figure, path: Path, fmt: str) -> None:
+    meta = {"Date": None} if fmt == "svg" else None
+    fig.savefig(path, format=fmt, dpi=PNG_DPI, facecolor="white", metadata=meta)

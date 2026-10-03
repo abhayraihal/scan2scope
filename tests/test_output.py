@@ -218,6 +218,15 @@ def test_render_writes_plan_and_room_sheets(tmp_path):
     assert "R1-W3" in sheet and "R2 kitchen" not in sheet
 
 
+def test_same_input_gives_identical_result_and_files(tmp_path):
+    a, b = build(), build()
+    assert a == b
+    for d in ("a", "b"):
+        render.render_all(a, tmp_path / d)
+    for name in ("plan.svg", "plan.png", "rooms/R1.svg", "rooms/R2.svg"):
+        assert (tmp_path / "a" / name).read_bytes() == (tmp_path / "b" / name).read_bytes(), name
+
+
 def test_wall_labels_outside_exterior_walls_and_inside_own_room_on_shared_walls():
     res = build()
     rooms = [render._parse_room(r, "#ffffff", False) for r in res["rooms"]]
