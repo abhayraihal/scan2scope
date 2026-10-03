@@ -555,3 +555,14 @@ def test_degenerate_room_polygon_does_not_break_the_view(tmp_path):
     res = analyze([scene], plan, None, detector=ScriptedDetector(script), segmenter=FakeSegmenter())
     assert [d.surface_id for d in res.damage] == ["R1-W3"]
     assert not any(f.startswith("semantics_view_failed") for f in res.flags)
+
+
+def test_one_photo_in_two_scenes_counts_once(tmp_path):
+    plan = make_plan(rect_room())
+    a = _scene_with_images(tmp_path, [(2.0, 1.0, 1.2)])
+    b = _scene_with_images(tmp_path, [(2.0, 1.0, 1.2)])  # same file, e.g. a doorway photo kept in both rooms
+    stain = rect_on_wall_y(3.0, 1.6, 2.4, 0.9, 1.5)
+    script = {"v0": {"damage": [(_working_box(stain, a.views[0]), "water stain", 0.6)]}}
+    res = analyze([a, b], plan, None, detector=ScriptedDetector(script), segmenter=FakeSegmenter())
+    assert res.stats["views_used"] == 1 and res.stats["views_skipped"]["duplicate_image"] == 1
+    assert len(res.damage) == 1 and res.damage[0].score == pytest.approx(0.6)

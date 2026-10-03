@@ -219,9 +219,20 @@ def analyze(scenes: list[Scene], plan: Plan, work_dir: str | Path | None, *, cac
         return res
     views: list[CameraView] = []
     skipped_total: dict[str, int] = {}
+    seen: set[str] = set()
     for scene in scenes:
         vs, skipped = select_views(scene.views, cfg.max_views_per_scene)
-        views += vs
+        for v in vs:  # one photo registered into two rooms is still one observation
+            try:
+                sha = file_sha256(v.image_path)
+            except OSError:
+                skipped["no_image"] = skipped.get("no_image", 0) + 1
+                continue
+            if sha in seen:
+                skipped["duplicate_image"] = skipped.get("duplicate_image", 0) + 1
+                continue
+            seen.add(sha)
+            views.append(v)
         for k, n in skipped.items():
             skipped_total[k] = skipped_total.get(k, 0) + n
     res.stats["views_used"] = len(views)
