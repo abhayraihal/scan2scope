@@ -15,6 +15,7 @@ import datetime as _dt
 import logging
 import shutil
 from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 
 import numpy as np
@@ -44,20 +45,38 @@ def generate_benchmark(out: str | Path, n_properties: int = 4, seed: int = 0, *,
     states = np.random.SeedSequence(seed).generate_state(max(n_properties, 0))
     jobs = [(out / f"synth_{k}", k, int(states[k]), fps, max_frames, rgb_scale, overwrite)
             for k in range(n_properties)]
+    summaries = None
     if workers > 1 and len(jobs) > 1:
-        with ProcessPoolExecutor(max_workers=workers) as pool:
-            summaries = list(pool.map(_property_job, jobs))
-    else:
+        try:
+            with ProcessPoolExecutor(max_workers=workers, initializer=_init_worker,
+                                     initargs=(log.getEffectiveLevel(),)) as pool:
+                summaries = list(pool.map(_property_job, jobs))
+        except BrokenProcessPool as exc:  # e.g. a calling script without a __main__ guard under spawn
+            log.warning("worker pool failed (%s); generating sequentially", exc)
+    if summaries is None:
         summaries = [_property_job(job) for job in jobs]
-    for s in summaries:
-        log.info("%s: %s, %d rooms, captures %s", s["property"], s["template"], s["rooms"], s["captures"])
-    return [job[0] for job in jobs]
+    done = []
+    for job, s in zip(jobs, summaries):
+        if "error" in s:
+            log.error("%s failed: %s", s["property"], s["error"])
+            continue
+        log.info("%s: %s, %d rooms, frames %s", s["property"], s["template"], s["rooms"], s["captures"])
+        done.append(job[0])
+    return done
+
+
+def _init_worker(level: int) -> None:
+    logging.basicConfig(level=level, format="%(asctime)s %(levelname)s %(name)s: %(message)s", datefmt="%H:%M:%S")
 
 
 def _property_job(job: tuple) -> dict:
     path, index, seed, fps, max_frames, rgb_scale, overwrite = job
-    return generate_property(path, index, seed, fps=fps, max_frames=max_frames, rgb_scale=rgb_scale,
-                             overwrite=overwrite)
+    try:
+        return generate_property(path, index, seed, fps=fps, max_frames=max_frames, rgb_scale=rgb_scale,
+                                 overwrite=overwrite)
+    except Exception as exc:  # one bad property must not stop the others
+        log.exception("property %s", path.name)
+        return {"property": path.name, "error": f"{type(exc).__name__}: {exc}"}
 
 
 def generate_property(path: str | Path, index: int, seed: int, *, fps: float = 10.0, max_frames: int | None = None,
