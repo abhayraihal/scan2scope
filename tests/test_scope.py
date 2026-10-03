@@ -159,3 +159,39 @@ def test_unknown_surface_skips_whole_surface_items(plan):
     d = region("D1", "water_stain", "R9-W1", (1.0, 1.5), (1.0, 1.4), room_id="R9")
     items = generate(plan, [d], [])
     assert items_by(items, ("PNT", "SEAL")) and not items_by(items, ("PNT", "P"))
+
+
+def test_outputs_fit_the_result_schema(plan):
+    import json
+    from pathlib import Path
+
+    import jsonschema
+    import numpy as np
+
+    schema = json.loads((Path(__file__).resolve().parents[1] / "schema" / "scan2scope.schema.json").read_text())
+
+    def check(name, instance):
+        sub = {"$schema": schema["$schema"], "$defs": schema["$defs"], **schema["properties"][name]}
+        jsonschema.Draft202012Validator(sub).validate(json.loads(json.dumps(instance)))
+
+    ds = [region("D1", "water_stain", "R1-W2", (0.5, 1.0), (0.05, 0.4), rel=0.1),
+          region("D2", "crack", "R1-W1", (1.9, 2.3), (2.05, 2.4), length=0.5, rel=0.1,
+                 evidence={"endpoints_uv_all": [[[1.95, 2.05], [2.3, 2.4]]]}),
+          region("D3", "mold", "R1-CEIL", (1.0, 2.2), (1.0, 2.0), rel=0.1),
+          region("D4", "hole", "R1-W3", (1.0, 1.1), (0.4, 0.5), rel=0.1)]
+    sink = SceneObject("O1", "sink", "R1", np.array([3.6, 0.6]), (0.8, 0.9), 0.7)
+    flags = evaluate(plan, ds, [sink])
+    items = generate(plan, ds, flags)
+    assert len({f.rule_id for f in flags}) >= 6 and len(items) >= 10
+    check("damage", [{"id": d.id, "room_id": d.room_id, "surface_id": d.surface_id, "class": d.cls, "score": d.score,
+                      "area": d.area.to_dict(), "width": d.width.to_dict(), "height": d.height.to_dict(),
+                      "length": d.length.to_dict() if d.length else None, "u_range": list(d.u_range),
+                      "v_range": list(d.v_range), "view_ids": d.view_ids} for d in ds])
+    check("concealed_damage_flags", [{"id": f.id, "rule_id": f.rule_id, "title": f.title, "basis": f.basis,
+                                      "room_id": f.room_id, "surface_ids": f.surface_ids, "damage_ids": f.damage_ids,
+                                      "severity": f.severity, "recommendation": f.recommendation,
+                                      "inputs": f.inputs} for f in flags])
+    check("scope", [{"id": i.id, "room_id": i.room_id, "surface_id": i.surface_id, "category": i.category,
+                     "selector": i.selector, "activity": i.activity, "description": i.description,
+                     "quantity": i.quantity.to_dict(), "unit": i.unit, "damage_ids": i.damage_ids,
+                     "flag_ids": i.flag_ids, "rule_id": i.rule_id} for i in items])
