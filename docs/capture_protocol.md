@@ -23,10 +23,10 @@ Hand off: in Photos, select one room's photos > Share > Save to Files > On My iP
 
 Once, in Settings > Camera > Record Video: choose 1080p HD at 30 fps (4K at 30 fps also works), turn **off** HDR Video, Enhanced Stabilization and Auto FPS, and turn **on** Lock Camera. In the Camera app: Video mode, tap **1x**, hold the phone sideways.
 
-1. Start recording at the entrance, pointing at a wall. Remember this view.
+1. Start recording at the entrance, pointing at a corner of the room so two walls and the floor are in view. Remember this view.
 2. In each room, walk slowly (about one step per second) along the walls, 1.5 to 2 m away from them, with the camera pointed at the walls so the floor line and the ceiling line stay in view. Turn slowly at corners.
 3. At each doorway, stop 1.5 m in front of the door frame for 2 seconds, then walk through slowly with the camera pointing ahead.
-4. After the last room, walk back to the start and end on the same view you started with. Stop recording. Expect 45 to 60 seconds per room, under 8 minutes in total.
+4. After the last room, walk back to the start and end on the same corner view you started with. Stop recording. Expect 45 to 60 seconds per room, under 8 minutes in total.
 
 Hand off: in Photos, Share > AirDrop the video to the Mac. On the Mac run `scan2scope run ~/Downloads/<video file>`.
 

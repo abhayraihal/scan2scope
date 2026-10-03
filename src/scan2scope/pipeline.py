@@ -46,6 +46,13 @@ def _git_commit() -> str | None:
         return None
 
 
+def _empty_plan():
+    from scan2scope.types import Measurement, Plan
+
+    return Plan(rooms=[], adjacency=[], footprint_area=Measurement(0.0, unit="m2", kind="area"),
+                extent_x=Measurement(0.0), extent_y=Measurement(0.0), flags=["no_geometry"])
+
+
 def run_capture(
     path: str | Path,
     out_dir: str | Path,
@@ -77,33 +84,45 @@ def run_capture(
         tier, root, info = detect_capture(Path(path), tier=tier, work_dir=work_dir)
 
     scenes = []
-    with timer.stage("geometry"):
-        if tier == "lidar":
-            from scan2scope.geometry.lidar import build_scene
+    plan = None
+    try:
+        with timer.stage("geometry"):
+            if tier == "lidar":
+                from scan2scope.geometry.lidar import build_scene
 
-            scenes = [build_scene(root, work_dir, drift_correction=drift_correction)]
-        elif tier == "video":
-            from scan2scope.geometry.video import build_scene
+                scenes = [build_scene(root, work_dir, drift_correction=drift_correction)]
+            elif tier == "video":
+                from scan2scope.geometry.video import build_scene
 
-            scenes = [build_scene(root, work_dir, drift_correction=drift_correction, cache=cache)]
-        else:
-            from scan2scope.geometry.photo import build_room_scenes
+                scenes = [build_scene(root, work_dir, drift_correction=drift_correction, cache=cache)]
+            else:
+                from scan2scope.geometry.photo import build_room_scenes
 
-            scenes = build_room_scenes(root, work_dir, cache=cache)
+                scenes = build_room_scenes(root, work_dir, cache=cache)
+        for s in scenes:
+            stage_errors.extend(f for f in s.meta.get("flags", []) if f not in stage_errors)
 
-    with timer.stage("layout"):
-        from scan2scope.layout import build_plan
+        with timer.stage("layout"):
+            from scan2scope.layout import build_plan
+
+            if tier == "photo":
+                room_plans = [build_plan(s, single_room=True) for s in scenes]
+            else:
+                plan = build_plan(scenes[0])
+                plan.meta["drift"] = scenes[0].meta.get("drift")
 
         if tier == "photo":
-            room_plans = [build_plan(s, single_room=True) for s in scenes]
-        else:
-            plan = build_plan(scenes[0])
+            with timer.stage("stitch"):
+                from scan2scope.stitch import stitch_rooms
 
-    if tier == "photo":
-        with timer.stage("stitch"):
-            from scan2scope.stitch import stitch_rooms
-
-            plan, scenes = stitch_rooms(scenes, room_plans, work_dir, cache=cache)
+                plan, scenes = stitch_rooms(scenes, room_plans, work_dir, cache=cache)
+    except Exception as exc:  # any input must still produce a schema-valid result
+        if cache_mode == "replay" and type(exc).__name__ == "CacheMiss":
+            raise
+        log.error("geometry stage failed: %s", exc)
+        log.debug(traceback.format_exc())
+        stage_errors.append(f"geometry_failed:{type(exc).__name__}:{str(exc)[:120]}")
+        plan = _empty_plan()
 
     damage, objects = [], []
     if semantics:
@@ -124,7 +143,7 @@ def run_capture(
 
     with timer.stage("uncertainty"):
         quality = {"tier": tier, "scale_log_sigma": max((s.scale_log_sigma for s in scenes), default=0.0),
-                   "scenes": [s.meta.get("quality", {}) for s in scenes]}
+                   "scenes": [{"room_hint": s.room_hint, **s.meta.get("quality", {})} for s in scenes]}
         annotate(plan, damage, tier=tier, quality=quality)
 
     with timer.stage("scope"):
