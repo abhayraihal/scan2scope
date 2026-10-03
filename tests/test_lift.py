@@ -256,6 +256,15 @@ def test_pieces_of_one_long_crack_merge_into_its_whole_length():
     assert sorted(m.u_range[0] for m in merge_damage(obs + [far])[0]) == pytest.approx([0.5, 3.0])
 
 
+def test_whole_views_of_a_short_crack_keep_the_single_view_length():
+    # two photos see the whole 0.17 m crack, registered 6 cm apart: the union would overstate it
+    a = _obs("v1", cls="crack", u=(2.10, 2.17), v=(1.60, 1.76), score=0.3)
+    b = _obs("v2", cls="crack", u=(2.16, 2.23), v=(1.62, 1.78), score=0.3)
+    a.length, b.length = 0.17, 0.18
+    m = merge_damage([a, b])[0][0]
+    assert m.length == pytest.approx(0.175) and m.u_range == pytest.approx((2.10, 2.23))
+
+
 def test_soft_class_merge_needs_more_overlap_across_classes():
     # a crack and a stain next to each other on one wall (centres 0.25 m apart, IoU 0) stay apart
     a = _obs("v1", cls="crack", u=(1.0, 1.1), v=(1.0, 1.3), score=0.6)

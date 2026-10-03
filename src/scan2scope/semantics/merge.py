@@ -30,8 +30,10 @@ class MergeConfig:
     soft_class: bool = True  # observations of different classes may merge; summed class scores pick the class
     cross_class_min_iou: float = 0.3  # uv box IoU needed to merge observations of different classes
     # cracks are thin, so their boxes rarely overlap by area: two crack observations merge when their boxes,
-    # grown by this much, touch, and the merged crack is at least as long as the longer side of their union
+    # grown by this much, touch; the merged crack takes the union as its extent when the union is longer than
+    # crack_pieces_ratio times the median single-view length (the views saw different pieces of it)
     crack_touch_m: float = 0.05
+    crack_pieces_ratio: float = 1.5
 
 
 @dataclass
@@ -240,8 +242,11 @@ def merge_damage(obs: list[DamageObservation], cfg: MergeConfig | None = None
             evidence["phrase_scores"] = [round(float(x), 4) for x in np.mean([o.phrase_scores for o in ms], 0)]
         length = float(np.median([o.length for o in ms]))
         width, height = float(np.median([o.width for o in ms])), float(np.median([o.height for o in ms]))
-        if cls == "crack":  # views see different pieces of a long crack: the union is the crack
-            length = max(length, u1 - u0, v1 - v0)
+        # views that each saw a different piece of a long crack: the union is the crack. Views of the whole
+        # crack also differ by their registration error, so the union is used only when it is clearly longer
+        # than what a single view saw.
+        if cls == "crack" and max(u1 - u0, v1 - v0) > cfg.crack_pieces_ratio * length:
+            length = max(u1 - u0, v1 - v0)
             width, height = u1 - u0, v1 - v0
         merged.append(MergedDamage(
             cls=cls, room_id=best.room_id, surface_id=best.surface_id, kind=best.kind, score=score,
