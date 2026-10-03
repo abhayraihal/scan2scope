@@ -308,7 +308,14 @@ class MapAnythingRunner:
             views.append(view)
         t0 = time.perf_counter()
         try:
-            preds = model.infer(views, **INFER_ARGS)
+            try:
+                preds = model.infer(views, **INFER_ARGS)
+            except RuntimeError as exc:  # MPS out-of-memory is often fragmentation; one retry after freeing
+                if "out of memory" not in str(exc).lower():
+                    raise
+                log.warning("MapAnything ran out of memory on %d views, retrying once", len(imgs))
+                _free_memory()
+                preds = model.infer(views, **INFER_ARGS)
             out = {
                 "pts3d": np.stack([p["pts3d"][0].float().cpu().numpy() for p in preds]).astype(np.float32),
                 "conf": np.stack([p["conf"][0].float().cpu().numpy() for p in preds]).astype(np.float32),
