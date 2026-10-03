@@ -320,7 +320,10 @@ def _on_surface_extent(u: np.ndarray, v: np.ndarray, a: SurfaceAssignment, margi
 
 
 def room_polygons_for(room: Room) -> Polygon:
-    poly = Polygon(np.asarray(room.polygon, float))
+    try:
+        poly = Polygon(np.asarray(room.polygon, float))
+    except (ValueError, TypeError, shapely.errors.ShapelyError):  # degenerate polygon: contains nothing
+        return Polygon()
     return poly if poly.is_valid else poly.buffer(0)
 
 

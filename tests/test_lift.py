@@ -504,3 +504,16 @@ def test_replay_cache_miss_is_not_swallowed(tmp_path):
     scene = _scene_with_images(tmp_path, [(2.0, 1.0, 1.2), (1.8, 0.9, 1.2)])
     with pytest.raises(CacheMiss):
         analyze([scene], plan, None, cache=ReplayCache(), detector=ScriptedDetector({}), segmenter=FakeSegmenter())
+
+
+def test_degenerate_room_polygon_does_not_break_the_view(tmp_path):
+    good = rect_room("R1")
+    bad = rect_room("R2", 10.0, 10.0)
+    bad.polygon = np.array([[10.0, 10.0], [11.0, 10.0]])  # two points: not a polygon
+    plan = make_plan(good, bad)
+    scene = _scene_with_images(tmp_path, [(2.0, 1.0, 1.2)])
+    stain = rect_on_wall_y(3.0, 1.6, 2.4, 0.9, 1.5)
+    script = {"v0": {"damage": [(_working_box(stain, scene.views[0]), "water stain", 0.6)]}}
+    res = analyze([scene], plan, None, detector=ScriptedDetector(script), segmenter=FakeSegmenter())
+    assert [d.surface_id for d in res.damage] == ["R1-W3"]
+    assert not any(f.startswith("semantics_view_failed") for f in res.flags)
