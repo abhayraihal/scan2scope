@@ -65,8 +65,11 @@ def look_rotation(yaw: float, pitch: float, roll: float = 0.0) -> np.ndarray:
     return R @ Rotation.from_rotvec([0.0, 0.0, roll]).as_matrix()
 
 
-def loop_poses(n: int) -> np.ndarray:
-    """Room-frame camera-to-world poses on an ellipse around the room centre, last pose equal to the first."""
+def loop_poses(n: int, roll_deg: float = 0.0) -> np.ndarray:
+    """Room-frame camera-to-world poses on an ellipse around the room centre, last pose equal to the first.
+
+    roll_deg turns the phone about the optical axis (90 is portrait, the sensor image then lies sideways).
+    """
     T = np.tile(np.eye(4), (n, 1, 1))
     cx, cy = ROOM[0] / 2, ROOM[1] / 2
     for k in range(n):
@@ -74,7 +77,7 @@ def loop_poses(n: int) -> np.ndarray:
         phi = 2 * np.pi * s - np.pi / 2
         p = np.array([cx + 1.1 * np.cos(phi), cy + 0.65 * np.sin(phi), 1.4 + 0.02 * np.sin(3 * phi)])
         yaw = np.arctan2(cy - p[1], cx - p[0]) + np.radians(25.0) * np.sin(2 * phi)
-        T[k, :3, :3] = look_rotation(yaw, np.radians(-18.0), np.radians(2.0) * np.sin(phi))
+        T[k, :3, :3] = look_rotation(yaw, np.radians(-18.0), np.radians(roll_deg + 2.0 * np.sin(phi)))
         T[k, :3, 3] = p
     return T
 
@@ -187,14 +190,14 @@ def _write_video(path: Path, frames: list[np.ndarray], divider: int) -> None:
 
 def write_stray_dataset(root: Path, *, n_frames: int = 160, fps: float = 5.0, rgb_size: tuple[int, int] = (640, 480),
                         legacy: bool = False, seed: int = 0, noise: bool = True, imu_unit: str = "g",
-                        t0: float = 1000.0) -> StrayFixture:
+                        t0: float = 1000.0, roll_deg: float = 0.0) -> StrayFixture:
     """Write a dataset folder at root and return the ground truth."""
     rng = np.random.default_rng(seed)
     root = Path(root)
     (root / "depth").mkdir(parents=True, exist_ok=True)
     (root / "confidence").mkdir(exist_ok=True)
 
-    T_room = loop_poses(n_frames)
+    T_room = loop_poses(n_frames, roll_deg)
     p0 = T_room[0, :3, 3]
     A = np.eye(4)
     A[:3, :3] = _rot_z(np.radians(ROOM_YAW_DEG))

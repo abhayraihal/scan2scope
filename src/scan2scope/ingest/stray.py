@@ -217,10 +217,12 @@ class StrayCapture:
         i = int(np.searchsorted(self.frame_ids, frame_id))
         return i if i < len(self) and self.frame_ids[i] == frame_id else None
 
-    def extract_rgb(self, frame_ids: Sequence[int], out_dir: Path, *, quality: int = 92) -> list[Path | None]:
+    def extract_rgb(self, frame_ids: Sequence[int], out_dir: Path, *, turns: Sequence[int] | None = None,
+                    quality: int = 92) -> list[Path | None]:
         """Decode rgb.mp4 once and write the requested frames as JPEGs; None for frames that cannot be decoded.
 
-        Frames are written as they are stored (landscape sensor orientation), which is the orientation K is for.
+        Frames are stored in the landscape sensor orientation, which is the orientation K is for; turns[i] rotates
+        frame i by that many quarter turns counter-clockwise (np.rot90) before saving.
         """
         import av
         from PIL import Image
@@ -235,6 +237,7 @@ class StrayCapture:
             self._flag("rgb_missing")
             return [None] * len(ids)
         wanted = set(ids)
+        turn_of = dict(zip(ids, turns)) if turns is not None else {}
         last = max(wanted)
         n_err = 0
         try:
@@ -251,7 +254,8 @@ class StrayCapture:
                     for frame in frames:
                         if index in wanted:
                             p = out_dir / f"frame_{index:06d}.jpg"
-                            Image.fromarray(frame.to_ndarray(format="rgb24")).save(p, quality=quality)
+                            img = np.rot90(frame.to_ndarray(format="rgb24"), turn_of.get(index, 0) % 4)
+                            Image.fromarray(np.ascontiguousarray(img)).save(p, quality=quality)
                             paths[index] = p
                         index += 1
                     if index > last:
@@ -315,6 +319,8 @@ def _parse_odometry(path: Path, flags: list[str]) -> dict[str, np.ndarray]:
     a, fid = a[keep], fid[keep]
     if len(fid) > 1 and (np.diff(fid) != 1).any():
         flags.append(f"odometry_frame_gaps:{int((np.diff(fid) != 1).sum())}")
+    if len(fid) > 1 and (np.diff(a[:, 0]) <= 0).any():
+        flags.append(f"timestamps_not_increasing:{int((np.diff(a[:, 0]) <= 0).sum())}")
     return {"frame": fid, "t": a[:, 0], "xyz": a[:, 2:5], "q": a[:, 5:9], "k": a[:, 9:13], "dc": a[:, 13:15],
             "has_k": np.array(has_k)}
 

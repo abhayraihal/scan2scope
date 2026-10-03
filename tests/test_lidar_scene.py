@@ -190,3 +190,45 @@ def test_no_depth_at_all_raises(tmp_path):
         p.unlink()
     with pytest.raises(ValueError, match="depth"):
         build_scene(fx.root, tmp_path / "work")
+
+
+def _project(K, T_wc, P):
+    pc = (P - T_wc[:3, 3]) @ T_wc[:3, :3]
+    return np.stack([K[0, 0] * pc[:, 0] / pc[:, 2] + K[0, 2], K[1, 1] * pc[:, 1] / pc[:, 2] + K[1, 2]], 1)
+
+
+@pytest.mark.parametrize("k", [0, 1, 2, 3])
+def test_turn_camera_matches_rot90(k):
+    rng = np.random.default_rng(k)
+    K = np.array([[500.0, 0, 330.2], [0, 505.0, 241.7], [0, 0, 1]])
+    T = make_T(rot_z(0.3), np.array([0.2, -0.1, 1.0]))
+    P = T[:3, 3] + (rng.uniform(-1, 1, (50, 3)) + [0, 0, 3]) @ T[:3, :3].T
+    w, h = 640, 480
+    u, v = _project(K, T, P).T
+    Kn, Tn, (wn, hn) = lidar.turn_camera(k, K, T, (w, h))
+    un, vn = _project(Kn, Tn, P).T
+    # where np.rot90(image, k) puts the original pixel (u, v)
+    expect = {0: (u, v), 1: (v, w - 1 - u), 2: (w - 1 - u, h - 1 - v), 3: (h - 1 - v, u)}[k]
+    np.testing.assert_allclose(un, expect[0], atol=1e-9)
+    np.testing.assert_allclose(vn, expect[1], atol=1e-9)
+    np.testing.assert_allclose(Tn[:3, 3], T[:3, 3])
+    assert (wn, hn) == ((w, h) if k % 2 == 0 else (h, w))
+
+
+def test_portrait_capture_gives_upright_consistent_views(tmp_path):
+    fx = write_stray_dataset(tmp_path / "portrait", n_frames=12, roll_deg=90.0)
+    sc = build_scene(fx.root, tmp_path / "work", drift_correction=False)
+    assert sc.views
+    for v in sc.views:
+        assert v.meta["quarter_turns"] in (1, 3)
+        assert (v.width, v.height) == (fx.rgb_size[1], fx.rgb_size[0])
+        assert v.T_wc[2, 1] < -0.8  # image down is world down
+        img = cv2.imread(str(v.image_path))[..., ::-1]
+        assert img.shape[:2] == (v.height, v.width)
+        assert read_barcode(np.rot90(img, -v.meta["quarter_turns"])) == v.meta["frame_id"]
+        # point map pixel (i, j) covers image pixel ((j + 0.5) * W / w - 0.5, (i + 0.5) * H / h - 0.5)
+        hp, wp = v.pointmap.shape[:2]
+        i, j = np.nonzero(v.valid)
+        uv = _project(v.K, v.T_wc, v.pointmap[i, j].astype(float))
+        np.testing.assert_allclose(uv[:, 0], (j + 0.5) * v.width / wp - 0.5, atol=0.05)
+        np.testing.assert_allclose(uv[:, 1], (i + 0.5) * v.height / hp - 0.5, atol=0.05)

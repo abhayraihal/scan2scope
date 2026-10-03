@@ -127,15 +127,21 @@ def _motion_score(T_wc: np.ndarray, t: np.ndarray) -> np.ndarray:
 
 def select_views(t: np.ndarray, motion: np.ndarray, valid_fraction: np.ndarray, *,
                  spacing: float = VIEW_SPACING_S, max_views: int = MAX_VIEWS) -> np.ndarray:
-    """Positions (into the keyframe arrays) of about one sharp, well-measured keyframe per spacing seconds."""
+    """Positions (into the keyframe arrays) of about one sharp, well-measured keyframe per spacing seconds.
+
+    Keyframes with an infinite motion score are never chosen.
+    """
     if len(t) == 0:
         return np.zeros(0, np.int64)
-    dur = float(t[-1] - t[0])
+    dur = float(t.max() - t.min())
     n_bins = int(max(1, min(max_views, math.floor(dur / spacing) + 1)))
-    edges = np.linspace(t[0], t[-1] + 1e-6, n_bins + 1)
+    edges = np.linspace(t.min(), t.max() + 1e-6, n_bins + 1)
     out = []
     for b in range(n_bins):
         cand = np.flatnonzero((t >= edges[b]) & (t < edges[b + 1]))
+        if len(cand) == 0:
+            continue
+        cand = cand[np.isfinite(motion[cand])]
         if len(cand) == 0:
             continue
         good = cand[valid_fraction[cand] > 0.2]
@@ -208,6 +214,8 @@ def build_scene(root: str | Path, work_dir: str | Path, *, drift_correction: boo
         flags.append("no_valid_depth")
 
     motion = _motion_score(T, cap.timestamps)[kf]
+    if cap.n_video_frames:
+        motion[cap.frame_ids[kf] >= cap.n_video_frames] = np.inf  # beyond the end of a short rgb.mp4
     vpos = select_views(t_kf, motion, valid_frac)
     views = _make_views(cap, kf, vpos, poses, K_d, work_dir / "lidar_views", load)
     if any(v.image_path is None for v in views):
@@ -245,21 +253,58 @@ def build_scene(root: str | Path, work_dir: str | Path, *, drift_correction: boo
                  view_index=view_index.astype(np.int64), scale_log_sigma=SCALE_LOG_SIGMA, meta=meta)
 
 
+# columns: the camera axes after np.rot90(image, k), in the original camera coordinates
+_TURN_AXES = (np.eye(3), np.array([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]), np.diag([-1.0, -1.0, 1.0]),
+              np.array([[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]))
+
+
+def upright_turns(T_wc: np.ndarray) -> int:
+    """Quarter turns (np.rot90 k) that put world down closest to image down; 0 when looking nearly straight down."""
+    down = T_wc[:3, :3].T @ np.array([0.0, 0.0, -1.0])  # world down in camera coordinates
+    if math.hypot(down[0], down[1]) < 0.3:
+        return 0
+    return int(np.argmax([A[:, 1] @ down for A in _TURN_AXES]))
+
+
+def turn_camera(k: int, K: np.ndarray, T_wc: np.ndarray, size: tuple[int, int]
+                ) -> tuple[np.ndarray, np.ndarray, tuple[int, int]]:
+    """(K, T_wc, (width, height)) of an image of `size` after np.rot90(image, k)."""
+    k %= 4
+    w, h = size
+    fx, fy, cx, cy = K[0, 0], K[1, 1], K[0, 2], K[1, 2]
+    Kn = np.eye(3)
+    if k == 0:
+        return K.copy(), T_wc.copy(), size
+    if k == 1:
+        Kn[0, 0], Kn[1, 1], Kn[0, 2], Kn[1, 2], new = fy, fx, cy, w - 1 - cx, (h, w)
+    elif k == 2:
+        Kn[0, 0], Kn[1, 1], Kn[0, 2], Kn[1, 2], new = fx, fy, w - 1 - cx, h - 1 - cy, (w, h)
+    else:
+        Kn[0, 0], Kn[1, 1], Kn[0, 2], Kn[1, 2], new = fy, fx, h - 1 - cy, cx, (h, w)
+    T = T_wc.copy()
+    T[:3, :3] = T_wc[:3, :3] @ _TURN_AXES[k]
+    return Kn, T, new
+
+
 def _make_views(cap: StrayCapture, kf: np.ndarray, vpos: np.ndarray, poses: np.ndarray, K_d: np.ndarray,
                 out_dir: Path, load) -> list[CameraView]:
+    """Views with upright images: frames, K, poses and point maps turned together by quarter turns."""
     rows = kf[vpos]
-    paths = cap.extract_rgb([int(cap.frame_ids[i]) for i in rows], out_dir)
-    w, h = cap.rgb_size
+    turns = [upright_turns(poses[k]) for k in vpos]
+    paths = cap.extract_rgb([int(cap.frame_ids[i]) for i in rows], out_dir, turns=turns)
     views = []
-    for k, i, path in zip(vpos, rows, paths):
+    for k, i, path, q in zip(vpos, rows, paths, turns):
         dc = load(i)
         pm = valid = conf = None
         if dc is not None:
             valid, conf = depth_mask(*dc)
             pm = backproject_depth(dc[0], K_d[i], poses[k]).astype(np.float32)
+            pm, valid, conf = (np.ascontiguousarray(np.rot90(a, q)) for a in (pm, valid, conf))
+        K, T_wc, (w, h) = turn_camera(q, cap.K[i], poses[k], cap.rgb_size)
+        Kd, _, _ = turn_camera(q, K_d[i], poses[k], (dc[0].shape[1], dc[0].shape[0]) if dc else cap.depth_size)
         fid = int(cap.frame_ids[i])
         views.append(CameraView(
-            id=f"F{fid:06d}", image_path=path, width=int(w), height=int(h), K=cap.K[i].copy(),
-            T_wc=poses[k].copy(), pointmap=pm, valid=valid, conf=conf, timestamp=float(cap.timestamps[i]),
-            meta={"frame_id": fid, "keyframe": int(k), "K_depth": K_d[i].copy()}))
+            id=f"F{fid:06d}", image_path=path, width=int(w), height=int(h), K=K, T_wc=T_wc, pointmap=pm,
+            valid=valid, conf=conf, timestamp=float(cap.timestamps[i]),
+            meta={"frame_id": fid, "keyframe": int(k), "K_depth": Kd, "quarter_turns": q}))
     return views
