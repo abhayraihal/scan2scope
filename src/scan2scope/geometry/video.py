@@ -33,6 +33,7 @@ from scan2scope.geometry.mapanything_backend import (
     MapAnythingRunner,
     OutputCacheLike,
     ViewPrediction,
+    focal_check,
 )
 from scan2scope.geometry.photo import file_sha256, fuse_points, gravity_alignment
 from scan2scope.geometry.pointmaps import normals_from_pointmap
@@ -674,9 +675,13 @@ def build_scene_from_frames(frames: list[Frame], *, drift_correction: bool = Tru
         both = c in k_of and c - 1 in k_of
         terms.append(d * d if lk.ok or both else d * d * len(dropped) / len(runs))
     geo_sigma = math.sqrt(float(np.mean(terms)) / 2.0) if terms else 0.0
-    scale_log_sigma = math.sqrt(scale_log_sigma ** 2 + link_var + geo_sigma ** 2)
+    # A predicted field of view the protocol's camera cannot have marks input MapAnything misreads (recompressed
+    # frames); its log distance from the camera's range is one more scale term.
+    focal, focal_flags = focal_check([p for run in sub_runs for p in run.preds])
+    flags.extend(focal_flags)
+    scale_log_sigma = math.sqrt(scale_log_sigma ** 2 + link_var + geo_sigma ** 2 + focal["sigma_log"] ** 2)
     scale.update({"sigma_log": scale_log_sigma, "link_sigma_log": math.sqrt(link_var),
-                  "geometry_sigma_log": geo_sigma})
+                  "geometry_sigma_log": geo_sigma, "focal_sigma_log": focal["sigma_log"]})
 
     scene = _fuse_scene(frames, sub_runs, X, owners, flags)
     n_kept = sum(o >= 0 for o in owners)
@@ -687,6 +692,7 @@ def build_scene_from_frames(frames: list[Frame], *, drift_correction: bool = Tru
         "n_chunks": len(runs), "n_chunks_used": K, "sample_fps": float(info.get("sample_fps", 0.0)),
         "chunk_size": chunk_size, "overlap": overlap, "scale_spread_log": scale["spread"], "thin": n < 3,
         "chunk_links": [lk.method for lk in links[1:]], "frames_dropped": n - n_kept,
+        "ma_focal_long": focal["ma_focal_long"], "focal_sigma_log": focal["sigma_log"],
     }
     applied = ["sim3_chain"] + (["loop_closure"] if loop["accepted"] else [])
     if anchor.get("floor_applied"):

@@ -155,6 +155,25 @@ def test_confidence_weight_is_bounded_and_monotone():
     assert np.all(np.diff(w[1:5]) > 0) and w[4] == 1.0 and w[5] == 1.0
 
 
+def _pred_with_focal(f):
+    K = np.array([[f, 0.0, (W - 1) / 2], [0.0, f, (H - 1) / 2], [0.0, 0.0, 1.0]])
+    return mb.ViewPrediction(np.zeros((H, W, 3), np.float32), np.ones((H, W), np.float32), np.ones((H, W), bool),
+                             np.eye(4), K, 1.0, (W, H), (W, H), (0, 0))
+
+
+def test_focal_check_against_the_protocol_camera_and_exif():
+    rec, flags = mb.focal_check([_pred_with_focal(50.0)] * 3)  # 0.78 of the long side: a 1x main camera
+    assert flags == [] and rec["sigma_log"] == 0.0 and math.isclose(rec["ma_focal_long"], 50 / 64)
+    rec, flags = mb.focal_check([_pred_with_focal(0.43 * W)] * 3)  # what recompressed photos come back as
+    assert flags == ["mapanything_focal_implausible:0.43"]
+    assert math.isclose(rec["sigma_log"], math.log(mb.PROTOCOL_MIN_FOCAL_LONG / 0.43))
+    rec, flags = mb.focal_check([_pred_with_focal(0.55 * W)], ref_focal_long=0.75)  # EXIF said 26 mm
+    assert flags == ["mapanything_focal_mismatch:0.55/0.75"]
+    assert math.isclose(rec["sigma_log"], math.log(0.75 / 0.55))
+    assert mb.focal_check([_pred_with_focal(0.72 * W)], ref_focal_long=0.75)[1] == []
+    assert mb.focal_check([])[0]["sigma_log"] == 0.0
+
+
 class _DictCache:
     def __init__(self):
         self.store, self.keys = {}, []
@@ -415,6 +434,44 @@ def test_build_room_scenes_with_fake_runner(tmp_path):
         down = s.points[:, 2] < np.percentile(s.points[:, 2], 2) + 0.05
         assert np.median(s.normals[down, 2]) > 0.99
         assert np.std(s.points[down, 2]) < 0.02
+
+
+class ShortFocalRunner(FakeRunner):
+    """FakeRunner whose views come back with a focal of 0.45 of the long side, as MapAnything does on
+    recompressed images (the point maps stay those of the true camera)."""
+
+    def infer(self, images, intrinsics=None, key=None, cache=None):
+        out = super().infer(images, intrinsics, key=key, cache=cache)
+        for p in out:
+            p.K = p.K.copy()
+            p.K[0, 0] = p.K[1, 1] = 0.45 * W
+        return out
+
+
+def test_implausible_focal_widens_the_scale_interval(tmp_path):
+    rng = np.random.default_rng(4)
+    room = tmp_path / "Scan" / "01 bed"
+    room.mkdir(parents=True)
+    by_sha = {}
+    for k, T in enumerate(_room_shots(rng, 4)):
+        p = room / f"IMG_{k:04d}.jpg"
+        _save_with_exif(p, _noise_image(rng), focal35=None, iso=100, exposure=1 / 60)
+        img, _, _ = photo.load_photo(p)
+        by_sha[mb.array_sha256(img)] = T
+    plain = photo.build_room_scenes(room.parent, tmp_path / "w1", runner=FakeRunner(by_sha))[0]
+    short = photo.build_room_scenes(room.parent, tmp_path / "w2", runner=ShortFocalRunner(by_sha))[0]
+    assert plain.scale_log_sigma == photo.SCALE_LOG_SIGMA and not any("focal" in f for f in plain.meta["flags"])
+    assert "mapanything_focal_implausible:0.45" in short.meta["flags"]
+    assert math.isclose(short.scale_log_sigma, math.hypot(photo.SCALE_LOG_SIGMA, math.log(0.6 / 0.45)))
+    assert math.isclose(short.meta["quality"]["ma_focal_long"], 0.45)
+    (tmp_path / "v").mkdir()
+    frames, vids, _ = _loop_frames(tmp_path / "v", n=24)
+    v_plain = video.build_scene_from_frames(frames, runner=FakeRunner(vids), chunk_size=8, overlap=3, loop_frames=4)
+    v_short = video.build_scene_from_frames(frames, runner=ShortFocalRunner(vids), chunk_size=8, overlap=3,
+                                            loop_frames=4)
+    assert "mapanything_focal_implausible:0.45" in v_short.meta["flags"]
+    assert v_short.scale_log_sigma > v_plain.scale_log_sigma + 0.15
+    assert v_short.meta["scale"]["focal_sigma_log"] > 0 and v_plain.meta["scale"]["focal_sigma_log"] == 0
 
 
 def test_rotated_jpeg_gets_an_upright_copy_and_bad_views_are_dropped(tmp_path):
