@@ -332,6 +332,10 @@ def _assemble(scene: Scene, d: _Data, lines: list[W.WallLine], cx: C.Complex, ro
             frame = OP.WallFrame(axis, float(coord), n_sign, float(t0), 1 if t1 > t0 else -1, float(abs(t1 - t0)),
                                  fl.z, ce.z)
             wa = OP.analyze_wall(frame, d.P, d.N, d.wp, d.wn, d.O, d.E, face.sigma if face.n >= 30 else sigma)
+            if face.n < 30 and wa.openings:
+                # without the room's own wall face there is no gap to measure, only rays into the unknown
+                wa.openings = []
+                wa.flags.append("openings_not_checked")
             edges.append((p, q, nin, face, frame, wa))
 
         walls: list[Wall] = []
@@ -363,6 +367,9 @@ def _assemble(scene: Scene, d: _Data, lines: list[W.WallLine], cx: C.Complex, ro
 
         area = _shoelace(poly_m)
         wl = np.array([w.length.value for w in walls])
+        seen = np.array([w.length.evidence["n_points"] >= 30 for w in walls])
+        if wl[seen].sum() < 0.5 * wl.sum():
+            rflags.append("walls_mostly_unobserved")
         rms = float(np.average([w.length.evidence["fit_rms"] for w in walls], weights=wl))
         obs = float(np.average([w.observed_fraction for w in walls], weights=wl))
         area_ev = {"n_walls": K, "fit_rms": rms, "observed_fraction": obs,
