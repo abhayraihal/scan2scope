@@ -17,7 +17,7 @@ For each room, including hallways:
 2. For every doorway in the room, stand about 1.5 m from it inside this room and take one photo through the open door, so the door frame and part of the next room are visible.
 3. Keep each room between 2 and 8 photos. 6 to 8 is best.
 
-Hand off: in Photos, select one room's photos > Share > Save to Files > On My iPhone. Create a folder named `Scan`, and inside it one folder per room named with a two-digit number in walking order and a name, for example `01 hallway`, `02 kitchen`. Repeat for every room. In the Files app, press and hold `Scan` > Share > AirDrop to the Mac. On the Mac run `scan2scope run ~/Downloads/Scan`.
+Hand off, by cable (works on Macs where AirDrop is switched off): connect the iPhone to the Mac with a USB-C cable, unlock it and tap Trust. On the Mac open Image Capture, choose a folder named `Scan` as the destination and import the photos. In `Scan`, make one folder per room named with a two-digit number in walking order and a name (`01 hallway`, `02 kitchen`) and move each room's photos into it; they are numbered in the order they were taken. Where AirDrop is allowed, AirDrop works too. Do not send photos through a messaging app as ordinary photos: that removes the lens information. Send them as a document or file instead. On the Mac run `scan2scope run ~/Scan` (or wherever `Scan` is).
 
 ## Video tier (any iPhone 15 or newer)
 
@@ -28,13 +28,13 @@ Once, in Settings > Camera > Record Video: choose 1080p HD at 30 fps (4K at 30 f
 3. At each doorway, stop 1.5 m in front of the door frame for 2 seconds, then walk through slowly with the camera pointing ahead.
 4. After the last room, walk back to the start and end on the same corner view you started with. Stop recording. Expect 45 to 60 seconds per room, under 8 minutes in total.
 
-Hand off: in Photos, Share > AirDrop the video to the Mac. On the Mac run `scan2scope run ~/Downloads/<video file>`.
+Hand off: import the video with Image Capture over the USB-C cable (or AirDrop, or a messaging app's send-as-document option). On the Mac run `scan2scope run <video file>`.
 
 ## LiDAR tier (Pro models only)
 
 Install **Stray Scanner** (free, by Kenneth Blomqvist) from the App Store and allow camera access. Tap the frame-rate button until it reads **30 fps**. Press record, walk the same route as the video tier (steps 1 to 4 above, including ending where you started), and press stop.
 
-Hand off: open the recording in Stray Scanner > Share > AirDrop to the Mac (it arrives as a zip). On the Mac run `scan2scope run ~/Downloads/<recording>.zip`. With a USB cable instead: Finder > the iPhone > Files > Stray Scanner, drag the recording folder to the Mac.
+Hand off: connect the USB-C cable, then on the Mac open Finder > the iPhone > Files > Stray Scanner and drag the recording folder to the Mac. Where AirDrop is allowed: open the recording in Stray Scanner > Share > AirDrop (it arrives as a zip). On the Mac run `scan2scope run <recording folder or zip>`.
 
 ## Avoid (every tier)
 

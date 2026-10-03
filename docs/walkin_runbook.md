@@ -8,17 +8,17 @@ How to run the pipeline on a capture made at the defense. The capture itself fol
 uv run scan2scope doctor          # weights present, Apple GPU found, disk free, HEVC and HEIC decoders present
 ```
 
-Set the Mac to accept AirDrop from everyone for 10 minutes (Control Centre > AirDrop > Everyone for 10 Minutes). Keep a USB-C cable as the fallback.
+Bring a USB-C cable: the demo Mac has AirDrop switched off by policy, so files come over the cable (Image Capture for photos and videos, Finder's Files tab for the Stray Scanner folder).
 
 ## Receiving the files
 
-| Tier | What arrives in ~/Downloads | Command |
+| Tier | What arrives | Command |
 |---|---|---|
 | Photo | a folder (`Scan`) holding one folder per room | `uv run scan2scope run ~/Downloads/Scan` |
 | Video | one `.MOV` | `uv run scan2scope run ~/Downloads/IMG_1234.MOV` |
 | LiDAR | a Stray Scanner `.zip` | `uv run scan2scope run ~/Downloads/<recording>.zip` |
 
-If the photos arrive as loose files instead of room folders, make one folder per room in walking order (`01 hallway`, `02 kitchen`, ...) and move each room's photos into it. AirDrop keeps the original HEIC files with their EXIF focal length; messaging apps strip it, which the pipeline flags and answers with wider intervals.
+If the photos arrive as loose files instead of room folders, make one folder per room in walking order (`01 hallway`, `02 kitchen`, ...) and move each room's photos into it. Image Capture and AirDrop keep the original HEIC files with their EXIF focal length; ordinary messaging-app sends strip it, which the pipeline flags and answers with wider intervals.
 
 ## Reading the result
 
