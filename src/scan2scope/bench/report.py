@@ -225,9 +225,9 @@ def _detection_section(bench: dict[str, Any]) -> list[str]:
                     m["rooms"]["matched"], ", ".join(m["rooms"]["missed"]), ", ".join(m["rooms"]["extra"]),
                     _adj_text(m.get("adjacency")), _m((m.get("overlap") or {}).get("max_m2"))] for m in ms])
     out += ["", "Openings:", ""]
-    out += _table(["Capture", "Tier", "GT", "Matched", "Missed", "Phantom", "Type mismatch", "Unscored phantoms"],
+    out += _table(["Capture", "Tier", "GT", "Matched", "Missed", "Phantom", "Door/passage swaps", "Unscored phantoms"],
                   [[f"{m['property']}/{m['capture']}", m["tier"], m["openings"]["gt"], m["openings"]["matched"],
-                    m["openings"]["missed"], m["openings"]["phantom"], m["openings"]["type_mismatch"],
+                    m["openings"]["missed"], m["openings"]["phantom"], m["openings"]["type_swaps"],
                     m["openings"]["phantom_unscored"]] for m in ms])
     if any(m["damage"]["gt"] or m["damage"]["phantom"] or m["damage"]["matched"] for m in ms):
         out += ["", "Damage (staged damage is disclosed as staged in the ground truth):", ""]

@@ -184,6 +184,48 @@ def test_floor_area_from_polygon_and_rectilinear_walls(tmp_path):
     assert gt.room("P").floor_area == pytest.approx(6.0) and gt.room("P").area_method == "polygon"
 
 
+ODD_GT = """
+property: odd
+rooms:
+  - id: "01 hall"
+    walls: [2.0, 3.0, 2.0, 3.0]
+    ceiling_height: 2.45
+    openings:
+      - {id: D1, type: door, wall: W1, offset: 0.2, width: 0.8, height: 2.0}
+      - {id: D1, type: doorway, wall: W9, offset: 0.2, width: 0.0, height: 2.0}
+  - id: "02 bay"
+    walls: [3.0, 1.0, 1.0, 1.0, 3.0]
+    ceiling_height: ["2,40", 0]
+    openings: [junk]
+    damage: [{id: X1, class: Mold, surface: Ceiling, width: 0.2, height: 0.1}, {id: X1, class: crack, surface: W2}]
+  - {walls: [1, 1, 1, 1]}
+captures:
+  - {id: a, tier: photo, path: raw/a, rooms: ["02 bay", "nope"]}
+  - {id: b, tier: thermal, path: raw/b}
+  - {id: c, tier: video}
+"""
+
+
+def test_odd_ground_truth_loads_with_flags(tmp_path):
+    p = tmp_path / "gt.yaml"
+    p.write_text(ODD_GT)
+    gt = load_ground_truth(p)
+    hall, bay = gt.rooms
+    assert hall.ceiling_height == pytest.approx(2.45) and bay.ceiling_height == pytest.approx(2.40)
+    assert [o.id for o in hall.openings] == ["D1", "D1~2"] and hall.openings[1].type == "opening"
+    assert bay.floor_area is None and "floor_area_unavailable" in bay.flags
+    assert [d.id for d in bay.damage] == ["X1", "X1~2"] and bay.damage[0].surface == "ceiling"
+    assert bay.damage[0].cls == "mold"
+    assert [c.id for c in gt.captures] == ["a"] and gt.captures[0].rooms == ["02 bay"]
+    assert gt.footprint() is None
+    for f in ("room_without_id:2", "capture_tier:b:thermal", "bad_capture:2", "capture_unknown_rooms:a:nope",
+              "01 hall:opening_unknown_wall:D1~2:W9", "02 bay:bad_opening:0"):
+        assert f in gt.flags, f
+    m = capture_metrics(gt, gt.captures[0], result([room("R1", [(0, 0), (3, 0), (3, 1), (2, 2), (0, 2)],
+                                                         hint="02 bay")], adjacency=()))
+    assert m["status"] == "ok" and m["rooms"]["matched"] == 1
+
+
 def _l_gt_room():
     from scan2scope.bench.groundtruth import GTOpening, GTWall
 

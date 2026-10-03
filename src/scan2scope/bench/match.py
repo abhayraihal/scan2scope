@@ -107,8 +107,11 @@ def pred_rooms(result: dict[str, Any]) -> list[PredRoom]:
         if not isinstance(r, dict):
             continue
         try:
-            P = np.asarray(r.get("polygon") or [], float).reshape(-1, 2)
+            P = np.asarray(r.get("polygon") or [], float)
+            P = P[:, :2] if P.ndim == 2 and P.shape[1] >= 2 else P.reshape(-1, 2)
         except (TypeError, ValueError):
+            P = np.zeros((0, 2))
+        if not np.isfinite(P).all():
             P = np.zeros((0, 2))
         area = mval(r.get("floor_area"))
         if area is None and len(P) >= 3:
@@ -377,17 +380,21 @@ def align_walls(gt_room: GTRoom, pred: PredRoom) -> tuple[WallAlignment, list[Op
     return best, ops
 
 
+def _pos(x: float | None) -> float | None:
+    return x if x is not None and math.isfinite(x) and x > 0 else None
+
+
+def _log_ratio(a: float | None, b: float | None) -> float | None:
+    a, b = _pos(a), _pos(b)
+    return None if a is None or b is None else abs(math.log(a / b))
+
+
 def _unary(p: PredRoom, g: GTRoom) -> float:
-    if p.area and g.floor_area:
-        cost = abs(math.log(p.area / g.floor_area))
-    elif p.perimeter and g.perimeter:
-        cost = 2.0 * abs(math.log(p.perimeter / g.perimeter))
-    else:
-        cost = 1.0
-    pa, ga = p.aspect, g.aspect
-    if pa and ga:
-        cost += ASPECT_WEIGHT * abs(math.log(pa / ga))
-    return cost
+    area = _log_ratio(p.area, g.floor_area)
+    perim = _log_ratio(p.perimeter, g.perimeter)
+    cost = area if area is not None else (2.0 * perim if perim is not None else 1.0)
+    aspect = _log_ratio(p.aspect, g.aspect)
+    return cost + (ASPECT_WEIGHT * aspect if aspect is not None else 0.0)
 
 
 def _inconsistency(p: int, g: int, assign: dict[int, int], pred_nb: list[set[int]], gt_nb: list[set[int]]) -> float:
@@ -409,7 +416,7 @@ def _inconsistency(p: int, g: int, assign: dict[int, int], pred_nb: list[set[int
 def _hungarian(cost: np.ndarray) -> dict[int, int]:
     if cost.size == 0:
         return {}
-    rows, cols = linear_sum_assignment(cost)
+    rows, cols = linear_sum_assignment(np.where(np.isfinite(cost), cost, BIG))
     return {int(r): int(c) for r, c in zip(rows, cols)}
 
 
@@ -455,9 +462,8 @@ def shape_assignment(preds: list[PredRoom], gts: list[GTRoom], pred_pairs: set[f
 
 
 def _area_ratio_ok(p: PredRoom, g: GTRoom) -> bool:
-    if not p.area or not g.floor_area:
-        return True
-    return abs(math.log(p.area / g.floor_area)) <= math.log(MAX_AREA_RATIO)
+    r = _log_ratio(p.area, g.floor_area)
+    return r is None or r <= math.log(MAX_AREA_RATIO)
 
 
 def match_rooms(gts: list[GTRoom], preds: list[PredRoom], tier: str, gt_pairs: set[frozenset[str]],

@@ -367,12 +367,17 @@ def _parse_room(raw: dict[str, Any], index: int, flags: list[str]) -> GTRoom | N
             readings.append(h)
     ceiling = float(np.median(readings)) if readings else None
     wall_ids = {w.id for w in walls}
+    if len(wall_ids) < len(walls):
+        rflags.append("duplicate_wall_ids")
     openings = []
     for k, o in enumerate(_as_list(raw.get("openings"))):
         if not isinstance(o, dict):
             rflags.append(f"bad_opening:{k}")
             continue
         oid = str(o.get("id") or f"O{k + 1}")
+        if any(p.id == oid for p in openings):
+            rflags.append(f"duplicate_opening_id:{oid}->{oid}~{k + 1}")
+            oid = f"{oid}~{k + 1}"
         kind = str(o.get("type") or "door").strip().lower()
         if kind not in OPENING_TYPES:
             rflags.append(f"opening_type:{oid}:{kind}->opening")
@@ -392,6 +397,9 @@ def _parse_room(raw: dict[str, Any], index: int, flags: list[str]) -> GTRoom | N
             rflags.append(f"bad_damage:{k}")
             continue
         did = str(d.get("id") or f"X{k + 1}")
+        if any(x.id == did for x in damage):
+            rflags.append(f"duplicate_damage_id:{did}->{did}~{k + 1}")
+            did = f"{did}~{k + 1}"
         cls = str(d.get("class") or d.get("cls") or "").strip().lower().replace(" ", "_").replace("-", "_")
         surface = str(d.get("surface") or "").strip()
         if surface.lower() in ("ceiling", "ceil", "floor"):

@@ -76,7 +76,7 @@ def _empty(gt: GroundTruth, capture: GTCapture) -> dict[str, Any]:
         "rooms": {"gt": len(rooms), "pred": 0, "matched": 0, "missed": [r.id for r in rooms], "extra": []},
         "walls": {"gt": sum(len(r.walls) for r in rooms), "matched": 0, "missed": 0, "extra": 0},
         "openings": {"gt": sum(len(r.openings) for r in rooms), "matched": 0, "missed": 0, "phantom": 0,
-                     "phantom_unscored": 0, "type_mismatch": 0, "items": []},
+                     "phantom_unscored": 0, "type_swaps": 0, "items": []},
         "damage": {"gt": sum(len(r.damage) for r in rooms), "matched": 0, "class_ok": 0, "missed": 0, "phantom": 0,
                    "phantom_unscored": 0, "items": []},
         "adjacency": None, "overlap": None, "drift": None, "timing": None, "q": None, "calibration_status": None,
@@ -256,7 +256,7 @@ def _score(out: dict[str, Any], gt: GroundTruth, capture: GTCapture, result: dic
                 continue
             out["openings"]["matched"] += 1
             if om.gt_type != om.pred_type:
-                out["openings"]["type_mismatch"] += 1
+                out["openings"]["type_swaps"] += 1
             o, po = gt_ops[om.gt], ops_by_id[om.pred]
             idx["openings"][o.id] = {"pred_id": om.pred, "width": _mdict(po.get("width")),
                                      "height": _mdict(po.get("height"))}
@@ -290,8 +290,9 @@ def _score(out: dict[str, Any], gt: GroundTruth, capture: GTCapture, result: dic
     out["overlap"] = room_overlaps(result)
     out["drift"] = prop_d.get("drift_correction")
     timing = result.get("timing") if isinstance(result.get("timing"), dict) else {}
+    stages = timing.get("stages") if isinstance(timing.get("stages"), dict) else {}
     out["timing"] = {"run_s": run_s, "total_s": num(timing.get("total_s")),
-                     "stages": {str(k): num(v) for k, v in (timing.get("stages") or {}).items()}}
+                     "stages": {str(k): num(v) for k, v in stages.items()}}
     out["flags"] += [str(f) for f in cap.get("flags") or []]
     return out
 
