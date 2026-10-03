@@ -412,6 +412,23 @@ def test_unplaceable_rooms_are_flagged_and_placed_without_overlap():
     assert max(errs.values()) < 0.02
 
 
+def test_disconnected_pair_keeps_its_adjacency_to_the_right():
+    specs = layout(k_width=0.8, b_width=1.02, w_width=0.62, entry=1.2)
+    # a wing of two rooms joined by a door that matches nothing in the main group
+    specs.append(Spec("05 wing", (0.0, 0.0, 2.5, 2.5), [(1, 1.0, 0.5, "06 store")]))
+    specs.append(Spec("06 store", (2.62, 0.0, 4.6, 2.5), [(3, 2.5 - 1.5, 0.5, "05 wing")]))
+    cap = make_capture(specs, seed=18)
+    plan, _ = stitch_rooms(cap.scenes, cap.plans, None, use_doorway_photos=False)
+    assert adjacency_hints(plan) == true_adjacency(specs)
+    assert uncertain_rooms(plan) == {"05 wing", "06 store"}
+    assert sorted(map(sorted, plan.meta["stitch"]["components"])) == [["R1", "R2", "R3", "R4"], ["R5", "R6"]]
+    right = max(r.polygon[:, 0].max() for r in plan.rooms[:4])
+    assert all(r.polygon[:, 0].min() >= right + 0.5 for r in plan.rooms[4:])
+    assert max(centre_errors(Plan(plan.rooms[4:], [], plan.footprint_area, plan.extent_x, plan.extent_y),
+                             specs[4:]).values()) < 0.02
+    assert max_overlap(plan) <= 0.05
+
+
 def test_relative_scale_disagreement_is_flagged_not_applied():
     specs = layout()
     cap = make_capture(specs, seed=6, scale={"04 bathroom": 1.25})
