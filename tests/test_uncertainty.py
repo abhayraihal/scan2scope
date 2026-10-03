@@ -322,3 +322,16 @@ def test_loro_coverage():
     assert small["mode"] == "as_reported"
     assert small["coverage"] < 0.85  # the prior intervals are too narrow for errors 1.7x the model sigma
     assert set(small["by_kind"]) == {"wall_length", "ceiling_height"}
+
+
+def test_one_sided_interval_is_scored_on_the_side_of_the_truth():
+    base = {"tier": "video", "kind": "wall_length", "room": "home/r1", "half_width": 0.55, "pred": 1.0,
+            "lo": 0.9, "hi": 2.0}  # widened upward only: the wall may be a fragment
+    above = as_record({**base, "err": -0.5})  # truth 1.5, inside the upper side
+    below = as_record({**base, "err": 0.2})  # truth 0.8, past the lower side
+    assert above.score == pytest.approx(0.5) and below.score == pytest.approx(2.0)
+    no_bounds = {k: v for k, v in base.items() if k not in ("lo", "hi")} | {"err": 0.2}
+    assert as_record(no_bounds).score == pytest.approx(0.2 / 0.55)
+    # the miss below is not confident garbage by the benchmark's rule, 0.2 against a half-width of 0.55
+    report = loro_coverage([above, below])["video"]
+    assert report["covered"] == 1 and report["confident_garbage"] == 0
