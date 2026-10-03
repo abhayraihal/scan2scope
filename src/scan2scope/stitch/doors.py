@@ -42,10 +42,13 @@ def _value(m: Any) -> float | None:
 
 
 def room_polygon(room: Room) -> np.ndarray | None:
+    """The room polygon as (K, 2), counter-clockwise even if the layout returned it clockwise."""
     P = np.asarray(room.polygon, float)
     if P.ndim != 2 or P.shape[0] < 3 or P.shape[1] < 2 or not np.isfinite(P[:, :2]).all():
         return None
-    return P[:, :2]
+    P = P[:, :2]
+    signed = float(np.sum(P[:, 0] * np.roll(P[:, 1], -1) - np.roll(P[:, 0], -1) * P[:, 1]))
+    return P[::-1].copy() if signed < 0 else P
 
 
 def nearest_edge(P: np.ndarray, p: np.ndarray) -> tuple[float, np.ndarray] | None:

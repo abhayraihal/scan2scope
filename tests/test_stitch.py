@@ -574,8 +574,13 @@ def test_opening_door_geometry_from_wall_and_offset():
     o2 = Opening(o.id, o.room_id, o.wall_id, "door", o.offset, o.width, o.height, center=None)
     d2 = opening_door(room, o2)
     assert np.allclose(d1.center, d2.center) and np.allclose(d1.normal, d2.normal)
-    assert opening_door(room, room.openings[0].__class__(o.id, "R1", "nope", "window", o.offset, o.width,
-                                                        o.height, center=o.center)) is None
+    assert opening_door(room, Opening(o.id, "R1", "R1-W3", "window", o.offset, o.width, o.height,
+                                      center=o.center)) is None
+    # unknown wall: the normal comes from the nearest polygon edge, also when the polygon is clockwise
+    lost = Opening(o.id, "R1", "nope", "door", o.offset, o.width, o.height, center=o.center)
+    assert np.allclose(opening_door(room, lost).normal, d1.normal)
+    room.polygon = room.polygon[::-1].copy()
+    assert np.allclose(opening_door(room, lost).normal, d1.normal)
 
 
 def test_doorway_photo_detection_picks_the_view_through_each_door():
