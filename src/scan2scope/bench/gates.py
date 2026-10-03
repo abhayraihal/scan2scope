@@ -35,6 +35,7 @@ MISSING_RATIO = 2.0
 WORST_N = 5
 H2H_MIN_DEFAULT = 0.70
 FOOTPRINT_DEFAULT = 0.08
+MIN_ROOMS = 9  # below this many independent rooms the interval multiplier stays at its prior (design.md)
 
 
 def load_gates(path: str | Path | None = None) -> dict[str, Any]:
@@ -250,10 +251,12 @@ def calibration_rows(tier: str, cal: dict[str, Any] | None, cfg: dict[str, Any],
         gap, score = lo - level, (lo - level) / max(1.0 - level, 1e-9)
     else:
         gap, score = 0.0, 0.0
+    thin = cal["rooms"] < MIN_ROOMS
     cov.update(measured=cal["coverage"], n=cal["n"], status="pass" if ok else "fail", pass_share=cal["coverage"],
-               shortfall=gap, score=score if not ok else 0.0,
+               shortfall=gap, score=score if not ok else 0.0, thin_evidence=thin,
                measured_text=f"{cal['covered']}/{cal['n']} covered ({_pct(cal['coverage'])}), CI "
-                             f"[{_pct(lo)}, {_pct(hi)}], {cal['rooms']} rooms")
+                             f"[{_pct(lo)}, {_pct(hi)}], {cal['rooms']} rooms"
+                             + (f" (fewer than {MIN_ROOMS}: too few to show calibration)" if thin else ""))
     g = cal["confident_garbage"]
     items = sorted(cal["garbage_items"], key=lambda x: -x["miss_ratio"])
     gar.update(measured=g, n=cal["n"], status="pass" if g == 0 else "fail", pass_share=1.0 - g / cal["n"],

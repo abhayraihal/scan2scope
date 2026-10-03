@@ -27,8 +27,9 @@ CEILING_NOTE = ("Accuracy against the tape or laser reading and spread across re
 REPEAT_NOTE = ("Rooms and walls are matched through the ground truth. Allowed |delta| is max(1 cm, 0.5% of the GT "
                "length); the strict reading is min(1 cm, 0.5%).")
 CAL_NOTE = ("Coverage of the 90% intervals over every scored value, with an exact (Clopper-Pearson) 95% interval. "
-            "Rooms counts distinct physical rooms; repeat captures of a room share one unit. Confident garbage is a "
-            "miss by more than the configured multiple of the half-width.")
+            "Rooms counts distinct physical rooms; repeat captures of a room share one unit. With fewer than 9 rooms "
+            "a tier keeps its prior interval multiplier and its coverage interval is too wide to show calibration. "
+            "Confident garbage is a miss by more than the configured multiple of the half-width.")
 DETECT_NOTE = ("Openings match on the same matched wall, compatible type (door and open passage are "
                "interchangeable) and centre within half the GT width. Phantoms in rooms that match no GT room are "
                "scored only when the capture covers the whole property.")
