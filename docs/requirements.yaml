@@ -1,0 +1,956 @@
+# Atomic requirements extracted from the case-study brief (Aug 2026). One row per requirement.
+- id: CAP-01
+  section: Part 1
+  category: constraint
+  requirement: No captures are supplied. The candidate owns everything from the phone's sensors to the output, the same way the incumbent apps do.
+  quote: We provide no captures. Like the incumbent scanning apps, you own the problem from the phone's sensors onward.
+- id: CAP-02
+  section: Part 1
+  category: capture
+  requirement: Pick one of the two capture routes and say which one the submission uses.
+  quote: 'You choose one of two capture routes and both are legitimate:'
+- id: CAP-03
+  section: Part 1 / Route 1
+  category: capture
+  requirement: Route 1 is a custom iOS capture app that records SDK data (ARKit, RoomPlan, raw LiDAR depth, camera, IMU or more).
+  quote: 'Route 1: Your own iOS capture app. ARKit, RoomPlan, raw LiDAR depth, camera, IMU, whatever you pull from the SDK.'
+- id: CAP-04
+  section: Part 1 / Route 1
+  category: deliverable
+  requirement: The Route 1 app ships as a TestFlight build or a dev build.
+  quote: Ship it as a TestFlight build or a dev build
+- id: CAP-05
+  section: Part 1 / Route 1
+  category: capture
+  requirement: The Route 1 app installs on the evaluators' own device in under 10 minutes.
+  quote: we can install on our device in under 10 minutes.
+- id: CAP-06
+  section: Part 1 / Route 2
+  category: capture
+  requirement: 'Route 2 names the exact off-the-shelf capture tool for each tier: the native camera, a LiDAR logging app, or another App Store app.'
+  quote: Name the off-the-shelf capture tool (a LiDAR logging app, the native camera, anything installable from the App Store)
+- id: CAP-07
+  section: Part 1 / Route 2
+  category: constraint
+  requirement: Route 2 tools must install from the App Store or be the native camera. No sideloading and no developer steps.
+  quote: anything installable from the App Store
+- id: CAP-08
+  section: Part 1 / Route 2
+  category: deliverable
+  requirement: The protocol is one page.
+  quote: write the one-page protocol
+- id: CAP-09
+  section: Part 1 / Route 2
+  category: capture
+  requirement: The protocol is written for a non-engineer.
+  quote: a non-engineer follows
+- id: CAP-10
+  section: Part 1 / Route 2
+  category: capture
+  requirement: The protocol says what to install.
+  quote: what to install
+- id: CAP-11
+  section: Part 1 / Route 2
+  category: capture
+  requirement: The protocol says how to walk.
+  quote: how to walk
+- id: CAP-12
+  section: Part 1 / Route 2
+  category: capture
+  requirement: The protocol says how long to capture.
+  quote: how long
+- id: CAP-13
+  section: Part 1 / Route 2
+  category: capture
+  requirement: The protocol says what to avoid.
+  quote: what to avoid
+- id: CAP-14
+  section: Part 1 / Route 2
+  category: capture
+  requirement: The protocol says how to hand the files to the pipeline.
+  quote: how to hand the files to your pipeline
+- id: CAP-15
+  section: Part 1 / Route 2
+  category: defense
+  requirement: Each step must have only one reading. The evaluators follow the page literally at the defense, and an ambiguous step degrades their capture.
+  quote: At the defense we follow your page literally. If the page is ambiguous, the capture you get reflects that.
+- id: CAP-16
+  section: Part 1 / Walk-in test
+  category: capture
+  requirement: 'Derived: the capture route covers all three tiers, because the evaluators pick the tier on the day and follow the route exactly.'
+  quote: choosing the tier on the day, following your capture route exactly.
+- id: TIER-01
+  section: Part 1 / Tiers
+  category: capture
+  requirement: The photo, video and LiDAR tiers are all mandatory.
+  quote: Three input tiers, all mandatory.
+- id: TIER-02
+  section: Part 1 / Tiers
+  category: output-contract
+  requirement: Every tier produces the same output contract, including damage, concealed-damage flags and scope items at the photo tier.
+  quote: The same output contract from each
+- id: TIER-03
+  section: Part 1 / Tiers
+  category: output-contract
+  requirement: Intervals widen as sensor data thins, and the widening is honest (calibrated).
+  quote: with intervals that widen honestly as sensor data thins
+- id: TIER-04
+  section: Part 1 / Tiers
+  category: capture
+  requirement: The photo tier takes 2 to 8 stills per room.
+  quote: Photos. 2 to 8 stills per room
+- id: TIER-05
+  section: Part 1 / Tiers
+  category: capture
+  requirement: The photo tier works with any iPhone 15 or newer, non-Pro models included.
+  quote: 2 to 8 stills per room from any iPhone 15 or newer
+- id: TIER-06
+  section: Part 1 / Tiers
+  category: constraint
+  requirement: The photo tier uses no depth and no poses.
+  quote: no depth, no poses
+- id: TIER-07
+  section: Part 1 / Tiers
+  category: capture
+  requirement: Photo input is a set of folders, one per room.
+  quote: A set of photo folders, one folder per room
+- id: TIER-08
+  section: Part 1 / Tiers
+  category: output-contract
+  requirement: The photo folders produce the same stitched whole-property plan the other tiers produce.
+  quote: must produce the same stitched whole-property plan the other tiers produce
+- id: TIER-09
+  section: Part 1 / Tiers
+  category: output-contract
+  requirement: Photo-tier intervals are wider to match the thinner input.
+  quote: with intervals widened accordingly.
+- id: TIER-10
+  section: Part 1 / Tiers
+  category: output-contract
+  requirement: 'Any picture in, results out: the photo tier always returns a schema-valid result.'
+  quote: 'This is the floor: any picture in, results out.'
+- id: TIER-11
+  section: Part 1 / Tiers
+  category: capture
+  requirement: The video tier takes one handheld walkthrough clip.
+  quote: Video. A handheld walkthrough clip
+- id: TIER-12
+  section: Part 1 / Tiers
+  category: capture
+  requirement: The video tier works with any iPhone 15 or newer.
+  quote: A handheld walkthrough clip from any iPhone 15 or newer.
+- id: TIER-13
+  section: Part 1 / Tiers
+  category: capture
+  requirement: The LiDAR tier uses depth, poses and intrinsics.
+  quote: LiDAR. Depth, poses and intrinsics
+- id: TIER-14
+  section: Part 1 / Tiers
+  category: capture
+  requirement: The LiDAR tier targets Pro-class devices that have LiDAR.
+  quote: on Pro-class devices.
+- id: TIER-15
+  section: Part 1 / Tiers
+  category: deliverable
+  requirement: A device matrix states which tier runs on which hardware.
+  quote: You submit a device matrix stating which tier runs on which hardware
+- id: TIER-16
+  section: Part 1 / Tiers
+  category: deliverable
+  requirement: The device matrix states the accuracy each tier honestly delivers.
+  quote: what accuracy each tier honestly delivers.
+- id: TIER-17
+  section: Part 1 / Tiers
+  category: capture
+  requirement: 'Derived: read the iPhone''s default formats (HEIC stills, HEVC and HDR video), because input can come from any iPhone 15 or newer.'
+  quote: from any iPhone 15 or newer
+- id: OUT-01
+  section: Part 2 / Contract
+  category: output-contract
+  requirement: The full contract applies to every capture at every tier.
+  quote: The full Round 1 contract per capture
+- id: OUT-02
+  section: Part 2 / Contract
+  category: output-contract
+  requirement: A dimensioned plan for each room.
+  quote: dimensioned per-room plan
+- id: OUT-03
+  section: Part 2 / Contract
+  category: output-contract
+  requirement: Each room plan lists its walls with lengths.
+  quote: dimensioned per-room plan with walls
+- id: OUT-04
+  section: Part 2 / Contract
+  category: output-contract
+  requirement: A ceiling height for each room.
+  quote: ceiling height
+- id: OUT-05
+  section: Part 2 / Contract
+  category: output-contract
+  requirement: A floor area for each room.
+  quote: floor area
+- id: OUT-06
+  section: Part 2 / Contract
+  category: output-contract
+  requirement: Openings for each room, with type, host wall, position and width.
+  quote: and openings
+- id: OUT-07
+  section: Part 2 / Contract
+  category: output-contract
+  requirement: A stitched multi-room plan.
+  quote: stitched multi-room plan
+- id: OUT-08
+  section: Part 2 / Contract
+  category: output-contract
+  requirement: The stitched plan has correct adjacency.
+  quote: stitched multi-room plan with correct adjacency
+- id: OUT-09
+  section: Part 2 / Contract
+  category: output-contract
+  requirement: Damage regions are attached to surfaces.
+  quote: per-surface damage regions
+- id: OUT-10
+  section: Part 2 / Contract
+  category: output-contract
+  requirement: Each damage region has a class.
+  quote: per-surface damage regions with class and metric extent
+- id: OUT-11
+  section: Part 2 / Contract
+  category: output-contract
+  requirement: Each damage region has a metric extent.
+  quote: per-surface damage regions with class and metric extent
+- id: OUT-12
+  section: Part 2 / Contract
+  category: output-contract
+  requirement: Concealed-damage flags.
+  quote: concealed-damage flags with the rule that fired
+- id: OUT-13
+  section: Part 2 / Contract
+  category: output-contract
+  requirement: Each concealed-damage flag names the rule that fired.
+  quote: concealed-damage flags with the rule that fired
+- id: OUT-14
+  section: Part 2 / Contract
+  category: output-contract
+  requirement: Scope line items.
+  quote: scope line items keyed to surfaces
+- id: OUT-15
+  section: Part 2 / Contract
+  category: output-contract
+  requirement: Scope line items are keyed to surfaces.
+  quote: scope line items keyed to surfaces
+- id: OUT-16
+  section: Part 2 / Contract
+  category: output-contract
+  requirement: Every measurement carries a confidence interval.
+  quote: a confidence interval on every measurement
+- id: OUT-17
+  section: Part 2 / Contract
+  category: output-contract
+  requirement: One command per capture.
+  quote: one command per capture
+- id: OUT-18
+  section: Part 2 / Contract
+  category: output-contract
+  requirement: Output is JSON that conforms to the published schema.
+  quote: JSON to the published schema
+- id: OUT-19
+  section: Part 2 / Contract
+  category: output-contract
+  requirement: A rendered plan.
+  quote: rendered plan.
+- id: OUT-20
+  section: Part 2 / Contract
+  category: output-contract
+  requirement: The stitched plan is one whole-property floor plan.
+  quote: one whole-property floor plan
+- id: OUT-21
+  section: Part 2 / Contract
+  category: output-contract
+  requirement: A homeowner would recognise the plan as the kind poly.cam or magicplan produces.
+  quote: a homeowner would recognise from poly.cam or magicplan
+- id: OUT-22
+  section: Part 2 / Contract
+  category: output-contract
+  requirement: Every room is placed.
+  quote: with every room placed, connected and dimensioned
+- id: OUT-23
+  section: Part 2 / Contract
+  category: output-contract
+  requirement: Every room is connected.
+  quote: with every room placed, connected and dimensioned
+- id: OUT-24
+  section: Part 2 / Contract
+  category: output-contract
+  requirement: Every room is dimensioned.
+  quote: with every room placed, connected and dimensioned
+- id: OUT-25
+  section: Part 2 / Contract
+  category: output-contract
+  requirement: A stitched plan is produced from every tier, photos included.
+  quote: produced from every tier including photos.
+- id: OUT-26
+  section: Part 2 / Gates
+  category: output-contract
+  requirement: 'Derived: running the same capture twice gives identical output.'
+  quote: Same room in, same plan out
+- id: BENCH-01
+  section: Part 2 / Benchmark
+  category: benchmark-data
+  requirement: The candidate builds the benchmark set.
+  quote: you build the benchmark set yourself
+- id: BENCH-02
+  section: Part 2 / Benchmark
+  category: benchmark-data
+  requirement: The composition is fixed so it cannot be flattered. Every listed component must be present.
+  quote: its composition is specified so it cannot be flattered
+- id: BENCH-03
+  section: Part 2 / Benchmark
+  category: benchmark-data
+  requirement: One multi-room capture of three or more rooms.
+  quote: One multi-room capture, three or more rooms plus a connector
+- id: BENCH-04
+  section: Part 2 / Benchmark
+  category: benchmark-data
+  requirement: The multi-room capture includes a connector.
+  quote: One multi-room capture, three or more rooms plus a connector
+- id: BENCH-05
+  section: Part 2 / Benchmark
+  category: benchmark-data
+  requirement: One furnished room.
+  quote: One furnished room with staged damage spanning two damage classes
+- id: BENCH-06
+  section: Part 2 / Benchmark
+  category: benchmark-data
+  requirement: Staged damage in the furnished room.
+  quote: One furnished room with staged damage spanning two damage classes
+- id: BENCH-07
+  section: Part 2 / Benchmark
+  category: benchmark-data
+  requirement: The staged damage covers two damage classes.
+  quote: One furnished room with staged damage spanning two damage classes
+- id: BENCH-08
+  section: Part 2 / Benchmark
+  category: benchmark-data
+  requirement: The same rooms are captured at all three tiers.
+  quote: The same rooms captured at all three input tiers
+- id: BENCH-09
+  section: Part 2 / Benchmark
+  category: benchmark-data
+  requirement: The multi-room set is captured at all three tiers.
+  quote: the multi-room set included
+- id: BENCH-10
+  section: Part 2 / Benchmark
+  category: benchmark-data
+  requirement: At the photo tier the multi-room set is stored as per-room folders.
+  quote: at the photo tier it arrives as per-room photo folders
+- id: BENCH-11
+  section: Part 2 / Benchmark
+  category: benchmark-data
+  requirement: The photo-tier multi-room set stitches.
+  quote: and must still stitch
+- id: BENCH-12
+  section: Part 2 / Benchmark
+  category: benchmark-data
+  requirement: At least one room is captured twice at the same tier.
+  quote: At least one room captured twice at the same tier, for the repeatability gate
+- id: BENCH-13
+  section: Part 2 / Benchmark
+  category: benchmark-data
+  requirement: Laser or tape ground truth for everything.
+  quote: Laser or tape ground truth on everything
+- id: BENCH-14
+  section: Part 2 / Benchmark
+  category: benchmark-data
+  requirement: Raw sensor data is submitted.
+  quote: raw sensor data and measurements submitted
+- id: BENCH-15
+  section: Part 2 / Benchmark
+  category: benchmark-data
+  requirement: Ground-truth measurements are submitted.
+  quote: raw sensor data and measurements submitted
+- id: BENCH-16
+  section: Constraints
+  category: benchmark-data
+  requirement: 'Derived: the benchmark includes mirrors, glass, wet-look surfaces and low light.'
+  quote: Real properties contain mirrors, glass, wet-look surfaces and low light. Cover them in your submission.
+- id: GATE-01
+  section: Part 2 / Gates
+  category: gate
+  requirement: The Round 1 gates also apply. They are not listed in this document.
+  quote: Round 1 gates apply
+- id: GATE-02
+  section: Part 2 / Gates
+  category: gate
+  requirement: Opening width error is 2 cm or less.
+  quote: 'Opening widths: <= 2 cm'
+- id: GATE-03
+  section: Part 2 / Gates
+  category: gate
+  requirement: The 2 cm bound holds on at least 85% of openings.
+  quote: on >= 85% of openings
+- id: GATE-04
+  section: Part 2 / Gates
+  category: gate
+  requirement: A missed opening counts as a miss.
+  quote: 'detection itself scored: a missed opening and a phantom opening each count as a miss'
+- id: GATE-05
+  section: Part 2 / Gates
+  category: gate
+  requirement: A phantom opening counts as a miss.
+  quote: 'detection itself scored: a missed opening and a phantom opening each count as a miss'
+- id: GATE-06
+  section: Part 2 / Gates
+  category: gate
+  requirement: Ceiling height error is 1.5 cm or less in each room.
+  quote: 'Ceiling height: <= 1.5 cm per room'
+- id: GATE-07
+  section: Part 2 / Gates
+  category: gate
+  requirement: For a room captured more than once, the spread of ceiling height across captures is 1 cm or less.
+  quote: where a room is captured more than once, spread across captures <= 1 cm
+- id: GATE-08
+  section: Part 2 / Gates
+  category: gate
+  requirement: Ceiling height must be both accurate and repeatable. Repeatable-but-biased fails, and so does unrepeatable.
+  quote: Repeatable-but-biased and unrepeatable both fail
+- id: GATE-09
+  section: Part 2 / Gates
+  category: deliverable
+  requirement: 'The report says which ceiling failure mode is present: bias, spread, both or none.'
+  quote: and your report says which one you have
+- id: GATE-10
+  section: Part 2 / Gates
+  category: gate
+  requirement: Two captures of the same room at the same tier agree within 1 cm or 0.5% on each wall.
+  quote: Two captures of the same room at the same tier agree within 1 cm or 0.5% per wall.
+- id: GATE-11
+  section: Part 2 / Gates
+  category: gate
+  requirement: Repeat captures give the same plan, with the same rooms, walls and openings.
+  quote: Same room in, same plan out is what "spit out the same results" means operationally
+- id: GATE-12
+  section: Part 2 / Gates
+  category: gate
+  requirement: The report states the drift handling used on the multi-room capture.
+  quote: Your report states what you do about accumulated drift on the multi-room capture
+- id: GATE-13
+  section: Part 2 / Gates
+  category: gate
+  requirement: An ablation shows the stitched footprint with drift handling on and with it off.
+  quote: an ablation shows the stitched footprint with it on and off
+- id: GATE-14
+  section: Part 2 / Gates
+  category: gate
+  requirement: Using poses as-is is an automatic fail on the drift row.
+  quote: '"Poses used as-is" is an automatic fail on this row'
+- id: GATE-15
+  section: Part 2 / Gates
+  category: gate
+  requirement: Per-room photo folders produce one stitched plan.
+  quote: Per-room photo folders produce one stitched plan
+- id: GATE-16
+  section: Part 2 / Gates
+  category: gate
+  requirement: The photo-tier stitched plan has correct adjacency.
+  quote: with correct adjacency and no room overlaps
+- id: GATE-17
+  section: Part 2 / Gates
+  category: gate
+  requirement: The photo-tier stitched plan has no room overlaps.
+  quote: with correct adjacency and no room overlaps
+- id: GATE-18
+  section: Part 2 / Gates
+  category: gate
+  requirement: The photo-tier footprint is within +/-8%.
+  quote: footprint within +/-8%
+- id: GATE-19
+  section: Part 2 / Gates
+  category: gate
+  requirement: The photo-tier footprint interval is calibrated.
+  quote: footprint within +/-8% with calibrated intervals
+- id: GATE-20
+  section: Part 2 / Gates
+  category: gate
+  requirement: A photo path that only handles single rooms fails.
+  quote: A photo path that handles single rooms only fails this row
+- id: GATE-21
+  section: Part 2 / Gates
+  category: gate
+  requirement: Photo-tier wall lengths are within +/-8%.
+  quote: 'photo: wall lengths within +/-8%'
+- id: GATE-22
+  section: Part 2 / Gates
+  category: gate
+  requirement: Photo-tier wall-length intervals are calibrated.
+  quote: 'photo: wall lengths within +/-8% with calibrated intervals'
+- id: GATE-23
+  section: Part 2 / Gates
+  category: gate
+  requirement: Video-tier wall lengths are within +/-3%.
+  quote: 'video: +/-3%'
+- id: GATE-24
+  section: Part 2 / Gates
+  category: gate
+  requirement: Calibration is scored at every tier, LiDAR included.
+  quote: calibration is scored at every tier
+- id: H2H-01
+  section: Part 3 / Head-to-head
+  category: benchmark-data
+  requirement: Run the head-to-head on 2 benchmark rooms.
+  quote: On 2 of your benchmark rooms
+- id: H2H-02
+  section: Part 3 / Head-to-head
+  category: benchmark-data
+  requirement: Compare the pipeline's LiDAR-tier output.
+  quote: your pipeline's output at the LiDAR tier
+- id: H2H-03
+  section: Part 3 / Head-to-head
+  category: benchmark-data
+  requirement: Compare against one consumer scanning app chosen by the candidate.
+  quote: against one consumer scanning app of your choice
+- id: H2H-04
+  section: Part 3 / Head-to-head
+  category: benchmark-data
+  requirement: Both run on the same rooms.
+  quote: on the same rooms
+- id: H2H-05
+  section: Part 3 / Head-to-head
+  category: deliverable
+  requirement: Name the app.
+  quote: name the app and version
+- id: H2H-06
+  section: Part 3 / Head-to-head
+  category: deliverable
+  requirement: State the app version.
+  quote: name the app and version
+- id: H2H-07
+  section: Part 3 / Head-to-head
+  category: deliverable
+  requirement: Submit the app's export.
+  quote: submit its export
+- id: H2H-08
+  section: Part 3 / Head-to-head
+  category: deliverable
+  requirement: Present the comparison as one table.
+  quote: One table, your error and theirs, dimension by dimension.
+- id: H2H-09
+  section: Part 3 / Head-to-head
+  category: deliverable
+  requirement: The table shows our error and the app's error against the same ground truth.
+  quote: One table, your error and theirs, dimension by dimension.
+- id: H2H-10
+  section: Part 3 / Head-to-head
+  category: deliverable
+  requirement: One table row per dimension.
+  quote: One table, your error and theirs, dimension by dimension.
+- id: H2H-11
+  section: Part 3 / Head-to-head
+  category: gate
+  requirement: Beat or tie on at least 70% of shared dimensions.
+  quote: Beat or tie on >= 70% of shared dimensions.
+- id: H2H-12
+  section: Part 3 / Head-to-head
+  category: constraint
+  requirement: Cost is not an accepted reason. Use a free tier if needed.
+  quote: Cost is not an accepted reason; free tiers exist.
+- id: FIX-01
+  section: Part 4 / Fix loop
+  category: deliverable
+  requirement: A one-page fix declaration.
+  quote: 'Acknowledge a one-page fix declaration:'
+- id: FIX-02
+  section: Part 4 / Fix loop
+  category: deliverable
+  requirement: The declaration names the single worst-performing gate in the candidate's own benchmark.
+  quote: The single worst-performing gate in your own benchmark
+- id: FIX-03
+  section: Part 4 / Fix loop
+  category: deliverable
+  requirement: It states the failing number.
+  quote: with the failing number
+- id: FIX-04
+  section: Part 4 / Fix loop
+  category: deliverable
+  requirement: It states the root-cause hypothesis.
+  quote: Your root-cause hypothesis
+- id: FIX-05
+  section: Part 4 / Fix loop
+  category: deliverable
+  requirement: It gives the evidence for that hypothesis.
+  quote: and the evidence for it
+- id: FIX-06
+  section: Part 4 / Fix loop
+  category: deliverable
+  requirement: It states the fix to be shipped.
+  quote: The fix you intend to ship
+- id: FIX-07
+  section: Part 4 / Fix loop
+  category: deliverable
+  requirement: It states the number predicted after the fix.
+  quote: and the number you predict after it
+- id: FIX-08
+  section: Part 4 / Fix loop
+  category: process
+  requirement: Ship the fix.
+  quote: Then you ship it.
+- id: FIX-09
+  section: Part 4 / Fix loop
+  category: deliverable
+  requirement: The final submission contains the before run.
+  quote: Final submission contains the before run
+- id: FIX-10
+  section: Part 4 / Fix loop
+  category: deliverable
+  requirement: The final submission contains the after run.
+  quote: the after run
+- id: FIX-11
+  section: Part 4 / Fix loop
+  category: deliverable
+  requirement: The evaluators can regenerate both runs.
+  quote: both regenerable by us
+- id: FIX-12
+  section: Part 4 / Fix loop
+  category: deliverable
+  requirement: A readable diff.
+  quote: and a readable diff.
+- id: FIX-13
+  section: Part 4 / Fix loop
+  category: deliverable
+  requirement: If the gate is not reached or the prediction misses, the report says why (post-mortem).
+  quote: majority marks when the report says why it fell short
+- id: FIX-14
+  section: Part 4 / Fix loop
+  category: process
+  requirement: 'Derived: the declaration is written before the fix lands, so the prediction is made in advance.'
+  quote: The fix you intend to ship and the number you predict after it
+- id: PROC-01
+  section: Part 5 / Process
+  category: process
+  requirement: Commit as you work.
+  quote: Commit as you work.
+- id: PROC-02
+  section: Part 5 / Process
+  category: process
+  requirement: The evaluators read the history.
+  quote: We read the history.
+- id: PROC-03
+  section: Part 5 / Process
+  category: process
+  requirement: No dump of the whole repo in one or two commits at the deadline.
+  quote: A repo that materialises fully formed in one or two commits at the deadline scores zero on this part
+- id: PROC-04
+  section: Part 5 / Process
+  category: process
+  requirement: The history must plausibly belong to the person who built the project.
+  quote: we are checking the history could belong to the person who built the thing.
+- id: PROC-05
+  section: Part 5 / Process
+  category: process
+  requirement: AI coding tools are allowed and expected.
+  quote: AI coding tools remain fully allowed and expected.
+- id: PROC-06
+  section: Part 5 / Process
+  category: defense
+  requirement: Every design decision is defended live with tools closed.
+  quote: every design decision defended live, tools closed.
+- id: DEL-01
+  section: Deliverables
+  category: deliverable
+  requirement: A compliance matrix with the columns requirement, file path, artifact and status.
+  quote: 'Compliance matrix: requirement -> file path -> artifact -> status.'
+- id: DEL-02
+  section: Deliverables
+  category: deliverable
+  requirement: 'The capture route artifact: the build, or the one-page protocol.'
+  quote: 'Capture route: the TestFlight/dev build, or the one-page stock-capture protocol.'
+- id: DEL-03
+  section: Deliverables
+  category: deliverable
+  requirement: The device matrix is delivered with the capture route.
+  quote: Plus the device matrix.
+- id: DEL-04
+  section: Deliverables
+  category: deliverable
+  requirement: A repo whose README takes a clean machine to a run on a fresh capture in under 15 minutes.
+  quote: Repo, README to running on a fresh capture in under 15 minutes on a clean machine
+- id: DEL-05
+  section: Deliverables
+  category: deliverable
+  requirement: One command per capture, repeated here as a deliverable.
+  quote: one command per capture.
+- id: DEL-06
+  section: Deliverables
+  category: deliverable
+  requirement: A reproduction bundle that regenerates every reported number from raw inputs.
+  quote: 'Reproduction bundle: everything our machine needs to regenerate every reported number from raw inputs.'
+- id: DEL-07
+  section: Deliverables
+  category: deliverable
+  requirement: Cached model outputs are allowed only when the cache replays deterministically.
+  quote: Cached model outputs acceptable when the cache replays deterministically
+- id: DEL-08
+  section: Deliverables
+  category: deliverable
+  requirement: The live model path must also run.
+  quote: and the live path also runs, because the walk-in test runs live.
+- id: DEL-09
+  section: Deliverables
+  category: deliverable
+  requirement: The benchmark report shows the gates at all three tiers.
+  quote: 'Benchmark report: gates at all three tiers'
+- id: DEL-10
+  section: Deliverables
+  category: deliverable
+  requirement: The benchmark report has a repeatability table.
+  quote: repeatability table
+- id: DEL-11
+  section: Deliverables
+  category: deliverable
+  requirement: The benchmark report has a head-to-head table.
+  quote: head-to-head table
+- id: DEL-12
+  section: Deliverables
+  category: deliverable
+  requirement: The benchmark report has timing.
+  quote: timing.
+- id: DEL-13
+  section: Deliverables
+  category: deliverable
+  requirement: A fix loop bundle.
+  quote: Fix loop bundle
+- id: DEL-14
+  section: Deliverables
+  category: deliverable
+  requirement: A technical report of at most 6 pages.
+  quote: Technical report, max 6 pages.
+- id: DEL-15
+  section: Deliverables
+  category: deliverable
+  requirement: The technical report covers the architecture.
+  quote: Architecture
+- id: DEL-16
+  section: Deliverables
+  category: deliverable
+  requirement: The technical report covers tier design and the device matrix.
+  quote: tier design and device matrix
+- id: DEL-17
+  section: Deliverables
+  category: deliverable
+  requirement: The technical report covers drift handling.
+  quote: drift handling
+- id: DEL-18
+  section: Deliverables
+  category: deliverable
+  requirement: The technical report covers the error budget.
+  quote: error budget
+- id: DEL-19
+  section: Deliverables
+  category: deliverable
+  requirement: The technical report covers calibration analysis.
+  quote: calibration analysis
+- id: DEL-20
+  section: Deliverables
+  category: deliverable
+  requirement: The technical report tells the fix loop story.
+  quote: the fix loop story
+- id: DEL-21
+  section: Deliverables
+  category: deliverable
+  requirement: The technical report lists known failure modes.
+  quote: known failure modes.
+- id: DEL-22
+  section: Deliverables
+  category: deliverable
+  requirement: Raw benchmark data includes the sensor logs.
+  quote: 'Raw benchmark data: sensor logs, ground truth, app exports.'
+- id: DEL-23
+  section: Deliverables
+  category: deliverable
+  requirement: Raw benchmark data includes the ground truth.
+  quote: 'Raw benchmark data: sensor logs, ground truth, app exports.'
+- id: DEL-24
+  section: Deliverables
+  category: deliverable
+  requirement: Raw benchmark data includes the app exports.
+  quote: 'Raw benchmark data: sensor logs, ground truth, app exports.'
+- id: WALK-01
+  section: Walk-in test
+  category: defense
+  requirement: The defense capture is of a space the candidate has never seen.
+  quote: At the defense we capture a space you have never seen
+- id: WALK-02
+  section: Walk-in test
+  category: defense
+  requirement: The evaluators capture with their own iPhone 15 or newer. The model is not known in advance.
+  quote: with our own iPhone 15 or newer
+- id: WALK-03
+  section: Walk-in test
+  category: defense
+  requirement: The evaluators choose the tier on the day.
+  quote: choosing the tier on the day
+- id: WALK-04
+  section: Walk-in test
+  category: defense
+  requirement: The evaluators follow the capture route exactly.
+  quote: following your capture route exactly.
+- id: WALK-05
+  section: Walk-in test
+  category: defense
+  requirement: 'The pipeline runs cold: no tuning for the space, no manual edits, no precomputed results.'
+  quote: Your pipeline runs on it cold, in front of us.
+- id: WALK-06
+  section: Walk-in test
+  category: defense
+  requirement: The live model path runs at the defense, not a cache replay.
+  quote: because the walk-in test runs live.
+- id: WALK-07
+  section: Walk-in test
+  category: defense
+  requirement: The pipeline runs while the evaluators laser the space, so runtime matters.
+  quote: We measure the space with a laser measurer while it runs
+- id: WALK-08
+  section: Walk-in test
+  category: defense
+  requirement: Output is scored on the spot against their laser readings, so it must be quick to read.
+  quote: score your output against those measurements on the spot.
+- id: WALK-09
+  section: Walk-in test
+  category: defense
+  requirement: All three tiers are ready to run at the defense.
+  quote: All three tiers must be ready to run.
+- id: CON-01
+  section: Constraints
+  category: constraint
+  requirement: Handheld consumer capture only.
+  quote: Handheld consumer capture only
+- id: CON-02
+  section: Constraints
+  category: constraint
+  requirement: Any pretrained model is allowed, with disclosure.
+  quote: any pretrained model, dataset or API with disclosure
+- id: CON-03
+  section: Constraints
+  category: constraint
+  requirement: Any dataset is allowed, with disclosure.
+  quote: any pretrained model, dataset or API with disclosure
+- id: CON-04
+  section: Constraints
+  category: constraint
+  requirement: Any API is allowed, with disclosure.
+  quote: any pretrained model, dataset or API with disclosure
+- id: CON-05
+  section: Constraints
+  category: constraint
+  requirement: Nothing calls the candidate's own infrastructure.
+  quote: everything runs without calling your infrastructure.
+- id: CON-06
+  section: Constraints
+  category: constraint
+  requirement: The Round 1 constraints still apply.
+  quote: Same as Round 1.
+- id: CON-07
+  section: Constraints
+  category: constraint
+  requirement: Model weights are fetched by a script or a volume, not committed to git.
+  quote: Weights and large binaries fetched by script or volume.
+- id: CON-08
+  section: Constraints
+  category: constraint
+  requirement: Large binaries such as raw data and exports are fetched by a script or a volume.
+  quote: Weights and large binaries fetched by script or volume.
+- id: CON-09
+  section: Constraints
+  category: constraint
+  requirement: Mirrors are covered in the submission.
+  quote: Real properties contain mirrors, glass, wet-look surfaces and low light. Cover them in your submission.
+- id: CON-10
+  section: Constraints
+  category: constraint
+  requirement: Glass is covered in the submission.
+  quote: Real properties contain mirrors, glass, wet-look surfaces and low light. Cover them in your submission.
+- id: CON-11
+  section: Constraints
+  category: constraint
+  requirement: Wet-look surfaces are covered in the submission.
+  quote: Real properties contain mirrors, glass, wet-look surfaces and low light. Cover them in your submission.
+- id: CON-12
+  section: Constraints
+  category: constraint
+  requirement: Low light is covered in the submission.
+  quote: Real properties contain mirrors, glass, wet-look surfaces and low light. Cover them in your submission.
+- id: SCORE-01
+  section: Scoring
+  category: scoring
+  requirement: The walk-in test is worth 30%. It targets systems that only work on their author's data.
+  quote: '30% The walk-in test: cold run on our capture, scored against our laser measurements taken in the room / Systems that only work on their author''s data'
+- id: SCORE-02
+  section: Scoring
+  category: scoring
+  requirement: The fix loop delta is worth 25%. It targets diagnosis without repair.
+  quote: 25% Fix loop delta / Diagnosis shipped in place of repair
+- id: SCORE-03
+  section: Scoring
+  category: scoring
+  requirement: Verified benchmark accuracy across all three tiers is worth 15%. It targets claims that fail under reproduction.
+  quote: 15% Verified benchmark accuracy across all three tiers / Claims that evaporate under reproduction
+- id: SCORE-04
+  section: Scoring
+  category: scoring
+  requirement: Compliance matrix coverage is worth 10%. It targets building a different product from the one specified.
+  quote: 10% Compliance matrix coverage / Building a different product than the one specified
+- id: SCORE-05
+  section: Scoring
+  category: scoring
+  requirement: The head-to-head is worth 10%. It targets benchmark avoidance.
+  quote: 10% Head-to-head vs incumbent app like magicplan or poly.cam / Benchmark avoidance
+- id: SCORE-06
+  section: Scoring
+  category: scoring
+  requirement: 'Capture route quality is worth 5%: install time, protocol clarity and what a non-engineer would experience.'
+  quote: '5% Capture route quality: install time, protocol clarity, what a non-engineer would experience / Pipelines with no path to a user''s hands'
+- id: SCORE-07
+  section: Scoring
+  category: scoring
+  requirement: Process evidence is worth 5%. It targets single-commit repos nobody can audit.
+  quote: 5% Process evidence / Unauditable single-commit repos
+- id: SCORE-08
+  section: Scoring
+  category: scoring
+  requirement: Confident garbage on thin input caps the total score.
+  quote: confident garbage on thin input caps your total score.
+- id: SCORE-09
+  section: Scoring
+  category: scoring
+  requirement: Fix loop full marks need a correct root cause, a shipped fix, and the gate moving from fail to pass.
+  quote: 'Correct root cause, shipped fix, gate moves from fail to pass: full marks'
+- id: SCORE-10
+  section: Scoring
+  category: scoring
+  requirement: A correct root cause and shipped fix that move the number without passing the gate earn majority marks, but only if the report says why it fell short.
+  quote: 'Correct root cause, shipped fix, meaningful movement short of the gate: majority marks when the report says why it fell short'
+- id: SCORE-11
+  section: Scoring
+  category: scoring
+  requirement: A prediction that is badly wrong in either direction earns marks for post-mortem honesty only, none for the prediction.
+  quote: 'Prediction badly wrong either direction: marks for the post-mortem''s honesty, none for the prediction'
+- id: SCORE-12
+  section: Scoring
+  category: scoring
+  requirement: Analysis with no shipped fix scores zero on the fix loop.
+  quote: 'Analysis with no shipped fix: zero, regardless of quality'
+- id: SCORE-13
+  section: Scoring
+  category: scoring
+  requirement: A fix without regenerable before and after runs scores zero on the fix loop.
+  quote: 'Fix with no regenerable before/after: zero'
+- id: SCORE-14
+  section: Scoring
+  category: scoring
+  requirement: A deadline dump scores zero on process evidence and casts suspicion on the narrative report.
+  quote: scores zero on this part and its narrative report is read with proportional suspicion.
+- id: SCORE-15
+  section: Scoring
+  category: scoring
+  requirement: Report length trades against engineering time, and the engineering is what gets scored.
+  quote: 'The page cap is deliberate: report length trades against engineering time, and we score the engineering.'
