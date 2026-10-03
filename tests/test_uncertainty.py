@@ -8,13 +8,19 @@ import numpy as np
 import pytest
 import yaml
 from _output_plan import (
+    PROVENANCE,
+    TIMING,
     M,
     make_damage,
+    make_flags,
+    make_info,
     make_plan,
+    make_scope,
     poly_room,
     rect_room,
 )
 
+from scan2scope.output import schema, writer
 from scan2scope.types import TIERS, Measurement, Plan
 from scan2scope.uncertainty import annotate
 from scan2scope.uncertainty.calibrate import (
@@ -478,6 +484,22 @@ def test_capture_focal_flags_are_recognised():
         quality = {"flags": [flag], "scenes": [{}]}
         rec = annotate(make_plan(), [], tier="photo", quality=quality, calibration=NO_CAL)
         assert rec["room_factors"]["R1"]["reasons"] == ["missing_exif_focal"], flag
+
+
+def test_writer_lists_why_intervals_were_widened():
+    plan, damage = make_plan(), make_damage()
+    plan.meta["drift"] = {"chunks": [{"world_scale": 0.8, "align_method": "reference"},
+                                     {"world_scale": 1.0, "align_method": "poses"}]}
+    unobserve(plan.rooms[0].walls[1])
+    annotate(plan, damage, tier="video", quality={}, calibration=NO_CAL)
+    res = writer.build_result(make_info("video"), plan, damage, make_flags(), make_scope(), TIMING,
+                              PROVENANCE)
+    schema.validate(res)
+    flags = set(res["property"]["flags"])
+    assert {"intervals_widened:chunk_scale_spread", "intervals_widened:chunk_align_fallback"} <= flags
+    assert "intervals_widened:wall_end_unobserved" in res["rooms"][0]["flags"]
+    assert not any(f.startswith("intervals_widened") for f in res["rooms"][1]["flags"])
+    assert "chunk_scale_spread" in res["conventions"]["interval"]["method"]
 
 
 def test_annotating_twice_gives_the_same_intervals():
