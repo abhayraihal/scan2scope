@@ -601,7 +601,7 @@ def _annotate_room(mdl: _Model, room: Room, add: dict[str, float], f_room: float
                        + t_unobs ** 2 + t_drift ** 2)
     area_v = abs(_num(room.floor_area.value) or 0.0)
     frame = _room_frame(room) if len(room.walls) >= 3 else None
-    p_room = max((o.p_fragment for o in outs if o.up > 0), default=0.0)
+    p_room = max((o.p_fragment for o in outs if "wall_fragment" in o.reasons), default=0.0)
     up_area = 0.0
     if frame is not None and p_room > 0:  # if the notches are not real, the room fills its bounding box
         box = float(frame.extent[0] * frame.extent[1])
