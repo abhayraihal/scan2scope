@@ -133,6 +133,7 @@ def test_mold_room_flag_gives_one_containment_item(plan):
     items = generate(plan, ds, flags)
     (cont,) = items_by(items, ("HMR", "CONT"))
     assert q(cont) == (1.0, 1.0, 1.0) and cont.surface_id == "R1-W2" and cont.rule_id == "R-MOLD-LIMITED"
+    assert cont.damage_ids == ["D1", "D2"]  # the containment covers all mold in the room
     assert len(items_by(items, ("DMO", "INSP"))) == 2  # one inspection opening per affected surface
     assert {i.surface_id for i in items_by(items, ("HMR", "AMA"))} == {"R1-W2", "R1-W4"}
 

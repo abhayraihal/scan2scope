@@ -214,12 +214,13 @@ def generate(plan: Plan, damage: list[DamageRegion], flags: list[ConcealedFlag],
         for f in flags:
             if f.rule_id not in entry.get("rules", []):
                 continue
-            sids = f.surface_ids[:1] if entry["quantity"].get("count") == "flag" else f.surface_ids
-            for sid in sids:
+            per_flag = entry["quantity"].get("count") == "flag"
+            for sid in (f.surface_ids[:1] if per_flag else f.surface_ids):
                 fl, regs = groups_f.setdefault(sid, ([], []))
                 fl.append(f)
-                regs += [by_id[i] for i in f.damage_ids
-                         if i in by_id and by_id[i].surface_id == sid and by_id[i] not in regs]
+                have = {d.id for d in regs}
+                regs += [by_id[i] for i in dict.fromkeys(f.damage_ids)
+                         if i in by_id and i not in have and (per_flag or by_id[i].surface_id == sid)]
         for sid, (fl, regs) in groups_f.items():
             room_id = regs[0].room_id if regs else fl[0].room_id
             try:
