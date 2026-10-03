@@ -175,6 +175,13 @@ def test_writer_repairs_odd_input_and_stays_valid():
     assert prov["device"] == "unknown" and prov["git_commit"] is None
 
 
+def test_polygon_with_a_z_column_keeps_plan_coordinates():
+    plan = make_plan()
+    plan.rooms[0].polygon = np.c_[plan.rooms[0].polygon, np.full(4, 0.05)]
+    res = build(plan=plan)
+    assert res["rooms"][0]["polygon"] == [[0.0, 0.0], [4.0, 0.0], [4.0, 3.0], [0.0, 3.0]]
+
+
 def test_duplicate_ids_are_renamed():
     plan, damage = make_plan(), make_damage()
     damage[1].id = "D1"

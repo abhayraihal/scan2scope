@@ -202,7 +202,8 @@ class _Writer:
 
     def polygon(self, room: Room, rid: str) -> list[list[float]]:
         try:
-            raw = np.asarray(room.polygon, float).reshape(-1, 2)
+            raw = np.asarray(room.polygon, float)
+            raw = raw[:, :2] if raw.ndim == 2 and raw.shape[1] >= 2 else raw.reshape(-1, 2)
         except (TypeError, ValueError):
             raw = np.zeros((0, 2))
         pts = [p for p in (self.point(q, f"{rid}.polygon", required=False) for q in raw) if p is not None]
