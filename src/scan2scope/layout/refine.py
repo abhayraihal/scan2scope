@@ -1,18 +1,22 @@
-"""Room outlines from each room's own wall faces: per-room wall refinement and regularisation.
+"""Room outlines from each room's own wall faces: furniture filter, per-room wall refinement, regularisation.
 
 The cell complex puts every room edge on a wall line fitted once for the whole property. Two parallel faces of
-different rooms a few centimetres apart then share one line placed between them, and an outline steps between
-the two faces of a wall. Per room:
+different rooms a few centimetres apart then share one line placed between them, an outline steps between the
+two faces of a wall, and furniture fronts cut notches into rooms. Per room:
 
-1. Refinement: each edge is refitted from the wall points within BAND of it that face into the room and lie
+1. Furniture filter: an edge whose face points never reach the band CEILING_BAND below the room's ceiling is a
+   furniture front or side. A run of such edges between two walls is replaced by those walls when that adds
+   floor no other room holds, at most FURNITURE_DEPTH deep. This runs on the cell lines before refinement, and
+   once more on the refined outline for notches whose walls sat on the two faces of one wall body.
+2. Refinement: each edge is refitted from the wall points within BAND of it that face into the room and lie
    along it: a trimmed mean of their offset, started at the densest offset and iterated, or a slanted line
    when that explains the points clearly better (the edge then sits where the line crosses its midpoint). An
    edge with fewer than MIN_POINTS such points keeps its cell-complex position and is flagged
    wall_not_refined. Corners are where consecutive refined lines meet.
-2. Regularisation: an edge shorter than STEP_MAX between two parallel edges goes. Between edges that run the
+3. Regularisation: an edge shorter than STEP_MAX between two parallel edges goes. Between edges that run the
    same way it is a step, and both snap to the face with more support over their joint extent and merge into
    one edge; between edges that run opposite ways it is the end of a strip that thin (a wall body, a slot),
-   and the strip is cut back. It also runs once on the cell lines before the refinement.
+   and the strip is cut back. It also runs once on the cell lines, so the walls around a notch line up first.
 
 Coordinates are in the Manhattan frame. An outline is rectilinear and counter-clockwise, held as a cyclic list
 of edges whose axes alternate; vertex k is where edge k - 1 meets edge k.
@@ -21,6 +25,7 @@ of edges whose axes alternate; vertex k is where edge k - 1 meets edge k.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -34,10 +39,15 @@ log = logging.getLogger("scan2scope.layout")
 
 BAND = 0.15  # wall points this close to an edge are candidates for its face
 STEP_MAX = 0.25  # shorter edges between parallel edges are removed
+CEILING_BAND = 0.5  # a face whose points never come this close to the ceiling is furniture
 MIN_POINTS = 30  # fewer face voxels than this: the edge keeps its cell-complex position
 END_MARGIN = 0.03  # voxels this close to either end of an edge are left out (corner voxels mix two faces)
 WIN_MIN, WIN_MAX = 0.015, 0.08  # trimming window of the face fit
 MODE_RES = 0.005
+TOP_QUANTILE = 0.99
+COLLINEAR_TOL = 0.05  # walls this close on one line are one wall when the notch between them is filled
+FURNITURE_DEPTH = 1.0  # deepest notch that is filled
+FURNITURE_AREA = 0.25  # largest filled area as a share of the room
 SLANT_FLAG = float(np.tan(np.radians(1.0)))
 
 
@@ -98,12 +108,14 @@ class Edge:
     coord: float
     sign: int  # +1 when the room lies on the positive side of the line
     fit: FaceFit | None = None
+    kind: str = "unknown"  # furniture filter: wall | furniture | unknown
 
 
 @dataclass
 class Outline:
     polygon: np.ndarray
     edges: list[Edge]  # edge k runs from polygon[k] to polygon[k + 1]
+    filled: list[Polygon] = field(default_factory=list)  # floor added behind furniture
     steps: int = 0  # steps and strips removed
 
 
@@ -139,6 +151,11 @@ def _span(edges: list[Edge], k: int) -> tuple[float, float]:
     return edges[k - 1].coord, edges[(k + 1) % len(edges)].coord
 
 
+def _length(edges: list[Edge], k: int) -> float:
+    a, b = _span(edges, k)
+    return abs(b - a)
+
+
 def consistent(edges: list[Edge]) -> bool:
     """Axes alternate, every edge runs the way its inward side requires, and the outline is simple."""
     K = len(edges)
@@ -154,6 +171,12 @@ def consistent(edges: list[Edge]) -> bool:
             return False
     poly = Polygon(outline(edges))
     return bool(poly.is_valid and poly.exterior.is_ccw)
+
+
+def _quantile(x: np.ndarray, w: np.ndarray, q: float) -> float:
+    o = np.argsort(x)
+    cw = np.cumsum(w[o])
+    return float(x[o][min(int(np.searchsorted(cw, q * cw[-1])), len(x) - 1)])
 
 
 def _mode(v: np.ndarray, w: np.ndarray, c0: float, sigma: float) -> float:
@@ -238,6 +261,86 @@ class _Room:
         v, t, _, wa, _ = self.band(e, t0, t1, a, win + abs(b) * abs(t1 - t0))
         return float(wa[np.abs(v - a - b * (t - tm)) < win].sum())
 
+    def kind(self, e: Edge, t0: float, t1: float, ceil_z: float) -> str:
+        """furniture when the face points never reach the band CEILING_BAND below the ceiling."""
+        _, _, z, wa, _ = self.band(e, t0, t1)
+        if len(z) < MIN_POINTS:
+            return "unknown"
+        return "furniture" if _quantile(z, wa, TOP_QUANTILE) < ceil_z - CEILING_BAND else "wall"
+
+
+def _furniture_runs(edges: list[Edge]) -> list[tuple[int, int, list[int]]]:
+    """(wall before, wall after, edges between) for each run between walls that holds a furniture edge."""
+    K = len(edges)
+    walls = [k for k, e in enumerate(edges) if e.kind == "wall"]
+    out = []
+    for i, a in enumerate(walls):
+        b = walls[(i + 1) % len(walls)]
+        run = [(a + j) % K for j in range(1, (b - a) % K or K)]
+        if run and b != a and any(edges[k].kind == "furniture" for k in run):
+            out.append((a, b, run))
+    return out
+
+
+def _bridge(edges: list[Edge], a: int, b: int, run: list[int], room: _Room) -> list[Edge] | None:
+    """The outline without `run`: wall a continues straight into wall b, or meets it at a corner."""
+    ea, eb = edges[a], edges[b]
+    drop = set(run)
+    if ea.axis == eb.axis:
+        if ea.sign != eb.sign or abs(ea.coord - eb.coord) > COLLINEAR_TOL:
+            return None
+        drop.add(b)
+        t0, t1 = _span(edges, a)[0], _span(edges, b)[1]
+        if abs(ea.coord - eb.coord) > 1e-9:
+            # one wall on two nearby lines: keep the line with more face points along the joint extent
+            best = max((ea, eb), key=lambda q: room.support(q, t0, t1))
+            ea = Edge(ea.axis, best.coord, ea.sign, kind="wall")
+    out = [ea if k == a else e for k, e in enumerate(edges) if k not in drop]
+    if len(out) < 4 or not consistent(out):
+        return None
+    # a wall left shorter than a step was the notch's own side, and it reaches the ceiling band: no furniture
+    if any((e is ea or e is eb) and _length(out, k) < STEP_MAX for k, e in enumerate(out)):
+        return None
+    return out
+
+
+def _thin(region: Polygon, width: float) -> bool:
+    return all(min(g.bounds[2] - g.bounds[0], g.bounds[3] - g.bounds[1]) <= width + 1e-9
+               for g in getattr(region, "geoms", [region]) if g.area > 1e-9)
+
+
+def _added(edges: list[Edge], new: list[Edge]) -> Polygon | None:
+    """The floor a fill adds, at most FURNITURE_AREA of the room and FURNITURE_DEPTH deep; it may give up
+    only slivers where the two walls it joins were not exactly on one line."""
+    p0, p1 = Polygon(outline(edges)), Polygon(outline(new))
+    if p1.area <= p0.area + 1e-6 or p1.area - p0.area > FURNITURE_AREA * p0.area:
+        return None
+    if not _thin(p0.difference(p1), COLLINEAR_TOL):
+        return None
+    region = p1.difference(p0)
+    return region if _thin(region, FURNITURE_DEPTH) else None
+
+
+def _fill(edges: list[Edge], room: _Room, ceil_z: float,
+          claimable: Callable[[Polygon], bool]) -> tuple[list[Edge], list[Polygon]]:
+    """Replace runs of furniture edges between two walls by the walls behind them."""
+    for k, e in enumerate(edges):
+        e.kind = room.kind(e, *_span(edges, k), ceil_z)
+    filled: list[Polygon] = []
+    while len(edges) > 4:
+        for a, b, run in _furniture_runs(edges):
+            new = _bridge(edges, a, b, run, room)
+            region = None if new is None else _added(edges, new)
+            if region is not None and claimable(region):
+                log.debug("furniture notch filled: %.2f m2", region.area)
+                filled.append(region)
+                edges = new
+                break
+        else:
+            break
+    return edges, filled
+
+
 def _merge_step(edges: list[Edge], e: int, room: _Room, refit: bool) -> list[Edge]:
     """Remove the step edge e: its neighbours snap to the better-supported face and become one edge,
     refitted over the joint extent when `refit`."""
@@ -247,7 +350,7 @@ def _merge_step(edges: list[Edge], e: int, room: _Room, refit: bool) -> list[Edg
     t0, t1 = edges[(e - 2) % K].coord, edges[(e + 2) % K].coord
     sa, sb = room.support(a, t0, t1), room.support(b, t0, t1)
     best = a if sa >= sb else b
-    merged = Edge(a.axis, best.coord, a.sign)
+    merged = Edge(a.axis, best.coord, a.sign, kind=a.kind)
     if refit:
         merged.fit = room.fit(merged, t0, t1, start=best.coord)
         if merged.fit.refined:
@@ -296,22 +399,31 @@ def _refit_all(edges: list[Edge], room: _Room, keep_face: bool) -> None:
             e.coord = f.coord
 
 
-def room_outline(poly: np.ndarray, pts: WallPoints, floor_z: float, ceil_z: float,
-                 sigma: float) -> Outline | None:
+def room_outline(poly: np.ndarray, pts: WallPoints, floor_z: float, ceil_z: float, sigma: float,
+                 claimable: Callable[[Polygon], bool]) -> Outline | None:
     """The room's outline from its cell polygon. None when the polygon is not rectilinear or the refined
-    outline is not a simple counter-clockwise polygon; the caller then keeps the cell polygon."""
+    outline is not a simple counter-clockwise polygon; the caller then keeps the cell polygon.
+
+    claimable(region) is False for plan regions that hold cells of another room.
+    """
     edges = edges_of(poly)
     if edges is None:
         return None
     room = _Room(pts, floor_z + 0.05, ceil_z - 0.03, sigma)
     edges, steps = _regularise(edges, room, refit=False)
+    edges, filled = _fill(edges, room, ceil_z, claimable)
     _refit_all(edges, room, keep_face=False)
     edges, n = _regularise(edges, room, refit=True)
     steps += n
+    # a notch between walls on the two faces of one wall body lines up only once the walls are refitted
+    edges, late = _fill(edges, room, ceil_z, claimable)
+    if late:
+        edges, n = _regularise(edges, room, refit=True)
+        steps += n
     _refit_all(edges, room, keep_face=True)
     if not consistent(edges):
         log.debug("refined outline is not simple; keeping the cell polygon")
         return None
     P = outline(edges)
     start = int(np.lexsort((P[:, 0], P[:, 1]))[0])
-    return Outline(np.roll(P, -start, axis=0), edges[start:] + edges[:start], steps)
+    return Outline(np.roll(P, -start, axis=0), edges[start:] + edges[:start], filled + late, steps)

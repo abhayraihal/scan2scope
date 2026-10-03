@@ -36,8 +36,8 @@ def points(faces: list) -> R.WallPoints:
     return R.WallPoints.build(P, N, w, w, -0.3, CEIL + 0.3)
 
 
-def run(poly, faces) -> R.Outline:
-    out = R.room_outline(np.asarray(poly, float), points(faces), 0.0, CEIL, 0.01)
+def run(poly, faces, claimable=lambda region: True) -> R.Outline:
+    out = R.room_outline(np.asarray(poly, float), points(faces), 0.0, CEIL, 0.01, claimable)
     assert out is not None
     assert Polygon(out.polygon).exterior.is_ccw
     return out
@@ -94,6 +94,32 @@ def test_wall_body_strip_attached_to_a_room_is_cut():
     assert same_outline(out, RECT)
 
 
+def counter(height: float) -> list:
+    """A box 1.5 m wide and 0.6 m deep against the y = 0 wall, its front and sides facing the room."""
+    return [face(1, 0.6, 1, 1.0, 2.5, z1=height), face(0, 1.0, -1, 0.0, 0.6, z1=height),
+            face(0, 2.5, 1, 0.0, 0.6, z1=height)]
+
+
+NOTCH = [(0, 0), (1, 0), (1, 0.6), (2.5, 0.6), (2.5, 0), (4, 0), (4, 3), (0, 3)]
+
+
+def test_furniture_notch_is_filled_up_to_the_wall_behind():
+    # the wall behind the counter is seen above it
+    faces = box_room(0, 0, 4, 3) + counter(0.9)
+    out = run(NOTCH, faces)
+    assert len(out.edges) == 4 and same_outline(out, RECT)
+    assert len(out.filled) == 1 and out.filled[0].area == pytest.approx(0.9, abs=1e-6)
+
+
+def test_full_height_box_and_claimed_floor_keep_the_notch():
+    # a unit whose front reaches into the band 0.5 m below the ceiling is a wall, by the furniture rule
+    out = run(NOTCH, box_room(0, 0, 4, 3) + counter(2.2))
+    assert len(out.edges) == 8 and not out.filled and same_outline(out, NOTCH)
+    # floor that another room holds is never added
+    out = run(NOTCH, box_room(0, 0, 4, 3) + counter(0.9), claimable=lambda region: False)
+    assert len(out.edges) == 8 and not out.filled
+
+
 def test_wall_without_points_keeps_its_cell_position_and_is_flagged():
     faces = box_room(0, 0, 4, 3)[:3]  # no points on the north wall
     out = run([(0, 0), (4, 0), (4, 3.04), (0, 3.04)], faces)
@@ -105,4 +131,4 @@ def test_wall_without_points_keeps_its_cell_position_and_is_flagged():
 
 def test_non_rectilinear_polygon_is_left_alone():
     tri = np.array([(0, 0), (4, 0), (0, 3)], float)
-    assert R.room_outline(tri, points(box_room(0, 0, 4, 3)), 0.0, CEIL, 0.01) is None
+    assert R.room_outline(tri, points(box_room(0, 0, 4, 3)), 0.0, CEIL, 0.01, lambda region: True) is None
