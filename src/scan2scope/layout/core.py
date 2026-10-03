@@ -49,6 +49,13 @@ def _xy(A: np.ndarray, R: np.ndarray) -> np.ndarray:
     return out
 
 
+def _center(T: object) -> np.ndarray:
+    try:
+        return np.asarray(T, float).reshape(4, 4)[:3, 3]
+    except (TypeError, ValueError):
+        return np.full(3, np.nan)
+
+
 def _sanitize(scene: Scene) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray,
                                      list[str]]:
     flags: list[str] = []
@@ -67,8 +74,10 @@ def _sanitize(scene: Scene) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndar
         flags.append("view_index_missing")
         V = np.full(n, -1)
     V = np.where(np.isfinite(V.astype(float)), V, -1).astype(np.int64)
-    cams = np.array([np.asarray(v.T_wc, float)[:3, 3] for v in scene.views]).reshape(-1, 3)
+    cams = np.array([_center(v.T_wc) for v in scene.views]).reshape(-1, 3)
     cam_ok = np.isfinite(cams).all(1)
+    if len(cams) and not cam_ok.all():
+        flags.append(f"bad_view_poses:{int((~cam_ok).sum())}")
     Wt = np.clip(np.nan_to_num(Wt, nan=0.0, posinf=1.0, neginf=0.0), 0.0, 1.0)
     nn = np.linalg.norm(N, axis=1)
     ok = np.isfinite(P).all(1) & np.isfinite(N).all(1) & (nn > 1e-6) & (Wt > 0)

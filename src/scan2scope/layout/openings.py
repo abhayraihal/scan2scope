@@ -2,7 +2,8 @@
 
 An opening is an empty region of the wall face that rays pass through (see-through evidence). Empty
 regions without rays through them are unobserved wall, not openings; they only lower observed_fraction.
-Edges are placed where the count-weighted occupancy profile crosses half of the local wall level.
+Each edge is found by walking out of the gap to half the wall level of the face-mass profile and is then
+moved to that profile's steepest rise.
 """
 
 from __future__ import annotations
@@ -182,7 +183,7 @@ def analyze_wall(wf: WallFrame, P: np.ndarray, N: np.ndarray, w_occ: np.ndarray,
         m = cand == k
         if m.sum() * RES * RES < 0.04 or (taken & m).any():
             continue
-        fit = _fit_candidate(m, occ, cnt, hits_s, see_s, empty, level_hit, wf, sigma)
+        fit = _fit_candidate(m, cnt, hits_s, see_s, empty, level_hit, wf, sigma)
         if fit is None:
             continue
         i0, i1 = int(fit.u0 / RES), int(np.ceil(fit.u1 / RES))
@@ -194,7 +195,7 @@ def analyze_wall(wf: WallFrame, P: np.ndarray, N: np.ndarray, w_occ: np.ndarray,
     return WallAnalysis(float(obs.mean()), n_pts, sorted(fits, key=lambda f: f.u0), flags)
 
 
-def _fit_candidate(m: np.ndarray, occ: np.ndarray, cnt: np.ndarray, hits_s: np.ndarray, see_s: np.ndarray,
+def _fit_candidate(m: np.ndarray, cnt: np.ndarray, hits_s: np.ndarray, see_s: np.ndarray,
                    empty: np.ndarray, level_hit: float, wf: WallFrame, sigma: float) -> OpeningFit | None:
     nu, nz = m.shape
     fz, cz = wf.floor_z, wf.ceil_z
@@ -279,7 +280,7 @@ def _fit_candidate(m: np.ndarray, occ: np.ndarray, cnt: np.ndarray, hits_s: np.n
         else:
             return None
 
-    er_rows = jj_rows(j0, j1, nz, z0, z1, fz)
+    er_rows = _central_rows(nz, z0, z1, fz)
     n_edge = int(sum((cnt[max(int(e / RES) - 5, 0):int(e / RES) + 5][:, er_rows] > 0).sum() for e in (u0, u1)))
     rms_l, rms_r = _edge_rms(cnt, er_rows, u0, u1, sigma)
     conf = float(np.clip(min(see_ratio, 1.0) * (0.6 + 0.4 * box_empty), 0, 1))
@@ -290,7 +291,7 @@ def _fit_candidate(m: np.ndarray, occ: np.ndarray, cnt: np.ndarray, hits_s: np.n
                       (left_obs, right_obs, header), n_edge, see_frac, conf, flags)
 
 
-def jj_rows(j0: int, j1: int, nz: int, z0: float, z1: float, fz: float) -> np.ndarray:
+def _central_rows(nz: int, z0: float, z1: float, fz: float) -> np.ndarray:
     """Row indices of the central part of the opening, where both jambs are wall."""
     a = int(np.clip((z0 - fz) / RES, 0, nz - 1))
     b = int(np.clip((z1 - fz) / RES, a + 1, nz))

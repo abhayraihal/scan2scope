@@ -110,8 +110,7 @@ def _tilt(xy: np.ndarray, z: np.ndarray, w: np.ndarray) -> tuple[float, float]:
     return float(np.hypot(coef[0], coef[1])), float(np.sqrt(np.average(res ** 2, weights=w)))
 
 
-def _level(z: np.ndarray, w_peak: np.ndarray, w_fit: np.ndarray, peaks: list[Peak], pick: str,
-           sigma0: float) -> Level | None:
+def _level(z: np.ndarray, w_fit: np.ndarray, peaks: list[Peak], pick: str, sigma0: float) -> Level | None:
     if not peaks:
         return None
     best = max(p.support for p in peaks)
@@ -152,7 +151,7 @@ def estimate(z: np.ndarray, nz: np.ndarray, w_peak: np.ndarray, w_fit: np.ndarra
             peaks_up = plausible
         else:
             flags.append("floor_camera_height_unusual")
-    floor = _level(z[up], w_peak[up], w_fit[up], peaks_up, "low", sigma0)
+    floor = _level(z[up], w_fit[up], peaks_up, "low", sigma0)
     if floor is None:
         flags.append("floor_not_observed")
         floor = Level(float(np.percentile(z[horiz], 2)), observed=False)
@@ -165,10 +164,11 @@ def estimate(z: np.ndarray, nz: np.ndarray, w_peak: np.ndarray, w_fit: np.ndarra
             if MIN_CEILING_HEIGHT <= p.center - floor.z <= MAX_CEILING_HEIGHT]
     if cam_z is not None and len(cam_z):
         cand = [p for p in cand if p.center > float(np.median(cam_z)) + 0.05] or cand
-    ceiling = _level(z[down], w_peak[down], w_fit[down], cand, "high", sigma)
+    ceiling = _level(z[down], w_fit[down], cand, "high", sigma)
     if ceiling is None:
         flags.append("ceiling_not_observed")
-        top = float(np.percentile(z, 99.5))
+        vert = np.abs(nz) < 0.3  # walls stop at the ceiling; all points would include outdoor geometry
+        top = float(np.percentile(z[vert], 99.5)) if vert.sum() >= 30 else floor.z + DEFAULT_CEILING_HEIGHT
         c = top if MIN_CEILING_HEIGHT <= top - floor.z <= MAX_CEILING_HEIGHT else floor.z + DEFAULT_CEILING_HEIGHT
         ceiling = Level(c, observed=False)
     else:
