@@ -172,6 +172,15 @@ def test_low_light_flag_on_the_room_and_index_mapping():
     assert rec["room_factors"]["R2"]["factor"] == pytest.approx(1.3 * 1.5)
 
 
+def test_scene_named_for_one_room_does_not_apply_to_another():
+    quality = {"scale_log_sigma": 0.0, "scenes": [{"room_hint": "01 living", "low_light": True}]}
+    _, _, rec = run("photo", quality=quality)
+    assert rec["room_factors"]["R1"]["reasons"] == ["low_light"]
+    assert rec["room_factors"]["R2"]["reasons"] == []
+    _, _, rec = run("video", quality={"scale_log_sigma": 0.0, "scenes": [{"low_light": True}]})
+    assert rec["room_factors"]["R1"]["reasons"] == rec["room_factors"]["R2"]["reasons"] == ["low_light"]
+
+
 def test_photo_count_falls_back_to_room_views_and_capture_flags_merge():
     plan = make_plan()
     plan.rooms[0].view_ids = ["a", "b", "c"]

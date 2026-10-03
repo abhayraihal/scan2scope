@@ -161,18 +161,19 @@ def _room_qualities(plan: Plan, quality: dict[str, Any] | None, tier: str) -> di
     quality = quality if isinstance(quality, dict) else {}
     scenes = [q for q in (quality.get("scenes") or []) if isinstance(q, dict)]
     top = {k: v for k, v in quality.items() if k != "scenes"}
+    names = [{str(x) for x in (r.id, r.label, r.source_hint) if x} for r in plan.rooms]
+    known = set().union(*names) if names else set()
+    # A scene whose hint names a room belongs to that room and is never a fallback for another one.
+    free = [q for q in scenes if _hint(q) not in known]
     out: dict[str, list[dict[str, Any]]] = {}
     for i, room in enumerate(plan.rooms):
-        names = {str(x) for x in (room.id, room.label, room.source_hint) if x}
-        match = next((q for q in scenes if _hint(q) in names), None)
+        match = next((q for q in scenes if _hint(q) in names[i]), None)
         if match is not None:
             cands = [match]
-        elif len(scenes) == 1:
-            cands = scenes
-        elif tier == "photo" and len(scenes) == len(plan.rooms):
+        elif tier == "photo" and len(scenes) == len(plan.rooms) and _hint(scenes[i]) not in known:
             cands = [scenes[i]]
         else:
-            cands = scenes
+            cands = free
         merged = []
         for c in cands or [{}]:
             q = {**top, **c, "flags": _flag_list(top) + _flag_list(c)}
@@ -209,8 +210,8 @@ def _quality_factor(q: dict[str, Any], flags: set[str], tier: str, infl: dict[st
 
 def _room_flags(room: Room, plan: Plan) -> set[str]:
     names = {str(x) for x in (room.id, room.label, room.source_hint) if x}
-    flags = {str(f) for f in room.flags}
-    for f in plan.flags:
+    flags = {str(f) for f in room.flags or []}
+    for f in plan.flags or []:
         name, _, target = str(f).partition(":")
         if not target or target in names:
             flags.add(name)
