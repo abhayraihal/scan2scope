@@ -4,7 +4,8 @@
 
 Mirrors SRC_DIR into DST_DIR: images are re-saved as JPEG (quality 95) with screens blurred, videos are re-encoded
 (H.264, same size and frame rate) with screens blurred on every frame. Boxes come from Grounding DINO; in videos they
-are detected every few frames and held in between. Benchmark numbers are computed from the blurred copies, so the
+are detected every few frames and held in between; frames are written upright. Photo EXIF (focal length,
+Apple MakerNote) is kept. Benchmark numbers are computed from the blurred copies, so the
 published inputs regenerate them.
 """
 
@@ -70,23 +71,35 @@ def blur_image(finder: ScreenFinder, src: Path, dst: Path) -> int:
     rgb, _ = load_image(src)
     img = Image.fromarray(rgb)
     boxes = finder.boxes(img)
-    blur_boxes(img, boxes).save(dst.with_suffix(".jpg"), quality=95)
+    raw = Image.open(src)
+    exif = raw.getexif()
+    if exif.get(0x0112, 1) != 1:  # pixels are saved upright, so the orientation tag must say so
+        exif[0x0112] = 1
+        exif_bytes = exif.tobytes()
+    else:
+        exif_bytes = raw.info.get("exif", exif.tobytes())  # keeps the Apple MakerNote byte for byte
+    blur_boxes(img, boxes).save(dst.with_suffix(".jpg"), quality=95, exif=exif_bytes)
     return len(boxes)
 
 
 def blur_video(finder: ScreenFinder, src: Path, dst: Path, every: int = 3) -> int:
     import av
 
+    from scan2scope.ingest.video import probe, rotate_upright
+
+    rotation = probe(src).rotation_deg  # frames are written upright, without a rotation tag
     with av.open(str(src)) as inp:
         stream = inp.streams.video[0]
         rate = stream.average_rate or 30
         with av.open(str(dst.with_suffix(".mp4")), "w") as out:
             ov = out.add_stream("libx264", rate=rate)
-            ov.width, ov.height, ov.pix_fmt = stream.codec_context.width, stream.codec_context.height, "yuv420p"
+            w, h = stream.codec_context.width, stream.codec_context.height
+            ov.width, ov.height = (h, w) if rotation in (90, 270) else (w, h)
+            ov.pix_fmt = "yuv420p"
             ov.options = {"crf": "17", "preset": "medium"}
             boxes, n_boxes = [], 0
             for k, frame in enumerate(inp.decode(stream)):
-                img = frame.to_image()
+                img = Image.fromarray(rotate_upright(frame.to_ndarray(format="rgb24"), rotation))
                 if k % every == 0:
                     boxes = finder.boxes(img)
                     n_boxes += len(boxes)
