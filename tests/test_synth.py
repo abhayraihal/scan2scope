@@ -264,8 +264,21 @@ def test_trajectory_visits_rooms_and_returns(apt):
     assert abs(np.degrees(traj.pitch[-1] - traj.pitch[0])) < 1.0
     assert free_mask(apt, p[:, :2]).all() and not traj.flags
     assert 1.25 < p[:, 2].min() and p[:, 2].max() < 1.6
-    assert 60.0 < traj.duration < 400.0
+    assert 60.0 < traj.duration <= 210.0
     assert np.degrees(traj.pitch.min()) < -30 and np.degrees(traj.pitch.max()) > 20
+    dt = 1.0 / traj.rate
+    assert np.degrees(np.abs(np.gradient(traj.yaw, dt))).max() < 150.0  # no spins between samples
+    assert np.degrees(np.abs(np.gradient(traj.pitch, dt))).max() < 120.0
+    assert np.linalg.norm(np.gradient(p[:, :2], dt, axis=0), axis=1).max() < 1.2
+
+
+def test_long_routes_are_walked_faster(apt):
+    slow = plan_trajectory(apt, np.random.default_rng(4), max_duration=None)
+    fast = plan_trajectory(apt, np.random.default_rng(4), max_duration=0.8 * slow.duration)
+    assert slow.speed == 1.0 and fast.speed > 1.0
+    assert fast.duration <= 0.8 * slow.duration + 1e-6
+    # same route; height and sway noise differ because the sample count differs
+    assert np.allclose(fast.pos[0], slow.pos[0], atol=0.03) and np.allclose(fast.pos[-1], slow.pos[-1], atol=0.03)
 
 
 # ------------------------------------------------------------------------------------------- capture files

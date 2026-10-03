@@ -165,6 +165,7 @@ def write_truth(res: CaptureResult, folder: Path, capture_id: str, property_id: 
         "duration_s": round(float(res.frame_times[-1]), 3),
         "fps": float(cfg.fps),
         "dropped_frames": int(res.slots[-1] + 1 - res.n_frames),
+        "walking_speed_factor": round(float(res.trajectory.speed), 3),
         "orientation": cfg.orientation,
         "rgb_size": list(cfg.rgb_size),
         "depth_size": list(cfg.depth_size),

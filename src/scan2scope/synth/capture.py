@@ -91,6 +91,7 @@ class Trajectory:
     orientation: str  # portrait | landscape (how the phone is held)
     rate: float = IMU_RATE
     flags: list[str] = field(default_factory=list)
+    speed: float = 1.0  # walking speed factor applied to fit the duration budget
 
     @property
     def duration(self) -> float:
@@ -208,18 +209,37 @@ def _smooth_noise(rng: np.random.Generator, shape: tuple[int, ...], sigma: float
     return gaussian_filter1d(n, sigma, axis=0, mode="wrap") * np.sqrt(2.0 * np.sqrt(np.pi) * sigma)
 
 
+MAX_SPEEDUP = 1.8
+
+
 def plan_trajectory(apt: Apartment, rng: np.random.Generator, *, orientation: str = "portrait",
-                    rate: float = IMU_RATE) -> Trajectory:
+                    rate: float = IMU_RATE, max_duration: float | None = 210.0) -> Trajectory:
     """Walk from the hallway entrance through every room's door, loop each room facing the walls, come back.
 
     Inside each room the camera walks a rounded loop about 1.1 to 1.3 m from the walls (less in small rooms),
     facing the walls with yaw panning and pitch sweeps so the floor and ceiling junctions are seen; L-shaped
-    rooms get a walk into the arm. The capture ends on the starting view.
+    rooms get a walk into the arm. The capture ends on the starting view. A route longer than max_duration is
+    walked faster (same route, up to MAX_SPEEDUP), which keeps big apartments within the disk budget.
     """
     if orientation not in ("portrait", "landscape"):
         raise ValueError(f"orientation must be portrait or landscape, got {orientation!r}")
-    v_cor, v_door, v_loop = rng.uniform(0.50, 0.62), rng.uniform(0.36, 0.45), rng.uniform(0.30, 0.38)
-    w_turn, w_walk = np.radians(rng.uniform(45, 60)), np.radians(rng.uniform(35, 45))
+    state = rng.bit_generator.state
+    speed = 1.0
+    for _ in range(5):
+        rng.bit_generator.state = state
+        traj = _plan_once(apt, rng, orientation, rate, speed)
+        if max_duration is None or traj.duration <= max_duration or speed >= MAX_SPEEDUP:
+            break
+        speed = min(MAX_SPEEDUP, speed * 1.03 * traj.duration / max_duration)
+    if max_duration is not None and traj.duration > max_duration:
+        traj.flags.append(f"over_duration:{traj.duration:.0f}s")
+    traj.speed = speed
+    return traj
+
+
+def _plan_once(apt: Apartment, rng: np.random.Generator, orientation: str, rate: float, speed: float) -> Trajectory:
+    v_cor, v_door, v_loop = (speed * rng.uniform(*r) for r in ((0.50, 0.62), (0.36, 0.45), (0.30, 0.38)))
+    w_turn, w_walk = (speed * np.radians(rng.uniform(*r)) for r in ((45, 60), (35, 45)))
     inset = rng.uniform(1.1, 1.3)
     hall = apt.hallway.rects[0]
     hx0, hy0, hx1, hy1 = hall.x0 / 1000, hall.y0 / 1000, hall.x1 / 1000, hall.y1 / 1000
@@ -251,12 +271,13 @@ def plan_trajectory(apt: Apartment, rng: np.random.Generator, *, orientation: st
     x, y, yaw = (gaussian_filter1d(a, sig, mode="nearest") for a in (x, y, yaw))
     pan_amp, p_base, p_amp = (gaussian_filter1d(tab[mode], 0.8 * rate, mode="nearest")
                               for tab in (_PAN_AMP, _PITCH_BASE, _PITCH_AMP))
-    speed = np.hypot(np.gradient(x), np.gradient(y)) * rate
-    walking = np.clip(speed / 0.3, 0.0, 1.0)
+    v_walk = np.hypot(np.gradient(x), np.gradient(y)) * rate
+    walking = np.clip(v_walk / 0.3, 0.0, 1.0)
     activity = gaussian_filter1d((mode != HOLD).astype(float), 0.8 * rate, mode="nearest")
     n = len(t)
-    yaw = yaw + pan_amp * np.sin(2 * np.pi * t / rng.uniform(5.0, 8.0) + rng.uniform(0, 2 * np.pi))
-    pitch = p_base + p_amp * np.sin(2 * np.pi * t / rng.uniform(4.0, 5.5) + rng.uniform(0, 2 * np.pi))
+    sweep = np.sqrt(speed)  # faster walking sweeps a little faster too, keeping floor and ceiling coverage
+    yaw = yaw + pan_amp * np.sin(2 * np.pi * t * sweep / rng.uniform(5.0, 8.0) + rng.uniform(0, 2 * np.pi))
+    pitch = p_base + p_amp * np.sin(2 * np.pi * t * sweep / rng.uniform(4.0, 5.5) + rng.uniform(0, 2 * np.pi))
     roll = np.radians(1.5) * _smooth_noise(rng, (n,), 1.0 * rate) * (0.3 + 0.7 * activity)
     f_step = rng.uniform(1.6, 2.0)
     z = (rng.uniform(1.35, 1.45) + 0.012 * walking * np.sin(2 * np.pi * f_step * t)
@@ -555,6 +576,7 @@ class CaptureConfig:
     noise: bool = True  # depth noise and artefacts, pose jitter, IMU noise, dropped frames
     rgb_scale: float = 0.5  # RGB is rendered at this fraction of rgb_size and resized up
     max_frames: int | None = None
+    max_duration: float | None = 210.0  # longer routes are walked faster (about 140 MB per capture at 10 fps)
     max_range: float = 5.0
     png_compression: int = 6
     video_codec: str | None = None
@@ -605,7 +627,7 @@ def write_capture(apt: Apartment, out_dir: str | Path, *, seed: int, config: Cap
     t_start = time.perf_counter()
     rng_traj, rng_noise, rng_drift, rng_misc, rng_imu = (np.random.default_rng(s)
                                                          for s in np.random.SeedSequence(seed).spawn(5))
-    traj = plan_trajectory(apt, rng_traj, orientation=cfg.orientation)
+    traj = plan_trajectory(apt, rng_traj, orientation=cfg.orientation, max_duration=cfg.max_duration)
     period = 1.0 / cfg.fps
     slots, s = [], 0
     while s * period <= traj.duration + 1e-9:
