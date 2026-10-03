@@ -555,26 +555,31 @@ def register_photo(room_a: StitchRoom, photo: DoorwayPhoto, room_b: StitchRoom, 
 
 
 def _run(runner: RunnerFn, view: CameraView, room_b: StitchRoom, door_a: Door, cache: Any,
-         flags: list[str]) -> tuple[list[CameraView], list[Pred]] | None | str:
+         flags: list[str]) -> tuple[list[CameraView], list[Pred]] | str:
+    """One registration run, or a status string: no_views, unavailable, import_error, failed, bad_output."""
     b_views = select_views(room_b, door_a)
     if not b_views:
-        return None
+        return "no_views"
     views = [view] + b_views
     try:
         out = runner(views, run_key(views), cache)
+    except ImportError as exc:
+        log.warning("stitch: doorway registration unavailable: %s", exc)
+        return "import_error"
     except Exception as exc:  # one failed run must not stop the stitch
         log.warning("stitch: doorway registration run failed: %s", exc)
         flag = f"doorway_registration_failed:{type(exc).__name__}"
         if flag not in flags:
             flags.append(flag)
-        return None
+        return "failed"
     if out is None:
         return "unavailable"
     preds = as_predictions(out, len(views))
     if preds is None:
         log.warning("stitch: runner returned %s, expected %d view predictions", type(out).__name__,
                     len(views))
-    return (b_views, preds) if preds is not None else None
+        return "bad_output"
+    return b_views, preds
 
 
 def register_doorways(rooms: list[StitchRoom], runner: RunnerFn, cache: Any, *, max_runs: int = 24,
@@ -593,7 +598,7 @@ def register_doorways(rooms: list[StitchRoom], runner: RunnerFn, cache: Any, *, 
     records: list[dict] = []
     flags: list[str] = []
     settled: set[int] = set()
-    n_runs = skipped = unavailable = 0
+    n_runs = skipped = unavailable = failed_in_row = 0
     for _, _, pi, b in queue:
         p = photos[pi]
         if pi in settled:
@@ -606,11 +611,18 @@ def register_doorways(rooms: list[StitchRoom], runner: RunnerFn, cache: Any, *, 
             n_runs += 1
             runs[rk] = _run(runner, p.view, rooms[b], p.door, cache, flags)
             unavailable += runs[rk] == "unavailable"
+            failed_in_row = failed_in_row + 1 if runs[rk] == "failed" else 0
         res = runs[rk]
-        if res is None or isinstance(res, str):
+        if isinstance(res, str):
             records.append({"room_a": rooms[p.room].id, "room_b": rooms[b].id, "view": p.view.id,
-                            "opening_a": p.door.id, "source": "doorway_photo",
-                            "status": res if isinstance(res, str) else "run_failed"})
+                            "opening_a": p.door.id, "source": "doorway_photo", "status": res})
+            # a missing model or repeated failures will not get better on the next photo
+            if res == "import_error":
+                flags.append("doorway_registration_unavailable:import_error")
+                break
+            if failed_in_row >= 3:
+                flags.append("doorway_registration_stopped:repeated_failures")
+                break
             continue
         h, rec = register_photo(rooms[p.room], p, rooms[b], *res)
         records.append(rec)

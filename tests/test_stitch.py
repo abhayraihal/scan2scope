@@ -482,13 +482,26 @@ def test_runner_failure_falls_back_to_door_matching():
     specs = layout(k_width=0.8, b_width=1.02, w_width=0.62, entry=0.92)
     cap = make_capture(specs, seed=7)
 
+    calls = []
+
     def broken(views, key, cache):
+        calls.append(1)
         raise RuntimeError("MPS out of memory")
 
     plan, _ = stitch_rooms(cap.scenes, cap.plans, None, runner=broken)
     assert "doorway_registration_failed:RuntimeError" in plan.flags
+    assert "doorway_registration_stopped:repeated_failures" in plan.flags and len(calls) == 3
     assert adjacency_hints(plan) == true_adjacency(specs)
     assert max(centre_errors(plan, specs).values()) < 0.02
+
+    def missing(views, key, cache):
+        calls.append(1)
+        raise ModuleNotFoundError("No module named 'scan2scope.geometry.mapanything_backend'")
+
+    calls.clear()
+    plan, _ = stitch_rooms(cap.scenes, cap.plans, None, runner=missing)
+    assert "doorway_registration_unavailable:import_error" in plan.flags and len(calls) == 1
+    assert adjacency_hints(plan) == true_adjacency(specs)
 
 
 def test_degenerate_inputs_do_not_crash():
