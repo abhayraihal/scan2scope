@@ -8,7 +8,9 @@ every keyframe.
 
 Stages, each with a switch for the ablation:
 1. Loop closure: point-to-plane ICP between segments more than 20 s apart whose clouds overlap, always
-   including first versus last, then a pose graph with odometry edges from the raw poses and accepted loop edges.
+   including first versus last, in two rounds (the second from the corrected poses). A registration constrains
+   only the directions its geometry fixes (a wall and the floor leave sliding along the wall free), and its
+   information matrix weights the loop edge in a pose graph with odometry edges from the raw poses.
 2. Plane anchoring: per-segment floor height (as a prior in a second pose-graph solve) and floor tilt.
 3. Manhattan yaw anchoring: segments whose dominant wall angle is within 5 degrees of the global one get a yaw
    prior that snaps them to it, in the same second solve.
@@ -592,6 +594,20 @@ def _manhattan(n: np.ndarray, w: np.ndarray) -> tuple[float, float, float]:
     return float((np.angle(z) / 4.0) % (np.pi / 2)), float(abs(z) / max(tot, 1e-12)), tot
 
 
+def _solve_or_keep(rec: dict, params: np.ndarray, *args, **kwargs) -> np.ndarray:
+    """solve_pose_graph, keeping the previous corrections (and flagging it) if the solver fails."""
+    try:
+        out = solve_pose_graph(*args, **kwargs)
+    except (ValueError, np.linalg.LinAlgError) as exc:
+        log.warning("pose graph failed: %s", exc)
+        rec["flags"].append(f"pose_graph_failed:{type(exc).__name__}")
+        return params
+    if not np.isfinite(out).all():
+        rec["flags"].append("pose_graph_failed:nonfinite")
+        return params
+    return out
+
+
 def _spread(values: list[float]) -> float | None:
     return round(float(max(values) - min(values)), 4) if len(values) >= 2 else None
 
@@ -690,7 +706,7 @@ def correct_lidar_poses(frames: Sequence[KeyFrame], poses: np.ndarray, depth_rea
                     done.add((i, j))
             if len(loops) == n_before:
                 break
-            params = solve_pose_graph(anchors, edges, loops=loops, init=params)
+            params = _solve_or_keep(rec, params, anchors, edges, loops=loops, init=params)
         rec["loop_closures_accepted"] = len(loops)
 
     X = _corrections(params) @ anchors
@@ -725,8 +741,8 @@ def correct_lidar_poses(frames: Sequence[KeyFrame], poses: np.ndarray, depth_rea
         rec["manhattan_anchoring"] = {"global_angle_deg": round(math.degrees(th_g), 3),
                                       "concentration": round(conc_g, 3), "segments_snapped": len(snapped)}
     if z_priors or yaw_priors:
-        params = solve_pose_graph(anchors, edges, loops=loops, init=params, z_priors=z_priors,
-                                  yaw_priors=yaw_priors)
+        params = _solve_or_keep(rec, params, anchors, edges, loops=loops, init=params, z_priors=z_priors,
+                                yaw_priors=yaw_priors)
 
     C = _corrections(params)
     if plane_anchoring and h_g is not None:

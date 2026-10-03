@@ -184,6 +184,13 @@ def test_missing_depth_frames_and_video_degrade(tmp_path):
     assert sc.meta["drift"]["enabled"] is True
 
 
+def test_two_frame_capture_still_builds(tmp_path):
+    fx = write_stray_dataset(tmp_path / "tiny", n_frames=2)
+    sc = build_scene(fx.root, tmp_path / "work", drift_correction=True)
+    assert len(sc.points) > 1000 and 1 <= len(sc.views) <= 2
+    assert sc.meta["drift"]["enabled"] is True
+
+
 def test_no_depth_at_all_raises(tmp_path):
     fx = write_stray_dataset(tmp_path / "nodepth", n_frames=4)
     for p in (fx.root / "depth").iterdir():

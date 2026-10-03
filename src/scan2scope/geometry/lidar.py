@@ -161,6 +161,9 @@ def build_scene(root: str | Path, work_dir: str | Path, *, drift_correction: boo
         raise ValueError(f"{cap.root}: no frame has both a pose and a depth map")
     rgb_size = cap.rgb_size
     depth_size = cap.depth_size or (256, 192)
+    if abs(rgb_size[0] / rgb_size[1] - depth_size[0] / depth_size[1]) > 0.01:
+        # depth intrinsics are the RGB ones rescaled, which assumes both images share a field of view
+        flags.append(f"rgb_depth_aspect_mismatch:{rgb_size[0]}x{rgb_size[1]}/{depth_size[0]}x{depth_size[1]}")
     K_d = scale_intrinsics(cap.K, rgb_size, depth_size)
     kf = select_keyframes(T, usable)
     t_kf = cap.timestamps[kf]
@@ -217,7 +220,7 @@ def build_scene(root: str | Path, work_dir: str | Path, *, drift_correction: boo
     if cap.n_video_frames:
         motion[cap.frame_ids[kf] >= cap.n_video_frames] = np.inf  # beyond the end of a short rgb.mp4
     vpos = select_views(t_kf, motion, valid_frac)
-    views = _make_views(cap, kf, vpos, poses, K_d, work_dir / "lidar_views", load)
+    views = _make_views(cap, kf, vpos, poses, K_d, depth_size, work_dir / "lidar_views", load)
     if any(v.image_path is None for v in views):
         flags.append(f"views_without_image:{sum(v.image_path is None for v in views)}")
     for f in cap.flags:
@@ -234,7 +237,8 @@ def build_scene(root: str | Path, work_dir: str | Path, *, drift_correction: boo
         "n_frames": len(cap),
         "n_keyframes": len(kf),
         "duration_s": round(cap.duration_s, 3),
-        "mean_conf": round(conf_sum / conf_n / 2.0, 4) if conf_n else None,  # ARKit level / 2, in [0, 1]
+        # mean ARKit level / 2, in [0, 1]; 0.5 (medium) when the capture has no confidence maps (flagged)
+        "mean_conf": round(conf_sum / conf_n / 2.0, 4) if conf_n else 0.5,
         "valid_depth_fraction": round(float(valid_frac.mean()), 4),
     }
     meta = {
@@ -287,7 +291,7 @@ def turn_camera(k: int, K: np.ndarray, T_wc: np.ndarray, size: tuple[int, int]
 
 
 def _make_views(cap: StrayCapture, kf: np.ndarray, vpos: np.ndarray, poses: np.ndarray, K_d: np.ndarray,
-                out_dir: Path, load) -> list[CameraView]:
+                depth_size: tuple[int, int], out_dir: Path, load) -> list[CameraView]:
     """Views with upright images: frames, K, poses and point maps turned together by quarter turns."""
     rows = kf[vpos]
     turns = [upright_turns(poses[k]) for k in vpos]
@@ -301,7 +305,7 @@ def _make_views(cap: StrayCapture, kf: np.ndarray, vpos: np.ndarray, poses: np.n
             pm = backproject_depth(dc[0], K_d[i], poses[k]).astype(np.float32)
             pm, valid, conf = (np.ascontiguousarray(np.rot90(a, q)) for a in (pm, valid, conf))
         K, T_wc, (w, h) = turn_camera(q, cap.K[i], poses[k], cap.rgb_size)
-        Kd, _, _ = turn_camera(q, K_d[i], poses[k], (dc[0].shape[1], dc[0].shape[0]) if dc else cap.depth_size)
+        Kd, _, _ = turn_camera(q, K_d[i], poses[k], depth_size)
         fid = int(cap.frame_ids[i])
         views.append(CameraView(
             id=f"F{fid:06d}", image_path=path, width=int(w), height=int(h), K=K, T_wc=T_wc, pointmap=pm,
