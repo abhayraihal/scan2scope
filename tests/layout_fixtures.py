@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 import numpy as np
+from scipy.spatial.transform import Rotation
 
 from scan2scope.geometry.se3 import rot_z
 from scan2scope.types import CameraView, Scene
@@ -116,11 +117,24 @@ def cast(syn: Synth, cam: Cam, w: int, h: int, hfov_deg: float, max_range: float
 def make_scene(syn: Synth, *, noise: float = 0.01, normal_noise: float = 0.03, drop: float = 0.0,
                outliers: float = 0.0, rays: tuple[int, int] = (192, 144), hfov_deg: float = 67.0,
                max_range: float = 8.0, yaw_deg: float = 0.0, shift: tuple[float, float] = (0.0, 0.0),
-               seed: int = 0, tier: str = "lidar", room_hint: str | None = None) -> Scene:
+               seed: int = 0, tier: str = "lidar", room_hint: str | None = None, depth_noise: float = 0.0,
+               view_jitter: tuple[float, float] = (0.0, 0.0)) -> Scene:
+    """depth_noise: extra noise along each ray as a fraction of depth; view_jitter: per-view rigid error
+    (translation sigma in m, rotation sigma in degrees) like multi-view inconsistency in feed-forward models."""
     rng = np.random.default_rng(seed)
     pts, nrm, vidx, views = [], [], [], []
     for i, cam in enumerate(syn.cams):
         p, n, K, T = cast(syn, cam, rays[0], rays[1], hfov_deg, max_range, rng)
+        if depth_noise > 0:
+            ray = p - T[:3, 3]
+            depth = np.linalg.norm(ray, axis=1, keepdims=True)
+            p = p + ray / depth * rng.normal(0.0, depth_noise, (len(p), 1)) * depth
+        if view_jitter[0] > 0 or view_jitter[1] > 0:
+            ax = rng.normal(size=3)
+            Rj = Rotation.from_rotvec(ax / np.linalg.norm(ax) * np.radians(rng.normal(0.0, view_jitter[1]))).as_matrix()
+            c = T[:3, 3]
+            p = (p - c) @ Rj.T + c + rng.normal(0.0, view_jitter[0], 3)
+            n = n @ Rj.T
         pts.append(p)
         nrm.append(n)
         vidx.append(np.full(len(p), i))

@@ -35,11 +35,11 @@ def _symdiff(room, syn) -> float:
     return Polygon(room.polygon).symmetric_difference(lf.truth_polygon(syn, "R", YAW, SHIFT)).area
 
 
-def _match_openings(room, syn, tol_frac=0.5):
+def _match_openings(room, syn, tol_frac=0.5, yaw=YAW, shift=SHIFT):
     """Pair each true opening with the detected one whose centre is within half its width."""
     pairs = []
     for t in syn.openings:
-        c = lf.opening_center(t, YAW, SHIFT)
+        c = lf.opening_center(t, yaw, shift)
         best = min(room.openings, key=lambda o: np.linalg.norm(o.center - c), default=None)
         ok = best is not None and np.linalg.norm(best.center - c) < tol_frac * (t.u1 - t.u0)
         pairs.append((t, best if ok else None))
@@ -125,6 +125,22 @@ def test_noisy_capture_has_no_phantom_openings(noisy, syn):
     matched = {id(o) for _, o in pairs if o is not None}
     assert all(o is not None for _, o in pairs)
     assert all(id(o) in matched for o in room.openings), [(o.type, o.offset.value) for o in room.openings]
+
+
+@pytest.mark.parametrize("seed", [0, 1])
+def test_photo_like_views_with_rigid_misalignment(syn, seed):
+    """Per-view rigid errors (3 cm, 0.7 deg) and 1% depth noise, like feed-forward multi-view point maps."""
+    sc = lf.make_scene(syn, noise=0.02, depth_noise=0.01, view_jitter=(0.03, 0.7), drop=0.2, outliers=0.02,
+                       seed=seed, tier="photo", room_hint="01 living")
+    plan = build_plan(sc, single_room=True)
+    room = plan.rooms[0]
+    assert lf.cyclic_match([w.length.value for w in room.walls], [4.2, 3.1, 4.2, 3.1]) < 0.05
+    assert abs(room.ceiling_height.value - 2.6) < 0.04
+    pairs = _match_openings(room, syn, 0.5, 0.0, (0.0, 0.0))
+    assert all(o is not None and o.type == t.type for t, o in pairs)
+    assert len(room.openings) == 2
+    door = next(o for o in room.openings if o.type == "door")
+    assert abs(door.width.value - 0.9) < 0.05
 
 
 def test_single_room_mode_and_label_from_folder_name(syn):
