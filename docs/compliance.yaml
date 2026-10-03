@@ -1,0 +1,143 @@
+# Mapping from requirement id (docs/requirements.yaml) to where it is met. Rendered by
+# scripts/make_compliance_matrix.py into docs/compliance_matrix.md. A key ending in * covers every id with that prefix
+# unless a more specific key exists. Statuses: pass, fail, partial, deviation, n/a.
+
+CAP-01: {path: "docs/capture_protocol.md", artifact: "own capture route and pipeline", status: pass}
+CAP-02: {path: "docs/capture_protocol.md", artifact: "Route 2, stock-capture protocol", status: pass}
+CAP-03: {path: "docs/design.md", artifact: "Route 1 not taken", status: n/a, note: "Route 2 chosen"}
+CAP-04: {path: "docs/design.md", artifact: "Route 1 not taken", status: n/a, note: "Route 2 chosen"}
+CAP-05: {path: "docs/design.md", artifact: "Route 1 not taken", status: n/a, note: "Route 2 chosen"}
+CAP-06: {path: "docs/capture_protocol.md", artifact: "Camera app (photo, video), Stray Scanner 1.4 (LiDAR)", status: pass}
+CAP-07: {path: "docs/capture_protocol.md", artifact: "App Store tools only", status: pass}
+CAP-08: {path: "docs/capture_protocol.md", artifact: "one page (570 words)", status: pass}
+CAP-09: {path: "docs/capture_protocol.md", artifact: "plain steps", status: partial, note: "not yet followed by a non-engineer without help"}
+CAP-10: {path: "docs/capture_protocol.md", artifact: "install step", status: pass}
+CAP-11: {path: "docs/capture_protocol.md", artifact: "walking route per tier", status: pass}
+CAP-12: {path: "docs/capture_protocol.md", artifact: "duration per room and total", status: pass}
+CAP-13: {path: "docs/capture_protocol.md", artifact: "Avoid section", status: pass}
+CAP-14: {path: "docs/capture_protocol.md", artifact: "hand-off by USB cable, AirDrop or send-as-document", status: pass}
+CAP-15: {path: "docs/capture_protocol.md", artifact: "numbered literal steps", status: partial, note: "the real capture held the phone in portrait and one video aimed at furniture; protocol not yet tested by a third person"}
+CAP-16: {path: "docs/capture_protocol.md", artifact: "three tier sections", status: pass}
+
+TIER-01: {path: "src/scan2scope/geometry", artifact: "photo.py, video.py, lidar.py", status: pass}
+TIER-02: {path: "schema/scan2scope.schema.json", artifact: "one schema for every tier", status: pass}
+TIER-03: {path: "src/scan2scope/uncertainty", artifact: "per-tier error model", status: partial, note: "widening follows evidence; calibration shown only where ground truth exists (see benchmark report)"}
+TIER-04: {path: "src/scan2scope/ingest/detect.py", artifact: "2-8 photos per room (more are capped, fewer flagged)", status: pass}
+TIER-05: {path: "docs/device_matrix.md", artifact: "tested on iPhone 17", status: pass}
+TIER-06: {path: "src/scan2scope/geometry/photo.py", artifact: "RGB and EXIF focal only", status: pass}
+TIER-07: {path: "src/scan2scope/ingest/images.py", artifact: "list_room_folders", status: pass}
+TIER-08: {path: "src/scan2scope/stitch", artifact: "stitch_rooms", status: partial, note: "stitching implemented and unit-tested; the real benchmark has one room, so photo stitching is not shown on real data"}
+TIER-09: {path: "src/scan2scope/uncertainty/priors.yaml", artifact: "photo tier priors", status: pass}
+TIER-10: {path: "src/scan2scope/pipeline.py", artifact: "geometry failures still give a schema-valid result", status: pass}
+TIER-11: {path: "src/scan2scope/geometry/video.py", artifact: "video tier", status: pass}
+TIER-12: {path: "docs/device_matrix.md", artifact: "tested on iPhone 17 (1080p and 4K)", status: pass}
+TIER-13: {path: "src/scan2scope/ingest/stray.py", artifact: "depth, poses, per-frame intrinsics", status: pass}
+TIER-14: {path: "docs/device_matrix.md", artifact: "15 Pro to 18 Pro Max", status: partial, note: "no LiDAR phone available; LiDAR tier benchmarked on synthetic captures and run on a public real Stray Scanner recording"}
+TIER-15: {path: "docs/device_matrix.md", artifact: "device matrix", status: pass}
+TIER-16: {path: "docs/device_matrix.md", artifact: "measured accuracy per tier", status: pass}
+TIER-17: {path: "src/scan2scope/ingest", artifact: "HEIC (pillow-heif), HEVC and HDR video (PyAV)", status: pass}
+
+OUT-01: {path: "schema/scan2scope.schema.json", artifact: "result.json", status: pass}
+OUT-02: {path: "src/scan2scope/layout", artifact: "rooms[]", status: pass}
+OUT-03: {path: "src/scan2scope/layout", artifact: "rooms[].walls[].length", status: pass}
+OUT-04: {path: "src/scan2scope/layout", artifact: "rooms[].ceiling_height", status: pass}
+OUT-05: {path: "src/scan2scope/layout", artifact: "rooms[].floor_area", status: pass}
+OUT-06: {path: "src/scan2scope/layout/openings.py", artifact: "rooms[].openings[]", status: pass}
+OUT-07: {path: "src/scan2scope/stitch", artifact: "property block and plan.svg", status: pass}
+OUT-08: {path: "src/scan2scope/layout", artifact: "property.adjacency", status: partial, note: "shown on synthetic multi-room captures"}
+OUT-09: {path: "src/scan2scope/semantics/lift.py", artifact: "damage[].surface_id", status: pass}
+OUT-10: {path: "src/scan2scope/semantics", artifact: "damage[].class", status: pass}
+OUT-11: {path: "src/scan2scope/semantics/lift.py", artifact: "damage[].area, width, height, length", status: pass}
+OUT-12: {path: "src/scan2scope/rules/concealed_damage.yaml", artifact: "concealed_damage_flags[]", status: pass}
+OUT-13: {path: "src/scan2scope/rules/engine.py", artifact: "concealed_damage_flags[].rule_id", status: pass}
+OUT-14: {path: "src/scan2scope/scope/catalog.yaml", artifact: "scope[]", status: pass}
+OUT-15: {path: "src/scan2scope/scope/generator.py", artifact: "scope[].surface_id", status: pass}
+OUT-16: {path: "src/scan2scope/uncertainty", artifact: "every measurement has lo, hi", status: pass}
+OUT-17: {path: "src/scan2scope/cli.py", artifact: "scan2scope run CAPTURE", status: pass}
+OUT-18: {path: "src/scan2scope/output/schema.py", artifact: "validated on every run", status: pass}
+OUT-19: {path: "src/scan2scope/output/render.py", artifact: "plan.svg, plan.png, rooms/*.svg", status: pass}
+OUT-20: {path: "src/scan2scope/output/render.py", artifact: "one stitched plan per capture", status: pass}
+OUT-21: {path: "src/scan2scope/output/render.py", artifact: "consumer-style plan with dimensions", status: pass}
+OUT-22: {path: "src/scan2scope/stitch/solver.py", artifact: "unplaced rooms placed without overlap and flagged", status: pass}
+OUT-23: {path: "src/scan2scope/stitch", artifact: "adjacency from doors", status: partial, note: "shown on synthetic data only"}
+OUT-24: {path: "src/scan2scope/output/render.py", artifact: "wall labels on every room", status: pass}
+OUT-25: {path: "src/scan2scope/pipeline.py", artifact: "stitched plan from every tier", status: pass}
+OUT-26: {path: "src/scan2scope/cache.py", artifact: "--cache replay reproduces results; live MPS runs are not bit-identical", status: partial}
+
+BENCH-01: {path: "bench/data", artifact: "own benchmark", status: pass}
+BENCH-02: {path: "bench/data/home/ground_truth.yaml", artifact: "composition", status: deviation, note: "one real room only (owner's time); multi-room shown on synthetic LiDAR captures"}
+BENCH-03: {path: "bench/synthetic", artifact: "synthetic 4-6 room properties", status: deviation, note: "no real multi-room capture"}
+BENCH-04: {path: "bench/synthetic", artifact: "hallway in every synthetic property", status: deviation, note: "synthetic only"}
+BENCH-05: {path: "bench/data/home", artifact: "furnished bedroom", status: pass}
+BENCH-06: {path: "bench/data/home", artifact: "paper crack taped to a wall", status: pass}
+BENCH-07: {path: "bench/data/home", artifact: "one staged class (crack)", status: deviation, note: "second class not staged"}
+BENCH-08: {path: "bench/data/home", artifact: "photo and video of the same room", status: deviation, note: "no LiDAR phone; LiDAR tier synthetic"}
+BENCH-09: {path: "bench/synthetic", artifact: "multi-room LiDAR only", status: deviation}
+BENCH-10: {path: "bench/data/home/raw/photo_1", artifact: "room folders", status: pass}
+BENCH-11: {path: "src/scan2scope/stitch", artifact: "no real multi-room photo set", status: deviation}
+BENCH-12: {path: "bench/data/home", artifact: "video_1 and video_2 of the same room", status: pass}
+BENCH-13: {path: "bench/data/home/ground_truth.yaml", artifact: "tape walls and ceiling", status: partial, note: "openings and damage extents not measured"}
+BENCH-14: {path: "bench/data/home/raw_manifest.json", artifact: "raw photos and videos as release assets (laptop screens blurred)", status: pass}
+BENCH-15: {path: "bench/data/home/ground_truth.yaml", artifact: "ground truth", status: pass}
+BENCH-16: {path: "docs/technical_report.md", artifact: "mirror and night window in the real room; glass on synthetic", status: partial, note: "no wet-look surface or low-light capture"}
+
+GATE-*: {path: "docs/benchmark_report.md", artifact: "gate tables per tier", status: partial, note: "see the benchmark report for pass or fail per gate"}
+GATE-01: {path: "bench/gates.yaml", artifact: "Round 1 gates not provided; own thresholds marked assumed", status: deviation}
+GATE-09: {path: "docs/benchmark_report.md", artifact: "ceiling bias or spread section", status: pass}
+GATE-12: {path: "docs/technical_report.md", artifact: "section 4 drift handling", status: pass}
+GATE-13: {path: "docs/benchmark_report.md", artifact: "drift ablation table", status: pass}
+GATE-14: {path: "src/scan2scope/geometry/drift.py", artifact: "poses corrected, never used as-is", status: pass}
+GATE-20: {path: "src/scan2scope/stitch", artifact: "multi-room photo path exists", status: partial, note: "not shown on real data"}
+
+H2H-*: {path: "bench/data/home/magicplan/room.ifc", artifact: "magicplan free-plan export contained no room geometry", status: fail, note: "head-to-head not done"}
+H2H-05: {path: "docs/benchmark_report.md", artifact: "magicplan (free Starter plan)", status: partial}
+
+FIX-*: {path: "docs/fixloop", artifact: "declaration, before and after runs, diff, post-mortem", status: pass}
+FIX-13: {path: "docs/fixloop/postmortem.md", artifact: "why the gate stayed failing and the prediction missed", status: pass}
+
+PROC-*: {path: "git history", artifact: "incremental commits and merges since 2026-10-03", status: pass}
+PROC-06: {path: "docs/design.md", artifact: "decision log", status: n/a, note: "defended live"}
+
+DEL-01: {path: "docs/compliance_matrix.md", artifact: "this matrix", status: pass}
+DEL-02: {path: "docs/capture_protocol.md", artifact: "one-page protocol", status: pass}
+DEL-03: {path: "docs/device_matrix.md", artifact: "device matrix", status: pass}
+DEL-04: {path: "README.md", artifact: "clean-machine steps with measured time", status: pass}
+DEL-05: {path: "README.md", artifact: "scan2scope run CAPTURE", status: pass}
+DEL-06: {path: "README.md", artifact: "fetch-weights, benchmark_data.py fetch, synth, bench", status: pass}
+DEL-07: {path: "src/scan2scope/cache.py", artifact: "content-keyed cache with replay", status: pass}
+DEL-08: {path: "src/scan2scope/cache.py", artifact: "live path is the default", status: pass}
+DEL-09: {path: "docs/benchmark_report.md", artifact: "gate tables for photo, video, lidar", status: pass}
+DEL-10: {path: "docs/benchmark_report.md", artifact: "repeatability table", status: pass}
+DEL-11: {path: "docs/benchmark_report.md", artifact: "head-to-head table", status: fail, note: "no app export with geometry"}
+DEL-12: {path: "docs/benchmark_report.md", artifact: "timing table", status: pass}
+DEL-13: {path: "docs/fixloop", artifact: "fix loop bundle", status: pass}
+DEL-14: {path: "docs/technical_report.md", artifact: "six-page limit", status: pass}
+DEL-15: {path: "docs/technical_report.md", artifact: "section 2", status: pass}
+DEL-16: {path: "docs/technical_report.md", artifact: "section 3", status: pass}
+DEL-17: {path: "docs/technical_report.md", artifact: "section 4", status: pass}
+DEL-18: {path: "docs/technical_report.md", artifact: "error budget", status: pass}
+DEL-19: {path: "docs/technical_report.md", artifact: "calibration analysis", status: pass}
+DEL-20: {path: "docs/technical_report.md", artifact: "fix loop", status: pass}
+DEL-21: {path: "docs/technical_report.md", artifact: "known failure modes", status: pass}
+DEL-22: {path: "bench/data/home/raw_manifest.json", artifact: "raw photos and videos; synthetic LiDAR regenerated by seed", status: pass}
+DEL-23: {path: "bench/data/home/ground_truth.yaml", artifact: "ground truth", status: pass}
+DEL-24: {path: "bench/data/home/magicplan/room.ifc", artifact: "the only app export", status: partial}
+
+WALK-*: {path: "docs/walkin_runbook.md", artifact: "cold-run procedure", status: pass}
+WALK-02: {path: "docs/device_matrix.md", artifact: "any iPhone 15 or newer; LiDAR on Pro models", status: pass}
+WALK-07: {path: "docs/walkin_runbook.md", artifact: "measured run times", status: pass}
+
+CON-01: {path: "docs/capture_protocol.md", artifact: "phone only, no props", status: pass}
+CON-02: {path: "README.md", artifact: "models table", status: pass}
+CON-03: {path: "README.md", artifact: "datasets used for development disclosed in the technical report", status: pass}
+CON-04: {path: "README.md", artifact: "no external APIs", status: n/a}
+CON-05: {path: "README.md", artifact: "runs locally after fetch-weights", status: pass}
+CON-06: {path: "bench/gates.yaml", artifact: "Round 1 constraints not provided", status: deviation}
+CON-07: {path: "src/scan2scope/weights.py", artifact: "fetch-weights with SHA-256", status: pass}
+CON-08: {path: "scripts/benchmark_data.py", artifact: "release assets with SHA-256 manifest", status: pass}
+CON-09: {path: "src/scan2scope/pipeline.py", artifact: "mirror detections reject phantom windows; real room has a mirror", status: partial}
+CON-10: {path: "src/scan2scope/layout/openings.py", artifact: "windows from see-through evidence; night window in the real room", status: partial}
+CON-11: {path: "docs/technical_report.md", artifact: "failure mode described", status: partial, note: "no wet-look capture"}
+CON-12: {path: "src/scan2scope/uncertainty", artifact: "low-light flag widens intervals", status: partial, note: "no low-light capture"}
+
+SCORE-*: {path: "docs/compliance_matrix.md", artifact: "scoring rule", status: n/a}
