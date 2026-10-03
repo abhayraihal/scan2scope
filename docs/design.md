@@ -119,3 +119,10 @@ Assumed thresholds where the brief is silent are marked `assumed: true` in `gate
 | 2026-10-03 | Shared layout core for all tiers | Tier-specific layout code | One place to debug and fix; tiers differ only in how the Scene is produced |
 | 2026-10-03 | magicplan free Starter for head-to-head | Polycam (free tier exports GLTF only) | Free plan exports per-room numbers and a dimensioned sketch |
 | 2026-10-03 | Own schema and gates, marked as assumptions | Wait for Round 1 material | None was provided |
+| 2026-10-03 | Per-room wall refinement, step removal and furniture filter in layout | Global wall lines only | Fix loop: global lines merged walls of neighbouring rooms and followed furniture (docs/fixloop) |
+| 2026-10-03 | Refuse video chunk links whose runs disagree about shared cameras | Fall back to camera poses | The pose fallback chained a 23% scale jump into the real room's second video |
+| 2026-10-03 | Scale priors from measured real-room error: photo 0.15, video 0.08 (log) | 0.05 and 0.03 | MapAnything's metric scale was 7-10% off per room on real captures and the error does not average out over chunks |
+| 2026-10-03 | Interval widening from end walls, fragments, unobserved ceilings, chunk scale spread | Per-measurement evidence only | Confident misses on the real room all came from structure the per-measurement terms could not see |
+| 2026-10-03 | Ceiling accepted only when its points spread over the room | Highest strong horizontal peak | Door and window heads were taken as the ceiling when the camera never looked up |
+| 2026-10-03 | Hand-off by USB cable or send-as-document | AirDrop | AirDrop is disabled on the demo Mac; messaging apps recompress media, which shrank MapAnything's depth by up to a third |
+| 2026-10-03 | Head-to-head dropped | magicplan free plan | Its IFC export contained no room geometry and no other app data was captured |

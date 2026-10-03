@@ -17,7 +17,7 @@ The tiers differ only in how they build a `Scene`: gravity-aligned points with n
 | Stage | Method | Main code |
 |---|---|---|
 | LiDAR geometry | Stray Scanner depth (256x192, mm) back-projected with per-frame ARKit poses and intrinsics; confidence 2 weighted 1.0, 1 weighted 0.3; drift correction (section 4) | `geometry/lidar.py`, `geometry/drift.py` |
-| Video geometry | about 1.5 fps keyframes, at most 120; MapAnything (Apache-2.0 weights) on 24-frame chunks overlapping by 5; chunks chained by robust Sim(3) on shared frames; loop closure; plane and Manhattan anchoring | `geometry/video.py`, `geometry/chunk_align.py` |
+| Video geometry | about 1.5 fps keyframes, at most 120; MapAnything (Apache-2.0 weights) on 24-frame chunks overlapping by 5; chunks chained by robust Sim(3) on shared frames, a link refused when the two runs disagree about the shared cameras; loop closure; plane and Manhattan anchoring | `geometry/video.py`, `geometry/chunk_align.py` |
 | Photo geometry | MapAnything per room folder (at most 8 photos), intrinsics from EXIF 35 mm focal length on the image diagonal, gravity from camera axes refined on floor and ceiling normals | `geometry/photo.py` |
 | Layout | floor and ceiling from a height histogram; Manhattan frame from wall normals; wall lines from 1-D density peaks; a cell complex labelled by free-space ray casting; rooms separated at door-sized gaps; openings from an along-wall occupancy grid with see-through evidence | `layout/` |
 | Stitch (photo) | doorway photos registered into neighbouring rooms with MapAnything, door-matching hypotheses as a fallback, maximum spanning tree with a hard no-overlap constraint | `stitch/` |
@@ -40,7 +40,7 @@ The full device matrix with measured accuracy per tier is in `docs/device_matrix
 
 LiDAR: the keyframe trajectory is cut into 3-second segments. Segments more than 20 s apart whose clouds overlap, and always the first and last segment (the protocol ends on the starting corner), are registered by point-to-plane ICP. ICP only steps along directions its information matrix constrains, so a view of one wall cannot pull the loop sideways. Accepted loops enter a 4-DoF pose graph (yaw and translation; roll and pitch come from ARKit gravity). Then each segment is levelled to the shared floor plane and its yaw snapped to the global wall directions when within 5 degrees.
 
-Video: chunks are chained by Sim(3), so scale drift is modelled. A joint MapAnything run on the first and last frames gives a loop edge, accepted only when its residual, covisibility and disagreement with the chain are within bounds, and the error is distributed by a Sim(3) pose graph. Plane and Manhattan anchoring follow as for LiDAR.
+Video: chunks are chained by Sim(3), so scale drift is modelled. A link is refused when the two chunk runs place the shared cameras more than 10% of the scene depth apart; the loop registration can bridge one refused link, and chunks left unconnected are dropped and flagged instead of being chained on camera poses. A joint MapAnything run on the first and last frames gives a loop edge, accepted only when its residual, covisibility and disagreement with the chain are within bounds, and the error is distributed by a Sim(3) pose graph. Plane and Manhattan anchoring follow as for LiDAR.
 
 The ablation runs every multi-room capture with `--no-drift` and compares footprint error against ground truth (section 6).
 
