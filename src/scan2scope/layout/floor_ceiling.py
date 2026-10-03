@@ -147,7 +147,7 @@ def estimate(z: np.ndarray, nz: np.ndarray, w_peak: np.ndarray, w_fit: np.ndarra
     peaks_up = hist_peaks(z[up], w_peak[up], lo, hi, 0.01, 0.02, 0.03)
     if cam_z is not None and len(cam_z):
         cz = float(np.median(cam_z))
-        plausible = [p for p in peaks_up if 0.5 <= cz - p.center <= 2.3]
+        plausible = [p for p in peaks_up if 0.85 <= cz - p.center <= 2.2]
         if plausible and max(p.support for p in plausible) >= 0.1 * max(p.support for p in peaks_up):
             peaks_up = plausible
         else:

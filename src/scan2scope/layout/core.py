@@ -146,6 +146,8 @@ def build_plan(scene: Scene, *, single_room: bool = False) -> Plan:
 
     fc = FC.estimate(Pv[:, 2], Nv[:, 2], wp, wf, Pv[:, :2], cams_ok[:, 2] if len(cams_ok) else None)
     flags += fc.flags
+    if fc.floor.observed and fc.floor.tilt > 0.01:
+        flags.append(f"floor_tilted:{fc.floor.tilt:.3f}")
     floor_z, ceil_z = fc.floor.z, fc.ceiling.z
     wall_m = (np.abs(Nv[:, 2]) < W.WALL_NZ) & (Pv[:, 2] > floor_z + 0.15) & (Pv[:, 2] < ceil_z - 0.15)
     theta, conc = W.manhattan_frame(Nv[wall_m, :2], wp[wall_m])
