@@ -1,0 +1,33 @@
+# Gate thresholds per tier. `assumed: true` marks thresholds the brief does not state
+# (no Round 1 material was provided). The five gates the brief lists are used as written.
+interval_level: 0.9
+
+tiers:
+  lidar:
+    wall_length: {abs: 0.02, rel: 0.01, rule: max, assumed: true}
+    ceiling_height: {abs: 0.015, repeat_spread_abs: 0.01}
+    opening_width: {abs: 0.02, min_pass_rate: 0.85}
+    floor_area: {rel: 0.02, assumed: true}
+    repeatability: {abs: 0.01, rel: 0.005, rule: max}
+    drift_ablation: {required: true}
+  video:
+    wall_length: {rel: 0.03}
+    ceiling_height: {rel: 0.03, repeat_spread_abs: 0.01, assumed: true}
+    opening_width: {rel: 0.03, min_pass_rate: 0.85, assumed: true}
+    floor_area: {rel: 0.06, assumed: true}
+    repeatability: {abs: 0.01, rel: 0.005, rule: max}
+    drift_ablation: {required: true}
+  photo:
+    wall_length: {rel: 0.08}
+    ceiling_height: {rel: 0.08, repeat_spread_abs: 0.01, assumed: true}
+    opening_width: {rel: 0.08, min_pass_rate: 0.85, assumed: true}
+    floor_area: {rel: 0.16, assumed: true}
+    footprint: {rel: 0.08}
+    stitch: {adjacency_exact: true, max_overlap_m2: 0.05}
+    repeatability: {abs: 0.01, rel: 0.005, rule: max}
+
+calibration:
+  # Calibrated = the Clopper-Pearson interval (95%) of empirical coverage contains the nominal level.
+  ci: 0.95
+  # A miss by more than this multiple of the interval half-width counts as confident garbage.
+  confident_garbage_ratio: 2.0

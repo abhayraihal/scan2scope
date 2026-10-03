@@ -1,0 +1,63 @@
+[project]
+name = "scan2scope"
+version = "0.1.0"
+description = "Phone capture (photos, video or LiDAR) to dimensioned whole-property floor plan, damage regions and repair scope"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "numpy>=2.0",
+    "scipy>=1.14",
+    "pyyaml>=6.0",
+    "jsonschema>=4.23",
+    "matplotlib>=3.9",
+    "pillow>=11.0",
+    "pillow-heif>=1.0",
+    "av>=14.0",
+    "opencv-python-headless==4.10.0.84",
+    "shapely>=2.0",
+    "tqdm>=4.66",
+    "requests>=2.32",
+]
+
+[project.optional-dependencies]
+ml = [
+    "torch==2.14.1",
+    "torchvision",
+    "transformers>=5.0",
+    "huggingface_hub>=0.30",
+    "safetensors>=0.4",
+    "mapanything @ git+https://github.com/facebookresearch/map-anything@3d10cf7a3016fc0f9bb13a071ee66c47b10be0d9",
+]
+
+[project.scripts]
+scan2scope = "scan2scope.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8.3", "ruff>=0.9"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/scan2scope"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["ml: needs model weights and the ml extra"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"

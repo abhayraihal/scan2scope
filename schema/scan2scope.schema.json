@@ -1,0 +1,237 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/abhayraihal/scan2scope/schema/scan2scope.schema.json",
+  "title": "scan2scope capture result",
+  "description": "Output of `scan2scope run` for one capture. Lengths in metres, areas in square metres. Every measurement carries a 90% nominal interval [lo, hi].",
+  "type": "object",
+  "required": ["schema_version", "capture", "conventions", "property", "rooms", "damage", "concealed_damage_flags", "scope", "timing", "provenance"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "capture": {
+      "type": "object",
+      "required": ["id", "tier", "path", "device", "input_stats", "flags"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string"},
+        "tier": {"enum": ["photo", "video", "lidar"]},
+        "path": {"type": "string"},
+        "device": {"type": "object"},
+        "input_stats": {"type": "object"},
+        "flags": {"$ref": "#/$defs/flags"}
+      }
+    },
+    "conventions": {
+      "type": "object",
+      "required": ["units", "interval", "definitions"],
+      "properties": {
+        "units": {"type": "object"},
+        "interval": {
+          "type": "object",
+          "required": ["level", "method"],
+          "properties": {"level": {"type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1}, "method": {"type": "string"}}
+        },
+        "definitions": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    },
+    "property": {
+      "type": "object",
+      "required": ["footprint_area", "extent_x", "extent_y", "adjacency", "drift_correction", "stitch", "flags"],
+      "additionalProperties": false,
+      "properties": {
+        "footprint_area": {"$ref": "#/$defs/measurement"},
+        "extent_x": {"$ref": "#/$defs/measurement"},
+        "extent_y": {"$ref": "#/$defs/measurement"},
+        "adjacency": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["room_a", "room_b", "opening_a", "opening_b", "confidence", "source"],
+            "additionalProperties": false,
+            "properties": {
+              "room_a": {"type": "string"},
+              "room_b": {"type": "string"},
+              "opening_a": {"type": ["string", "null"]},
+              "opening_b": {"type": ["string", "null"]},
+              "confidence": {"$ref": "#/$defs/unit_interval"},
+              "source": {"enum": ["shared_frame", "doorway_photo", "door_match"]}
+            }
+          }
+        },
+        "drift_correction": {"type": ["object", "null"]},
+        "stitch": {"type": ["object", "null"]},
+        "flags": {"$ref": "#/$defs/flags"}
+      }
+    },
+    "rooms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "source_hint", "polygon", "floor_area", "perimeter", "ceiling_height", "walls", "openings", "surfaces", "flags"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string"},
+          "label": {"type": "string"},
+          "source_hint": {"type": ["string", "null"]},
+          "polygon": {"type": "array", "minItems": 3, "items": {"$ref": "#/$defs/point2"}},
+          "floor_area": {"$ref": "#/$defs/measurement"},
+          "perimeter": {"$ref": "#/$defs/measurement"},
+          "ceiling_height": {"$ref": "#/$defs/measurement"},
+          "walls": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "start", "end", "length", "height", "observed_fraction", "flags"],
+              "additionalProperties": false,
+              "properties": {
+                "id": {"type": "string"},
+                "start": {"$ref": "#/$defs/point2"},
+                "end": {"$ref": "#/$defs/point2"},
+                "length": {"$ref": "#/$defs/measurement"},
+                "height": {"$ref": "#/$defs/measurement"},
+                "observed_fraction": {"$ref": "#/$defs/unit_interval"},
+                "flags": {"$ref": "#/$defs/flags"}
+              }
+            }
+          },
+          "openings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "type", "wall_id", "offset", "width", "height", "sill", "center", "connects_to", "confidence", "flags"],
+              "additionalProperties": false,
+              "properties": {
+                "id": {"type": "string"},
+                "type": {"enum": ["door", "window", "opening"]},
+                "wall_id": {"type": "string"},
+                "offset": {"$ref": "#/$defs/measurement"},
+                "width": {"$ref": "#/$defs/measurement"},
+                "height": {"$ref": "#/$defs/measurement"},
+                "sill": {"oneOf": [{"$ref": "#/$defs/measurement"}, {"type": "null"}]},
+                "center": {"oneOf": [{"$ref": "#/$defs/point2"}, {"type": "null"}]},
+                "connects_to": {"type": ["string", "null"]},
+                "confidence": {"$ref": "#/$defs/unit_interval"},
+                "flags": {"$ref": "#/$defs/flags"}
+              }
+            }
+          },
+          "surfaces": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "kind", "wall_id", "area"],
+              "additionalProperties": false,
+              "properties": {
+                "id": {"type": "string"},
+                "kind": {"enum": ["wall", "floor", "ceiling"]},
+                "wall_id": {"type": ["string", "null"]},
+                "area": {"$ref": "#/$defs/measurement"}
+              }
+            }
+          },
+          "flags": {"$ref": "#/$defs/flags"}
+        }
+      }
+    },
+    "damage": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "room_id", "surface_id", "class", "score", "area", "width", "height", "length", "u_range", "v_range", "view_ids"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string"},
+          "room_id": {"type": "string"},
+          "surface_id": {"type": "string"},
+          "class": {"enum": ["water_stain", "mold", "crack", "hole", "peeling_paint"]},
+          "score": {"$ref": "#/$defs/unit_interval"},
+          "area": {"$ref": "#/$defs/measurement"},
+          "width": {"$ref": "#/$defs/measurement"},
+          "height": {"$ref": "#/$defs/measurement"},
+          "length": {"oneOf": [{"$ref": "#/$defs/measurement"}, {"type": "null"}]},
+          "u_range": {"$ref": "#/$defs/range"},
+          "v_range": {"$ref": "#/$defs/range"},
+          "view_ids": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "concealed_damage_flags": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "rule_id", "title", "basis", "room_id", "surface_ids", "damage_ids", "severity", "recommendation", "inputs"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string"},
+          "rule_id": {"type": "string"},
+          "title": {"type": "string"},
+          "basis": {"type": "string"},
+          "room_id": {"type": "string"},
+          "surface_ids": {"type": "array", "items": {"type": "string"}},
+          "damage_ids": {"type": "array", "items": {"type": "string"}},
+          "severity": {"enum": ["low", "medium", "high"]},
+          "recommendation": {"type": "string"},
+          "inputs": {"type": "object"}
+        }
+      }
+    },
+    "scope": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "room_id", "surface_id", "category", "selector", "activity", "description", "quantity", "unit", "damage_ids", "flag_ids", "rule_id"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string"},
+          "room_id": {"type": "string"},
+          "surface_id": {"type": "string"},
+          "category": {"type": "string"},
+          "selector": {"type": "string"},
+          "activity": {"enum": ["&", "-", "+", "R", "I"]},
+          "description": {"type": "string"},
+          "quantity": {"$ref": "#/$defs/measurement"},
+          "unit": {"enum": ["SF", "LF", "EA", "m2", "m"]},
+          "damage_ids": {"type": "array", "items": {"type": "string"}},
+          "flag_ids": {"type": "array", "items": {"type": "string"}},
+          "rule_id": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "timing": {
+      "type": "object",
+      "required": ["total_s", "stages"],
+      "properties": {
+        "total_s": {"type": "number", "minimum": 0},
+        "stages": {"type": "object", "additionalProperties": {"type": "number", "minimum": 0}}
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["pipeline_version", "git_commit", "models", "cache_mode", "device"],
+      "properties": {
+        "pipeline_version": {"type": "string"},
+        "git_commit": {"type": ["string", "null"]},
+        "models": {"type": "array", "items": {"type": "object", "required": ["name", "revision", "license"]}},
+        "cache_mode": {"enum": ["live", "replay", "mixed", "none"]},
+        "device": {"type": "string"}
+      }
+    }
+  },
+  "$defs": {
+    "measurement": {
+      "type": "object",
+      "required": ["value", "lo", "hi", "unit"],
+      "additionalProperties": false,
+      "properties": {
+        "value": {"type": "number"},
+        "lo": {"type": "number"},
+        "hi": {"type": "number"},
+        "unit": {"enum": ["m", "m2", "SF", "LF", "EA"]}
+      }
+    },
+    "point2": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+    "range": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+    "unit_interval": {"type": "number", "minimum": 0, "maximum": 1},
+    "flags": {"type": "array", "items": {"type": "string"}}
+  }
+}
