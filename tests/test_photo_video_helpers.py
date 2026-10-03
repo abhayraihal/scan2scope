@@ -264,6 +264,41 @@ def test_gravity_alignment_levels_a_tilted_room():
     assert np.degrees(np.arccos(np.clip((R @ R_true @ [0, 0, 1.0])[2], -1, 1))) < 0.5
 
 
+def test_gravity_alignment_single_steep_photo_uses_wide_cone():
+    rng = np.random.default_rng(1)
+    T = camera_pose((0, 0, 1.5), 0.3, -40.0)
+    floor = np.tile([0.0, 0.0, 1.0], (400, 1)) + rng.normal(scale=0.02, size=(400, 3))
+    front = np.tile(-T[:3, 2] * [1, 1, 0], (500, 1)) + rng.normal(scale=0.02, size=(500, 3))
+    side = np.tile(T[:3, 0], (300, 1)) + rng.normal(scale=0.02, size=(300, 3))
+    n = np.vstack([floor, front, side])
+    n /= np.linalg.norm(n, axis=1, keepdims=True)
+    R, info = photo.gravity_alignment([T], n, np.ones(len(n)))
+    assert info["refined"] and info["cone_deg"] == 60.0
+    assert abs(info["refine_angle_deg"] - 40.0) < 2.0
+    assert np.degrees(np.arccos(np.clip((R @ [0, 0, 1.0])[2], -1, 1))) < 1.0
+
+
+def test_runner_flags_heavy_aspect_crop(monkeypatch):
+    runner = mb.MapAnythingRunner()
+
+    def fake_run(imgs, Km, target):
+        n, (w, h) = len(imgs), target
+        return {"pts3d": np.ones((n, h, w, 3), np.float32), "conf": np.full((n, h, w), 5.0, np.float32),
+                "mask": np.ones((n, h, w), bool), "T_wc": np.tile(np.eye(4), (n, 1, 1)),
+                "K": np.tile(np.eye(3), (n, 1, 1)), "metric_scale": np.ones(n)}
+
+    monkeypatch.setattr(runner, "_run", fake_run)
+    land = np.zeros((300, 400, 3), np.uint8)
+    preds = runner.infer([land, land, land, np.zeros((400, 300, 3), np.uint8)])
+    assert "aspect_crop:1/4" in preds[0].meta["flags"]
+    assert preds[3].meta["crop_fraction"] > 0.4 and preds[0].meta["crop_fraction"] < 0.05
+    # half portrait, half landscape: the mean aspect picks the square size and every view loses a quarter
+    mixed = runner.infer([land, np.zeros((400, 300, 3), np.uint8)])
+    assert "aspect_crop:2/2" in mixed[0].meta["flags"] and mixed[0].model_size == (518, 518)
+    portrait = preds[3]
+    assert portrait.uncrop(portrait.mask, False).shape[::-1] == portrait.resized_size
+
+
 # ------------------------------------------------------------------------------------------- photo scenes
 
 

@@ -35,7 +35,7 @@ NORMAL_STEP = 2
 FILM_DIAGONAL_MM = math.hypot(36.0, 24.0)
 LOW_LIGHT_ISO = 1600.0
 LOW_LIGHT_EXPOSURE_S = 1.0 / 15.0
-MAX_REFINE_DEG = 30.0
+MAX_REFINE_DEG = 50.0  # walls are about 90 degrees from up, so a larger move is a wrong lock
 
 _heif_registered = False
 
@@ -166,26 +166,55 @@ def spread_indices(n: int, k: int) -> list[int]:
     return sorted({round(x) for x in np.linspace(0, n - 1, k).tolist()})
 
 
+def _refine_up_floor_only(normals: np.ndarray, weights: np.ndarray, hint: np.ndarray, cone_deg: float,
+                          iters: int = 3) -> np.ndarray:
+    """Like gravity.estimate_up but one-sided: only normals facing up towards the cameras (floors, table tops).
+    A camera pitched down by p sees the wall ahead at 90 - p degrees from the flipped hint, so a wide two-sided
+    cone would take it in; its normal faces against the hint and is left out here."""
+    up = hint
+    cos_t = math.cos(math.radians(cone_deg))
+    for _ in range(iters):
+        sel = normals @ up > cos_t
+        if sel.sum() < 50:
+            break
+        up = (normals[sel] * weights[sel, None]).sum(0)
+        up /= np.linalg.norm(up)
+        cos_t = math.cos(math.radians(max(8.0, cone_deg / 2)))
+    return up
+
+
 def gravity_alignment(T_wcs: list[np.ndarray], normals: np.ndarray, weights: np.ndarray
                       ) -> tuple[np.ndarray, dict[str, Any]]:
     """Rotation taking world up to +z. The hint is minus the mean camera y axis (OpenCV y points down in an
-    upright image); gravity.estimate_up refines it on floor and ceiling normals."""
+    upright image); gravity.estimate_up refines it on floor and ceiling normals. When almost none lie within 35
+    degrees of the hint (one photo pitched steeply), floor-facing normals within 60 degrees are used instead."""
     ys = np.array([np.asarray(T)[:3, 1] for T in T_wcs], float)
     down = ys.mean(0)
     strength = float(np.linalg.norm(down))
     if not np.isfinite(down).all() or strength < 1e-6:
         down = ys[0]
     hint = -down / np.linalg.norm(down)
-    up, refined, angle = hint, False, 0.0
-    if len(normals) >= 50:
-        cand = gravity.estimate_up(np.asarray(normals, float), np.asarray(weights, float), hint)
-        if np.isfinite(cand).all():
-            angle = float(np.degrees(np.arccos(np.clip(cand @ hint, -1.0, 1.0))))
-            if angle <= MAX_REFINE_DEG:
-                up, refined = cand, True
+    up, refined, angle, cone_used = hint, False, 0.0, None
+    normals = np.asarray(normals, float).reshape(-1, 3)
+    weights = np.asarray(weights, float).reshape(-1)
+    for cone in (35.0, 60.0):
+        d = normals @ hint
+        support = int(((np.abs(d) if cone == 35.0 else d) > math.cos(math.radians(cone))).sum())
+        if support < 50:
+            continue
+        if cone == 35.0:
+            cand = gravity.estimate_up(normals, weights, hint, max_angle_deg=cone)
+        else:
+            cand = _refine_up_floor_only(normals, weights, hint, cone)
+        if not np.isfinite(cand).all():
+            break
+        move = float(np.degrees(np.arccos(np.clip(cand @ hint, -1.0, 1.0))))
+        if move <= MAX_REFINE_DEG:
+            up, refined, angle, cone_used = cand, True, move, cone
+        break
     R = gravity.align_up_to_z(up)
     info = {"up_in_model": [float(x) for x in up], "hint": [float(x) for x in hint], "hint_strength": strength,
-            "refined": refined, "refine_angle_deg": angle, "R": R.tolist()}
+            "refined": refined, "refine_angle_deg": angle, "cone_deg": cone_used, "R": R.tolist()}
     return R, info
 
 

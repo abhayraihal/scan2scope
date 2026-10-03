@@ -8,8 +8,10 @@ u_m = sx * (u + 0.5) - 0.5 - ox, with sx = resized width / input width and ox th
 
 from __future__ import annotations
 
+import contextlib
 import gc
 import hashlib
+import io
 import logging
 import time
 from collections.abc import Callable, Sequence
@@ -36,6 +38,7 @@ INFER_ARGS = {"memory_efficient_inference": True, "minibatch_size": 1, "use_amp"
 OUTPUT_KEYS = ("pts3d", "conf", "mask", "T_wc", "K", "metric_scale")
 # MapAnything confidence is 1 + exp(x); indoor surfaces measured 10 to 60, unreliable pixels sit near 1.
 CONF_REF = 30.0
+HEAVY_CROP = 0.2  # share of a resized image cut away to fit the call's aspect ratio
 
 
 def confidence_weight(conf: np.ndarray) -> np.ndarray:
@@ -204,7 +207,10 @@ class MapAnythingRunner:
 
             self.device = torch_device()
             t0 = time.perf_counter()
-            model = MapAnything.from_pretrained(str(self.spec.local_dir), local_files_only=True)
+            chatter = io.StringIO()  # torch.hub and uniception print progress lines while loading
+            with contextlib.redirect_stdout(chatter), contextlib.redirect_stderr(chatter):
+                model = MapAnything.from_pretrained(str(self.spec.local_dir), local_files_only=True)
+            log.debug("MapAnything load output: %s", chatter.getvalue().strip())
             self._model = model.to(self.device).eval()
             log.info("MapAnything loaded on %s in %.1fs", self.device, time.perf_counter() - t0)
         return self._model
@@ -241,6 +247,10 @@ class MapAnythingRunner:
         flags = []
         if 0 < n_given < n:
             flags.append(f"intrinsics_partial:{n_given}/{n}")
+        cropped = [1.0 - target[0] * target[1] / (w2 * h2) for (w2, h2), _ in geoms]
+        n_heavy = sum(c > HEAVY_CROP for c in cropped)
+        if n_heavy:
+            flags.append(f"aspect_crop:{n_heavy}/{n}")
 
         full_key = {
             "model": self.spec.repo, "revision": self.spec.revision, "resolution": RESOLUTION_SET,
@@ -264,7 +274,8 @@ class MapAnythingRunner:
                 conf=np.nan_to_num(np.asarray(arrays["conf"][i], np.float32), nan=1.0),
                 mask=mask, T_wc=np.asarray(arrays["T_wc"][i], float), K=np.asarray(arrays["K"][i], float),
                 metric_scale=float(arrays["metric_scale"][i]), image_size=sizes[i], resized_size=(w2, h2),
-                crop=crop, intrinsics_given=Km[i] is not None, meta={"flags": list(flags)},
+                crop=crop, intrinsics_given=Km[i] is not None,
+                meta={"flags": list(flags), "crop_fraction": round(cropped[i], 4)},
             ))
         return preds
 
