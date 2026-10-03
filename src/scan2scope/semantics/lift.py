@@ -366,6 +366,7 @@ class ObjectPlacement:
     y_range: tuple[float, float]
     z_range: tuple[float, float]
     n_pixels: int
+    normal_z: float = 0.0  # |z| of the area-weighted mean normal: near 0 in a wall, near 1 on floor or ceiling
 
 
 def place_object(lifted: LiftedMask, plan: Plan, cfg: LiftConfig) -> ObjectPlacement | None:
@@ -377,4 +378,6 @@ def place_object(lifted: LiftedMask, plan: Plan, cfg: LiftConfig) -> ObjectPlace
     xy = np.array([wquantile(p[:, 0], w, 0.5), wquantile(p[:, 1], w, 0.5)])
     room = room_of(plan, xy, lifted.cam_center[:2], cfg)
     rng = [(wquantile(p[:, k], w, 0.05), wquantile(p[:, k], w, 0.95)) for k in range(3)]
-    return ObjectPlacement(room.id if room else None, xy, rng[0], rng[1], rng[2], len(w))
+    n = (lifted.normals * w[:, None]).sum(0)
+    nz = abs(float(n[2])) / max(float(np.linalg.norm(n)), 1e-12)
+    return ObjectPlacement(room.id if room else None, xy, rng[0], rng[1], rng[2], len(w), nz)

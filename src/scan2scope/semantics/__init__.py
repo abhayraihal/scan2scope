@@ -68,10 +68,11 @@ class SemanticsConfig:
     segmenter: SegmenterConfig = field(default_factory=SegmenterConfig)
     lift: LiftConfig = field(default_factory=LiftConfig)
     merge: MergeConfig = field(default_factory=MergeConfig)
-    max_views_per_scene: int = 60  # long video and LiDAR scenes are subsampled evenly in capture order
+    max_views_per_scene: int = 40  # long video and LiDAR scenes are subsampled evenly in capture order
     suppress_inside: tuple[str, ...] = ("door", "window", "mirror")  # damage boxes inside these are dropped
     suppress_overlap: float = 0.6  # share of the damage box inside the object box
     ring_px: int = 3
+    wall_object_max_nz: float = 0.5  # doors, windows and mirrors whose surround is tilted more are dropped
     write_debug: bool = True
 
 
@@ -118,11 +119,8 @@ def load_view_image(view: CameraView, long_side: int) -> tuple[np.ndarray, list[
         rgb = np.repeat(rgb[..., None], 3, axis=2)
     rgb = rgb[..., :3]
     h, w = rgb.shape[:2]
-    if (w, h) != (view.width, view.height):
-        if abs(w / h - view.width / view.height) > 0.01 * view.width / view.height:
-            notes.append(f"semantics_image_aspect_mismatch:{view.id}")
-        else:
-            notes.append(f"semantics_image_resized:{view.id}")
+    if abs(w / h - view.width / view.height) > 0.01 * view.width / view.height:
+        notes.append(f"semantics_image_aspect_mismatch:{view.id}")
     import cv2
 
     ww, hh = working_size(view.width, view.height, long_side)
@@ -278,31 +276,42 @@ def _process_view(view: CameraView, plan: Plan, cfg: SemanticsConfig, det: Any, 
     for prompt in (cfg.detector.damage, cfg.detector.objects):
         raw = _cached(cache, det.cache_key(sha, size, prompt), lambda p=prompt: det.predict(get_image(), p))
         dets += decode(raw, prompt, size[0], size[1], cfg.detector)
-    dets, suppressed = suppress_inside_objects(dets, cfg.suppress_inside, cfg.suppress_overlap)
-    for d, reason in suppressed:
-        records.append(_record(view, d, "dropped", reason))
     if not dets:
         return
     boxes = np.stack([d.box for d in dets])
     raw = _cached(cache, seg.cache_key(sha, size, boxes), lambda: seg.predict(get_image(), boxes))
     masks = seg.masks(raw, boxes)
-    valid = view_valid(view)
-    jac = pointmap_jacobian(view.pointmap, valid)
-    for d, (mask, iou, fallback) in zip(dets, masks):
-        ring = cfg.ring_px if d.kind == "object" and d.cls in RING_CLASSES else 0
+    jac = pointmap_jacobian(view.pointmap, view_valid(view))
+    # objects first: doors, windows and mirrors only count (and only suppress damage) when they sit in a wall
+    placed: list[Detection] = []
+    for d, (mask, _, _) in zip(dets, masks):
+        if d.kind != "object":
+            continue
+        ring = cfg.ring_px if d.cls in RING_CLASSES else 0
         lifted = lift_mask(view, mask, jac=jac, ring=ring)
-        if lifted is None or len(lifted.points) == 0:
+        place = place_object(lifted, plan, cfg.lift) if lifted is not None else None
+        if place is None:
             records.append(_record(view, d, "dropped", "no_geometry_under_mask"))
             continue
-        if d.kind == "object":
-            place = place_object(lifted, plan, cfg.lift)
-            if place is None:
-                records.append(_record(view, d, "dropped", "no_geometry_under_mask"))
-                continue
-            object_obs.append(ObjectObservation(view.id, d.cls, d.score, place.room_id, place.xy, place.x_range,
-                                                place.y_range, place.z_range, place.n_pixels))
-            records.append(_record(view, d, "kept", "", room_id=place.room_id,
-                                   xy=[round(float(x), 3) for x in place.xy]))
+        if d.cls in RING_CLASSES and place.normal_z > cfg.wall_object_max_nz:
+            records.append(_record(view, d, "dropped", "not_in_a_wall", normal_z=round(place.normal_z, 3)))
+            continue
+        placed.append(d)
+        object_obs.append(ObjectObservation(view.id, d.cls, d.score, place.room_id, place.xy, place.x_range,
+                                            place.y_range, place.z_range, place.n_pixels))
+        records.append(_record(view, d, "kept", "", room_id=place.room_id, xy=[round(float(x), 3) for x in place.xy]))
+    damage = [(d, m) for d, m in zip(dets, masks) if d.kind == "damage"]
+    kept, suppressed = suppress_inside_objects([d for d, _ in damage] + placed, cfg.suppress_inside,
+                                               cfg.suppress_overlap)
+    for d, reason in suppressed:
+        records.append(_record(view, d, "dropped", reason))
+    keep_ids = {id(d) for d in kept}
+    for d, (mask, iou, fallback) in damage:
+        if id(d) not in keep_ids:
+            continue
+        lifted = lift_mask(view, mask, jac=jac)
+        if lifted is None or len(lifted.points) == 0:
+            records.append(_record(view, d, "dropped", "no_geometry_under_mask"))
             continue
         assignment, reason = assign_surface(lifted, plan, cfg.lift)
         if assignment is None:

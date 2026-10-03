@@ -406,3 +406,52 @@ def test_semantics_config_defaults_match_contract():
     assert cfg.detector.long_side == 1024 and cfg.lift.wall_tol == 0.15
     assert cfg.merge.min_iou == 0.2 and cfg.merge.max_center_dist == 0.3 and cfg.merge.min_single_view_score == 0.5
     assert MergeConfig().top_k == 3
+
+
+class ScriptedDetector:
+    """Fixed detections per view (told apart by grey level): {view: {"damage"|"object": [(box, phrase, score)]}}."""
+
+    def __init__(self, script):
+        self.script = script
+
+    def cache_key(self, sha, size, prompt):
+        return {"sha": sha, "prompt": prompt.text}
+
+    def predict(self, image, prompt):
+        h, w = image.shape[:2]
+        rows = self.script[f"v{(int(image[0, 0, 0]) - 50) // 10}"].get(prompt.kind, [])
+        boxes = np.array([np.asarray(b, float) / [w, h, w, h] for b, _, _ in rows], np.float32).reshape(-1, 4)
+        ps = np.full((len(rows), len(prompt.phrases)), 0.05, np.float32)
+        for k, (_, phrase, score) in enumerate(rows):
+            ps[k, prompt.phrases.index(phrase)] = score
+        return {"boxes": boxes, "phrase_scores": ps}
+
+
+def test_window_on_the_ceiling_is_dropped_and_does_not_hide_a_stain(tmp_path):
+    plan = make_plan(rect_room())
+    path = tmp_path / "v0.png"
+    Image.new("RGB", (640, 480), (50, 50, 50)).save(path)
+    view = box_view("v0", (2.0, 1.2, 1.2), (2.0, 2.0, 2.5), LO, HI, image_path=path)
+    scene = Scene(tier="photo", views=[view], points=np.zeros((0, 3)), normals=np.zeros((0, 3)), weights=np.zeros(0),
+                  view_index=np.zeros(0, int))
+    stain = np.array([[1.8, 1.8, 2.5], [2.2, 1.8, 2.5], [2.2, 2.1, 2.5], [1.8, 2.1, 2.5]])
+    sb = _working_box(stain, view)
+    grid = [sb[0] - 150, sb[1] - 100, sb[2] + 150, sb[3] + 100]  # ceiling-tile grid mistaken for a window
+    det = ScriptedDetector({"v0": {"damage": [(sb, "water stain", 0.6)], "object": [(grid, "window", 0.7)]}})
+    res = analyze([scene], plan, None, detector=det, segmenter=FakeSegmenter())
+    assert [d.surface_id for d in res.damage] == ["R1-CEIL"] and res.objects == []
+    assert any(r.get("reason") == "not_in_a_wall" for r in res.dropped)
+    assert res.damage[0].area.value == pytest.approx(0.12, rel=0.08)
+
+
+def test_window_in_a_wall_suppresses_damage_seen_through_it(tmp_path):
+    plan = make_plan(rect_room())
+    scene = _scene_with_images(tmp_path, [(2.0, 1.0, 1.2)])
+    view = scene.views[0]
+    win = _working_box(rect_on_wall_y(3.0, 1.4, 2.6, 0.9, 2.0), view)
+    inside = _working_box(rect_on_wall_y(3.0, 1.8, 2.1, 1.2, 1.5), view)
+    det = ScriptedDetector({"v0": {"damage": [(inside, "mold", 0.7)], "object": [(win, "window", 0.7)]}})
+    res = analyze([scene], plan, None, detector=det, segmenter=FakeSegmenter())
+    assert res.damage == [] and [o.cls for o in res.objects] == ["window"]
+    assert any(r.get("reason") == "inside_window" for r in res.dropped)
+    assert res.objects[0].z_range[1] > 1.9  # placed from the band around the window, on the wall
