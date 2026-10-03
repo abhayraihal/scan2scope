@@ -209,6 +209,14 @@ def test_drift_record(drift_scenes):
     assert drift_scenes[False].meta["drift"] == {"enabled": False}
 
 
+def test_stage_switches_reach_the_record(tmp_path, drifted):
+    sc = build_scene(drifted.root, tmp_path, drift_options={"loop_closure": False, "manhattan_anchoring": False})
+    rec = sc.meta["drift"]
+    assert rec["stages"] == {"loop_closure": False, "plane_anchoring": True, "manhattan_anchoring": False}
+    assert rec["loop_closures_tried"] == 0 and "manhattan_anchoring" not in rec
+    assert rec["plane_anchoring"]["segments_anchored"] >= 1
+
+
 def test_corrected_poses_are_closer_to_truth(drift_scenes, drifted):
     cap = load_stray(drifted.root)
 

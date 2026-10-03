@@ -150,8 +150,12 @@ def select_views(t: np.ndarray, motion: np.ndarray, valid_fraction: np.ndarray, 
     return np.unique(np.array(out, np.int64))
 
 
-def build_scene(root: str | Path, work_dir: str | Path, *, drift_correction: bool = True) -> Scene:
-    """Scene (tier "lidar") from a Stray Scanner dataset folder: fused LiDAR points, normals and RGB views."""
+def build_scene(root: str | Path, work_dir: str | Path, *, drift_correction: bool = True,
+                drift_options: dict | None = None) -> Scene:
+    """Scene (tier "lidar") from a Stray Scanner dataset folder: fused LiDAR points, normals and RGB views.
+
+    drift_options go to drift.correct_lidar_poses, e.g. {"manhattan_anchoring": False} for a per-stage ablation.
+    """
     work_dir = Path(work_dir)
     cap = load_stray(root)
     flags = list(cap.flags)
@@ -185,7 +189,8 @@ def build_scene(root: str | Path, work_dir: str | Path, *, drift_correction: boo
         return None if dc is None else camera_cloud(dc[0], dc[1], K_d[kf[k]])
 
     frames = [KeyFrame(int(cap.frame_ids[i]), float(cap.timestamps[i])) for i in kf]
-    poses, drift = correct_lidar_poses(frames, T[kf], drift_reader, enabled=drift_correction)
+    poses, drift = correct_lidar_poses(frames, T[kf], drift_reader, enabled=drift_correction,
+                                       **(drift_options or {}))
     flags += [f"drift_{f}" for f in drift.get("flags", [])]
 
     acc = VoxelAccumulator(VOXEL)
