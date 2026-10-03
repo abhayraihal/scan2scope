@@ -209,14 +209,13 @@ def sample_frames(video_path: Path, out_dir: Path, *, target_fps: float = TARGET
 
 
 def plan_chunks(n: int, chunk_size: int, overlap: int) -> list[tuple[int, int]]:
-    """Frame spans [start, end) of size chunk_size overlapping by at least overlap; the last chunk is pulled
-    back to end at n."""
+    """Frame spans [start, end) of size chunk_size overlapping by at least overlap. The fewest chunks that meet
+    the overlap are spread evenly from 0 to n, so the slack goes into every overlap rather than into the last."""
     if n <= chunk_size:
         return [(0, n)]
     stride = max(1, chunk_size - overlap)
-    starts = list(range(0, n - chunk_size + 1, stride))
-    if starts[-1] + chunk_size < n:
-        starts.append(n - chunk_size)
+    k = 1 + math.ceil((n - chunk_size) / stride)
+    starts = sorted({round(x) for x in np.linspace(0, n - chunk_size, k).tolist()})
     return [(s, s + chunk_size) for s in starts]
 
 

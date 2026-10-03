@@ -464,6 +464,14 @@ def test_plan_chunks_and_owners():
     assert all(spans[c][0] <= f < spans[c][1] for f, c in enumerate(owners))
 
 
+def test_plan_chunks_spreads_the_overlap_evenly():
+    spans = video.plan_chunks(83, 24, 5)
+    assert len(spans) == 5 and spans[0] == (0, 24) and spans[-1] == (59, 83)
+    overlaps = [spans[i][1] - spans[i + 1][0] for i in range(len(spans) - 1)]
+    assert min(overlaps) >= 9 and max(overlaps) - min(overlaps) <= 1
+    assert len(video.plan_chunks(71, 24, 5)) == 4 and len(video.plan_chunks(120, 24, 5)) == 7
+
+
 def _loop_frames(tmp_path, n=40, radius=1.0):
     rng = np.random.default_rng(7)
     frames, by_sha, poses = [], {}, []
