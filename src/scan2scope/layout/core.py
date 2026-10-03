@@ -198,17 +198,32 @@ def build_plan(scene: Scene, *, single_room: bool = False) -> Plan:
                  "noise_sigma": round(sigma, 4), "ray_margin": round(margin, 4), "floor_z": round(floor_z, 4),
                  "ceiling_z": round(ceil_z, 4), "n_voxels": len(Pv), "n_rays": len(d.O),
                  "n_lines": len([q for q in lines if not q.synthetic]), "free_min_count": round(n_min, 2)})
-    if len(gx) < 2 or len(gy) < 2:
-        return _empty_plan(flags + ["walls_not_found"], meta)
-    C.close_groups(gx, gy, grids)
-    cx = C.build_complex(gx, gy, grids, free, floor, g2, t_thin)
-    lab = C.label_regions(cx)
-    regs = C.region_stats(cx, lab, d.cams[:, :2][cam_ok])
-    groups, sflags = C.select_rooms(regs, t_thin, single_room)
-    flags += sflags
-    meta["n_cells"] = int(lab.size)
+    groups: list[list[int]] = []
+    if len(gx) >= 2 and len(gy) >= 2:
+        C.close_groups(gx, gy, grids)
+        cx = C.build_complex(gx, gy, grids, free, floor, g2, t_thin)
+        lab = C.label_regions(cx)
+        regs = C.region_stats(cx, lab, d.cams[:, :2][cam_ok])
+        groups, sflags = C.select_rooms(regs, t_thin, single_room)
+        flags += sflags
+        meta["n_cells"] = int(lab.size)
     if not groups:
-        return _empty_plan(flags, meta)
+        # no enclosed free space: one room over the robust extent of what was seen, so later stages still run
+        rect = _fallback_rect(d, fc, sigma)
+        if rect is None:
+            return _empty_plan(flags + ["walls_not_found"], meta)
+        flags.append("room_fallback_extent")
+        lines = [q for q in lines if not q.synthetic] + [
+            W.synthetic_line(0, rect[0], grids[0]), W.synthetic_line(0, rect[2], grids[0]),
+            W.synthetic_line(1, rect[1], grids[1]), W.synthetic_line(1, rect[3], grids[1])]
+        gx = C.group_lines([q for q in lines if q.synthetic], 0)
+        gy = C.group_lines([q for q in lines if q.synthetic], 1)
+        C.close_groups(gx, gy, grids)
+        cx = C.build_complex(gx, gy, grids, free, floor, g2, t_thin)
+        cx.inside[:] = True
+        lab = C.label_regions(cx)
+        regs = C.region_stats(cx, lab, d.cams[:, :2][cam_ok])
+        groups = [[0]]
 
     room_of_cell = np.full(cx.shape, -1)
     for k, g in enumerate(groups):
@@ -220,6 +235,19 @@ def build_plan(scene: Scene, *, single_room: bool = False) -> Plan:
     log.info("layout: %d rooms, %d walls, %d openings in %.1fs", len(plan.rooms),
              sum(len(r.walls) for r in plan.rooms), sum(len(r.openings) for r in plan.rooms), meta["time_s"])
     return plan
+
+
+def _fallback_rect(d: _Data, fc: FC.FloorCeiling, sigma: float) -> tuple[float, float, float, float] | None:
+    """Robust plan extent (2nd to 98th percentile) of floor points, else of all points; None if degenerate."""
+    nz = np.abs(d.N[:, 2]) if "normals_unoriented" in fc.flags else d.N[:, 2]
+    fl = (nz > FC.HORIZONTAL_NZ) & (np.abs(d.P[:, 2] - fc.floor.z) < max(0.05, 3 * sigma))
+    xy = d.P[fl, :2] if fl.sum() >= 100 else d.P[:, :2]
+    if len(xy) < 10:
+        return None
+    lo, hi = np.percentile(xy, 2, axis=0), np.percentile(xy, 98, axis=0)
+    if (hi - lo).min() < 0.5:
+        return None
+    return float(lo[0]), float(lo[1]), float(hi[0]), float(hi[1])
 
 
 def _floor_mask(d: _Data, fc: FC.FloorCeiling, sigma: float, g2: C.Grid2D) -> np.ndarray:
