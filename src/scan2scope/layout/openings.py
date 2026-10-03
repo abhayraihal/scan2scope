@@ -142,18 +142,16 @@ def analyze_wall(wf: WallFrame, P: np.ndarray, N: np.ndarray, w_occ: np.ndarray,
     dE = (E[:, a] - wf.coord) * wf.n_sign
     uE = (E[:, b] - wf.t_start) * wf.t_dir
     hit = (np.abs(dE) < win) & (uE >= 0) & (uE < L) & (E[:, 2] > fz) & (E[:, 2] < cz)
-    hits = np.zeros(nu * nz)
-    np.add.at(hits, np.minimum((uE[hit] / RES).astype(np.int64), nu - 1) * nz
-              + np.clip(((E[hit, 2] - fz) / RES).astype(np.int64), 0, nz - 1), 1.0)
+    hits = np.bincount(np.minimum((uE[hit] / RES).astype(np.int64), nu - 1) * nz
+                       + np.clip(((E[hit, 2] - fz) / RES).astype(np.int64), 0, nz - 1), minlength=nu * nz)
     cross = ((dO > 0.05) & (dE < -win)) | ((dO < -0.05) & (dE > win))
     lam = dO[cross] / (dO[cross] - dE[cross])
     Q = O[cross] + lam[:, None] * (E[cross] - O[cross])
     uQ = (Q[:, b] - wf.t_start) * wf.t_dir
     ok = (uQ >= 0) & (uQ < L) & (Q[:, 2] > fz) & (Q[:, 2] < cz)
-    see = np.zeros(nu * nz)
-    np.add.at(see, np.minimum((uQ[ok] / RES).astype(np.int64), nu - 1) * nz
-              + np.clip(((Q[ok, 2] - fz) / RES).astype(np.int64), 0, nz - 1), 1.0)
-    hits, see = hits.reshape(nu, nz), see.reshape(nu, nz)
+    see = np.bincount(np.minimum((uQ[ok] / RES).astype(np.int64), nu - 1) * nz
+                      + np.clip(((Q[ok, 2] - fz) / RES).astype(np.int64), 0, nz - 1), minlength=nu * nz)
+    hits, see = hits.reshape(nu, nz).astype(float), see.reshape(nu, nz).astype(float)
 
     occ_s = uniform_filter(occ, 3, mode="constant")
     hits_s = uniform_filter(hits, 5, mode="constant")

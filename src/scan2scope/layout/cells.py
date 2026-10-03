@@ -398,7 +398,7 @@ def select_rooms(regs: list[Region], t_thin: float, single_room: bool) -> tuple[
         if len(adj) == 1:
             rooms[adj[0]].append(k)
     if not rooms and regs:
-        k = max(range(len(regs)), key=lambda q: (regs[q].n_cams, regs[q].area))
+        k = max(range(len(regs)), key=lambda q: (kind[q] != "thin", regs[q].n_cams, regs[q].area))
         rooms = {k: [k]}
         flags.append("room_fallback_largest_region")
     if single_room and len(rooms) > 1:
