@@ -8,31 +8,51 @@ from __future__ import annotations
 
 import numpy as np
 
-from scan2scope.types import (Adjacency, CaptureInfo, ConcealedFlag, DamageRegion, LineItem, Measurement, Opening,
-                              Plan, Room, Wall)
+from scan2scope.types import (
+    Adjacency,
+    CaptureInfo,
+    ConcealedFlag,
+    DamageRegion,
+    LineItem,
+    Measurement,
+    Opening,
+    Plan,
+    Room,
+    Wall,
+)
 
 
 def M(v: float, kind: str = "length", unit: str = "m", **evidence) -> Measurement:
     return Measurement(float(v), unit=unit, kind=kind, evidence=dict(evidence))
 
 
-def rect_room(rid: str, label: str, x0: float, y0: float, x1: float, y1: float, height: float = 2.5,
-              observed: tuple[float, ...] = (0.9, 0.9, 0.9, 0.9), source_hint: str | None = None) -> Room:
-    poly = np.array([[x0, y0], [x1, y0], [x1, y1], [x0, y1]], float)
+def poly_room(rid: str, label: str, poly: np.ndarray, height: float = 2.5, observed: tuple[float, ...] | None = None,
+              source_hint: str | None = None) -> Room:
+    """Room with one wall per edge of a counter-clockwise polygon."""
+    poly = np.asarray(poly, float)
+    n = len(poly)
+    observed = observed or (0.9,) * n
     walls = []
-    for k in range(4):
-        a, b = poly[k], poly[(k + 1) % 4]
+    for k in range(n):
+        a, b = poly[k], poly[(k + 1) % n]
         d = b - a
         length = float(np.linalg.norm(d))
         u = d / length
         walls.append(Wall(id=f"{rid}-W{k + 1}", room_id=rid, start=a.copy(), end=b.copy(),
                           length=M(length, n_points=5000, residual=0.004), height=M(height, "height"),
                           normal_in=np.array([-u[1], u[0]]), observed_fraction=observed[k]))
-    area = (x1 - x0) * (y1 - y0)
-    perimeter = 2 * ((x1 - x0) + (y1 - y0))
+    x, y = poly[:, 0], poly[:, 1]
+    area = 0.5 * abs(float(np.dot(x, np.roll(y, -1)) - np.dot(np.roll(x, -1), y)))
+    perimeter = sum(w.length.value for w in walls)
     return Room(id=rid, label=label, polygon=poly, walls=walls, openings=[], floor_z=0.0, ceiling_z=height,
                 ceiling_height=M(height, "height"), floor_area=M(area, "area", "m2"), perimeter=M(perimeter),
                 source_hint=source_hint)
+
+
+def rect_room(rid: str, label: str, x0: float, y0: float, x1: float, y1: float, height: float = 2.5,
+              observed: tuple[float, ...] = (0.9, 0.9, 0.9, 0.9), source_hint: str | None = None) -> Room:
+    poly = np.array([[x0, y0], [x1, y0], [x1, y1], [x0, y1]], float)
+    return poly_room(rid, label, poly, height, observed, source_hint)
 
 
 def make_plan() -> Plan:
