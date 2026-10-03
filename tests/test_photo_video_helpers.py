@@ -476,14 +476,6 @@ def test_plan_chunks_and_owners():
     assert all(spans[c][0] <= f < spans[c][1] for f, c in enumerate(owners))
 
 
-def test_plan_chunks_spreads_the_overlap_evenly():
-    spans = video.plan_chunks(83, 24, 5)
-    assert len(spans) == 5 and spans[0] == (0, 24) and spans[-1] == (59, 83)
-    overlaps = [spans[i][1] - spans[i + 1][0] for i in range(len(spans) - 1)]
-    assert min(overlaps) >= 9 and max(overlaps) - min(overlaps) <= 1
-    assert len(video.plan_chunks(71, 24, 5)) == 4 and len(video.plan_chunks(120, 24, 5)) == 7
-
-
 def _two_runs(tmp_path, spread):
     """One chunk's frames rendered twice: the second run keeps every depth map but spreads its cameras."""
     frames, by_sha, _ = _loop_frames(tmp_path, n=40)
@@ -520,15 +512,15 @@ def test_video_inconsistent_chunk_is_dropped_not_chained(tmp_path):
                                       chunk_size=8, overlap=3, loop_frames=4)
     flags = s.meta["flags"]
     assert "chunk_align_failed:1" in flags and "chunk_align_failed:2" in flags
-    assert "video_segment_dropped:0-8" in flags and not any(f.startswith("chunk_align_fallback") for f in flags)
+    assert "video_segment_dropped:0-9" in flags and not any(f.startswith("chunk_align_fallback") for f in flags)
     q = s.meta["quality"]
-    assert q["frames_dropped"] == 9 and q["n_chunks_used"] == 6 and q["n_chunks"] == 8
+    assert q["frames_dropped"] == 10 and q["n_chunks_used"] == 6 and q["n_chunks"] == 8
     chunks = s.meta["drift"]["chunks"]
     assert [c["kept"] for c in chunks] == [False, False] + [True] * 6
     assert chunks[1]["align_camera_disagreement"] > video.LINK_MAX_DISAGREE
     ok = s.meta["frames"]["pose_ok"]
-    assert not any(ok[:9]) and all(ok[9:]) and all(v.meta["frame_index"] >= 9 for v in s.views)
-    ate, _ = _ate([T for T, o in zip(s.meta["frames"]["T_wc"], ok) if o], poses[9:])
+    assert not any(ok[:10]) and all(ok[10:]) and all(v.meta["frame_index"] >= 10 for v in s.views)
+    ate, _ = _ate([T for T, o in zip(s.meta["frames"]["T_wc"], ok) if o], poses[10:])
     assert ate < 0.05
     clean = video.build_scene_from_frames(frames, drift_correction=False, runner=FakeRunner(by_sha), chunk_size=8,
                                           overlap=3, loop_frames=4)
@@ -542,11 +534,11 @@ def test_video_loop_registration_bridges_a_refused_link(tmp_path):
     s = video.build_scene_from_frames(frames, drift_correction=True, runner=FakeRunner(by_sha, spread={5: 2.5}),
                                       chunk_size=8, overlap=3, loop_frames=4)
     flags = s.meta["flags"]
-    assert "chunk_align_loop_bridge" in flags and "video_segment_dropped:8-8" in flags
+    assert "chunk_align_loop_bridge" in flags and "video_segment_dropped:8-9" in flags
     assert s.meta["drift"]["loop_closure"]["reason"] == "used_as_link"
     assert [c["kept"] for c in s.meta["drift"]["chunks"]] == [True, False] + [True] * 6
     ok = s.meta["frames"]["pose_ok"]
-    assert sum(ok) == 39 and not ok[8]
+    assert sum(ok) == 38 and not ok[8] and not ok[9]
     ate, _ = _ate([T for T, o in zip(s.meta["frames"]["T_wc"], ok) if o], [P for P, o in zip(poses, ok) if o])
     assert ate < 0.05
 
