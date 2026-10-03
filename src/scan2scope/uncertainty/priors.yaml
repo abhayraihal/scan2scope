@@ -44,6 +44,7 @@ structure:
   min_face_points: 30         # an end wall with fewer face points (the layout's own bar) is unobserved
   sparse_observed: 0.1        # ... one observed over less than this share of its face is sparse
   unobserved_end: 0.15        # 1-sigma position of an unobserved end wall, as a share of the room extent
+  span_max: 3.0               # ... taking the extent as at most this many times the wall's own length
   short_wall_m: 0.5           # walls shorter than this may be steps from furniture or misregistration
   step_wall_m: 1.0            # ... and so may walls shorter than this whose face covers less than
   step_observed: 0.6          #     step_observed of the floor-to-ceiling plane (a counter stops low)

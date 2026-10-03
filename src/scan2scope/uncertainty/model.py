@@ -14,18 +14,19 @@ on the measurement (observed_fraction, n_points, a fit residual in its own unit 
 context (low light, few photos or views, missing focal length).
 
 A wall's length is the distance between its two end walls, so their evidence counts as well: a thinly observed
-end wall inflates the additive term the same way, the part of an end wall's face rms above the capture's
-surface noise (a doubled or cluttered face) adds in quadrature, and an end wall with no face of its own
-(wall_unobserved, wall_face_missing, wall_face_mismatch, fewer than min_face_points face points) leaves that
-end where camera free space ran out and adds a share of the room's extent along the wall. Half the translation
-error of a credible rejected loop closure adds to every length.
+end wall inflates the additive term the same way, and the part of an end wall's face rms above the capture's
+surface noise (a doubled or cluttered face) adds in quadrature. An end wall with no face of its own
+(wall_unobserved, wall_face_missing, wall_face_mismatch, fewer than min_face_points face points) sits where
+camera free space ran out: the wall may run on past it by a share of the room's extent along the wall (the
+extent taken as at most span_max times the wall's length), and it is no shorter than the part of its own face
+that was seen. Half the translation error of a credible rejected loop closure adds to every length.
 
 Structure: a wall that ends at an unobserved, sparse or step-like wall (shorter than short_wall_m, or shorter
 than step_wall_m with a face covering less than step_observed of the floor-to-ceiling plane) may be a piece of
 a longer wall. Its upper side reaches the far end of the pieces that continue in the same direction past such
-walls; a wall that is not itself a step may also span the room's extent along it. A room's area reaches up to
-its bounding box when any wall may be a fragment, and widens by each unobserved wall's length times that
-wall's position term.
+steps; a wall that is not itself a step may also span the room's extent along it, within span_max times its
+length. A room's area reaches up to its bounding box when any wall may be a fragment, and widens by each
+unobserved wall's length times that wall's position term.
 
 Heights add a vertical log term (photo and video see heights across the image and lengths partly in depth) and
 a one-sided upward term when the floor or ceiling was not observed, since the level then reported is the
@@ -64,10 +65,10 @@ UNOBSERVED_WALL = ("wall_unobserved", "wall_face_missing", "wall_face_mismatch")
 SPARSE_WALL = ("wall_face_sparse",)
 
 # Defaults for the priors.yaml sections that older files do not have.
-STRUCTURE = {"min_face_points": 30, "sparse_observed": 0.1, "unobserved_end": 0.15, "short_wall_m": 0.5,
-             "step_wall_m": 1.0, "step_observed": 0.6, "level_unobserved_m": 0.5, "ceiling_max_m": 4.0,
-             "level_from_global_m": 0.05, "ceiling_min_coverage": 0.05, "ceiling_min_points": 200,
-             "door_head_min_m": 1.9}
+STRUCTURE = {"min_face_points": 30, "sparse_observed": 0.1, "unobserved_end": 0.15, "span_max": 3.0,
+             "short_wall_m": 0.5, "step_wall_m": 1.0, "step_observed": 0.6, "level_unobserved_m": 0.5,
+             "ceiling_max_m": 4.0, "level_from_global_m": 0.05, "ceiling_min_coverage": 0.05,
+             "ceiling_min_points": 200, "door_head_min_m": 1.9}
 CAPTURE = {"loop_min_overlap": 0.2, "loop_min_inliers": 0.3, "loop_max_rot_deg": 20.0, "report_ratio": 1.1}
 
 
@@ -412,14 +413,14 @@ def _room_frame(room: Room) -> _Frame | None:
                   d / np.maximum(L, 1e-12)[:, None])
 
 
-def _continuation(k: int, step: int, frame: _Frame, doubt: list[float], lengths: list[float]) -> float:
-    """Length wall k would gain if the doubtful walls past one of its ends were artefacts: every piece
-    beyond a doubtful end wall that runs on in the same direction (the far side of a notch or a step)."""
+def _continuation(k: int, step: int, frame: _Frame, steps: list[float], lengths: list[float]) -> float:
+    """Length wall k would gain if the steps past one of its ends were artefacts: every piece beyond a
+    step that runs on in the same direction (the far side of a notch or a misregistration step)."""
     K = len(lengths)
     gain, i = 0.0, k
     for _ in range(K // 2):
         j, nxt = (i + step) % K, (i + 2 * step) % K
-        if nxt == k or doubt[j] <= 0 or float(frame.dirs[k] @ frame.dirs[nxt]) < 0.95:
+        if nxt == k or steps[j] <= 0 or float(frame.dirs[k] @ frame.dirs[nxt]) < 0.95:
             break
         gain += lengths[nxt]
         i = nxt
@@ -430,8 +431,9 @@ def _continuation(k: int, step: int, frame: _Frame, doubt: list[float], lengths:
 class _WallOut:
     a_own: float  # additive term from the wall's own evidence
     end_noise: float  # extra additive term from thinly observed or smeared end walls
-    end_pos: float  # position terms of unobserved or sparse end walls
-    up: float  # one-sided upward extent if the wall may be a fragment
+    end_pos: float  # 1-sigma position of unobserved or sparse end walls, beyond the polygon's end
+    up: float  # one-sided upward extent (at q = 1)
+    down: float  # one-sided downward extent (at q = 1)
     p_fragment: float
     pos: float  # position term of this wall when it is unobserved, used by its room's area
     reasons: list[str]
@@ -443,7 +445,8 @@ def _walls(mdl: _Model, room: Room, a: float, st: dict[str, Any], drift_m: float
     evs = [_wall_ev(mdl, w, st) for w in walls]
     frame = _room_frame(room) if K >= 3 else None
     lengths = [abs(_num(getattr(w.length, "value", None)) or 0.0) for w in walls]
-    doubt = [1.0 if (e.unobserved or e.step) else (0.5 if e.sparse else 0.0) for e in evs]
+    steps = [1.0 if e.step else 0.0 for e in evs]  # a notch side or a misregistration step, seen or not
+    z = mdl.z
     out = []
     for k, w in enumerate(walls):
         a_own = mdl.additive(a, [_ev(w.length), w.evidence, {"observed_fraction": w.observed_fraction}])
@@ -451,9 +454,11 @@ def _walls(mdl: _Model, room: Room, a: float, st: dict[str, Any], drift_m: float
         noise2 = pos2 = 0.0
         real = 1.0  # chance-like product that the walls where this one stops are real walls
         reasons: list[str] = []
-        E = E_perp = 0.0
+        E_room = E = E_perp = 0.0
         if frame is not None:
-            E, E_perp = float(frame.extent[frame.axes[k]]), float(frame.extent[1 - frame.axes[k]])
+            E_room, E_perp = float(frame.extent[frame.axes[k]]), float(frame.extent[1 - frame.axes[k]])
+            # the room's extent sets how far an end can be off, but not more than a few times the wall itself
+            E = min(E_room, float(st["span_max"]) * L)
             for j in ((k - 1) % K, (k + 1) % K):
                 e = evs[j]
                 noise2 += 0.5 * a * a * max(e.inflation ** 2 - 1.0, 0.0) + e.smear ** 2
@@ -474,19 +479,24 @@ def _walls(mdl: _Model, room: Room, a: float, st: dict[str, Any], drift_m: float
         p = 1.0 - real
         deficit = 0.0
         if frame is not None and p > 0:
-            gain = _continuation(k, 1, frame, doubt, lengths) + _continuation(k, -1, frame, doubt, lengths)
+            gain = _continuation(k, 1, frame, steps, lengths) + _continuation(k, -1, frame, steps, lengths)
             # a step that is an artefact vanishes rather than grows, so only longer walls may span the extent
             reach = L + gain if evs[k].step else max(L + gain, E)
-            deficit = max(0.0, min(E, reach) - L)
+            deficit = max(0.0, min(E_room, reach) - L)
         delta = deficit * min(1.0, 2.0 * p)
-        up = 0.0
-        if delta > a_own:  # the far end of the pieces, measured at the same scale as the rest
-            rest = a_own ** 2 + noise2 + pos2 + drift_m ** 2
-            up = _reach(math.sqrt((L * mdl.s) ** 2 + rest), delta,
-                        math.sqrt(((L + delta) * mdl.s) ** 2 + rest), mdl.z)
+        rest = a_own ** 2 + noise2 + drift_m ** 2
+        sigma = math.sqrt((L * mdl.s) ** 2 + rest)
+        # An unobserved end lies where camera free space ran out: the wall may run on past it, and it is
+        # no shorter than the part of its own face that was seen.
+        bound = z * math.sqrt(sigma * sigma + pos2)
+        if delta > a_own:  # a fragment runs on to the far end of the pieces, measured at the same scale
+            bound = max(bound, delta + z * math.sqrt(((L + delta) * mdl.s) ** 2 + rest))
             reasons.append("wall_fragment")
+        up = math.sqrt(max(0.0, bound * bound - (z * sigma) ** 2))
+        seen = _num(w.observed_fraction)
+        down = min(z * math.sqrt(pos2), max(0.0, 1.0 - (seen or 0.0)) * L) if pos2 > 0 else 0.0
         pos = st["unobserved_end"] * E_perp if evs[k].unobserved else 0.0
-        out.append(_WallOut(a_own, math.sqrt(noise2), math.sqrt(pos2), up, p, pos, reasons))
+        out.append(_WallOut(a_own, math.sqrt(noise2), math.sqrt(pos2), up, down, p, pos, reasons))
     return out
 
 
@@ -542,8 +552,14 @@ def _annotate_room(mdl: _Model, room: Room, add: dict[str, float], f_room: float
     outs = _walls(mdl, room, a0, st, cap.drift_m)
     reasons: list[str] = []
     for wall, o in zip(room.walls, outs):
-        mdl.length(wall.length, o.a_own, {"end_noise": o.end_noise, "end_position": o.end_pos,
-                                          "drift": cap.drift_m}, o.up, o.reasons)
+        m = wall.length
+        sc = abs(_num(m.value) or 0.0) * mdl.s
+        sym = {"end_noise": o.end_noise, "drift": cap.drift_m}
+        sigma = math.sqrt(sc * sc + o.a_own ** 2 + sum(v * v for v in sym.values()))
+        parts = {"scale": sc, "additive": o.a_own, **sym, "end_position": o.end_pos, "upper": o.up,
+                 "lower": o.down}
+        mdl.set(m, sigma, {k: v for k, v in parts.items() if k in ("scale", "additive") or v > 0}, o.up,
+                o.reasons, o.down)
         reasons += o.reasons
     lev_sym, lev_up, lev_why = _levels(room, flags, st, mdl.z)
     reasons += lev_why
@@ -755,9 +771,11 @@ def describe(record: dict[str, Any] | None) -> str:
         f"{add.get('opening', 0):.3f} m (openings), {float(record.get('damage_additive', 0.0)):.3f} m "
         "(damage), inflated for thin evidence on the measurement and on a wall's two end walls (low observed "
         "fraction, few face points, fit residuals in quadrature, low light, fewer than 4 photos or views, "
-        "missing focal length). An end wall with no face of its own adds "
-        f"{float(st['unobserved_end']):.2f} of the room's extent along the wall. A wall ending at an "
-        f"unobserved wall or a step (shorter than {float(st['short_wall_m']):.2f} m, or shorter than "
+        "missing focal length). A wall ending at a wall with no face of its own may run on by "
+        f"{float(st['unobserved_end']):.2f} of the room's extent along it (at most "
+        f"{float(st['span_max']):.0f} times the wall's length) and is no shorter than the part of its face "
+        "that was seen. A wall ending at "
+        f"an unobserved wall or a step (shorter than {float(st['short_wall_m']):.2f} m, or shorter than "
         f"{float(st['step_wall_m']):.2f} m and low) may be a fragment: its upper bound reaches the pieces "
         f"beyond the step or the room's extent along the wall. Heights add a vertical term of {vert:.2f} "
         f"(log); an unobserved floor or ceiling widens the upper side by z*{unseen:.2f} m, an unobserved "

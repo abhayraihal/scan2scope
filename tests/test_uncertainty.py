@@ -343,13 +343,37 @@ def test_unobserved_end_wall_adds_a_share_of_the_extent():
     annotate(plan, [], tier="video", quality={}, calibration=NO_CAL)
     bottom, right, top, left = (w.length for w in room.walls)
     for m in (bottom, top):  # both end at the unobserved wall
-        assert m.evidence["sigma_parts"]["end_position"] == pytest.approx(0.15 * 4.0)
+        sigma, pos = m.evidence["sigma"], 0.15 * 4.0
+        assert m.evidence["sigma_parts"]["end_position"] == pytest.approx(pos)
         assert "wall_end_unobserved" in m.evidence["widened"]
-        assert symmetric(m)  # they already span the room, so nothing one-sided
-    assert "end_position" not in left.evidence["sigma_parts"]
+        # the wall may run on past the end where free space ran out ...
+        assert m.hi - m.value == pytest.approx(Z * math.hypot(sigma, pos))
+        # ... but it is no shorter than the 90% of its face that was seen
+        assert m.value - m.lo == pytest.approx(Z * math.hypot(sigma, 0.1 * 4.0 / Z))
+    assert "end_position" not in left.evidence["sigma_parts"] and symmetric(left)
     assert "wall_unobserved" in right.evidence["widened"]
     # the area carries the unobserved wall's position: its 3 m length times 0.15 of the 4 m extent across it
     assert room.floor_area.evidence["sigma_parts"]["unobserved_walls"] == pytest.approx(3.0 * 0.15 * 4.0)
+
+
+def test_end_terms_scale_with_the_wall_not_a_large_open_space():
+    # a 1.5 m wall in a 20 m wide space, ending at a 2 m wall that was never seen
+    poly = np.array([[0, 0], [1.5, 0], [1.5, 2], [20, 2], [20, 8], [0, 8]], float)
+    room = poly_room("R1", "open plan", poly)
+    unobserve(room.walls[1])
+    plan = one_room(room)
+    annotate(plan, [], tier="lidar", quality={}, calibration=NO_CAL)
+    w1 = room.walls[0].length
+    # the end position and the reach use at most 3 x 1.5 m of the room, not its 20 m
+    assert w1.evidence["sigma_parts"]["end_position"] == pytest.approx(0.15 * 4.5)
+    assert 4.5 < w1.hi < 5.0
+    # and the 90% of its face that was seen keeps the lower bound close
+    assert w1.value - w1.lo < 0.2
+    # a 0.3 m step instead of the 2 m wall: the 18.5 m piece past it may be the same wall
+    poly = np.array([[0, 0], [1.5, 0], [1.5, 0.3], [20, 0.3], [20, 8], [0, 8]], float)
+    room = poly_room("R1", "open plan", poly)
+    annotate(one_room(room), [], tier="lidar", quality={}, calibration=NO_CAL)
+    assert room.walls[0].length.hi > 20.0
 
 
 def test_fragment_with_an_unobserved_end_reaches_the_room_extent():
