@@ -1,0 +1,41 @@
+# Ground truth for one property. Definitions: docs/ground_truth_protocol.md
+# All lengths in metres. Room ids must match the photo-tier folder names.
+property: home
+measured_by: ""
+instrument: "steel tape 5 m"      # or laser model, e.g. "Bosch GLM 50-27 CG"
+date: "2026-10-04"
+
+rooms:
+  - id: "01 hallway"
+    walls:                         # start at the wall with the entry door, then the next wall on your right
+      - {id: W1, length: 0.000}
+      - {id: W2, length: 0.000}
+      - {id: W3, length: 0.000}
+      - {id: W4, length: 0.000}
+    diagonal: null                 # only for rooms that are not rectangles
+    ceiling_height: [0.000, 0.000, 0.000]
+    openings:
+      - {id: D1, type: door, wall: W1, offset: 0.000, width: 0.000, height: 0.000, leads_to: "02 kitchen", wall_thickness: 0.000}
+      - {id: N1, type: window, wall: W3, offset: 0.000, width: 0.000, height: 0.000, sill: 0.000}
+    damage: []
+
+  - id: "02 kitchen"
+    walls:
+      - {id: W1, length: 0.000}
+      - {id: W2, length: 0.000}
+      - {id: W3, length: 0.000}
+      - {id: W4, length: 0.000}
+    diagonal: null
+    ceiling_height: [0.000, 0.000, 0.000]
+    openings:
+      - {id: D1, type: door, wall: W1, offset: 0.000, width: 0.000, height: 0.000, leads_to: "01 hallway", wall_thickness: 0.000}
+    damage:
+      - {id: X1, class: water_stain, surface: W2, offset: 0.000, bottom: 0.000, width: 0.000, height: 0.000}
+      - {id: X2, class: crack, surface: W3, offset: 0.000, bottom: 0.000, width: 0.000, height: 0.000, length: 0.000}
+
+# Which captures belong to this property (paths relative to this file).
+captures:
+  - {id: photo_1, tier: photo, path: raw/photo_1}
+  - {id: photo_2, tier: photo, path: raw/photo_2, rooms: ["02 kitchen"]}   # repeat of one room
+  - {id: video_1, tier: video, path: raw/video_1.mov}
+  - {id: video_2, tier: video, path: raw/video_2.mov, rooms: ["02 kitchen"]}
