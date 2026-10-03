@@ -241,3 +241,22 @@ def test_degenerate_input_returns_flagged_plan(case):
     assert isinstance(plan.flags, list) and plan.flags
     assert plan.footprint_area.value >= 0
     assert all(len(r.polygon) >= 3 for r in plan.rooms)
+    if case == "floor_only":
+        assert len(plan.rooms) == 1
+        room = plan.rooms[0]
+        assert 7.0 < room.floor_area.value < 10.0 and not room.openings
+        assert all("wall_unobserved" in w.flags for w in room.walls)
+    if case in ("empty", "few", "no_normals"):
+        assert not plan.rooms and "no_rooms" in plan.flags
+
+
+def test_walls_without_rays_or_floor_fall_back_to_the_seen_extent():
+    rng = np.random.default_rng(1)
+    t, z = rng.uniform(0, 3, 4000), rng.uniform(0.2, 2.4, 4000)
+    P = np.concatenate([np.column_stack([t, np.zeros_like(t), z]), np.column_stack([t, np.full_like(t, 3), z]),
+                        np.column_stack([np.zeros_like(t), t, z]), np.column_stack([np.full_like(t, 3), t, z])])
+    N = np.concatenate([np.tile(v, (4000, 1)) for v in ([0, 1, 0], [0, -1, 0], [1, 0, 0], [-1, 0, 0])])
+    sc = Scene("photo", [_view()], P, N.astype(float), np.ones(len(P)), np.full(len(P), -1))
+    plan = build_plan(sc, single_room=True)
+    assert "room_fallback_extent" in plan.flags and len(plan.rooms) == 1
+    assert 6.0 < plan.rooms[0].floor_area.value < 9.5
