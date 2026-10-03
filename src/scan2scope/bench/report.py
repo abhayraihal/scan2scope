@@ -338,9 +338,12 @@ def _timing_section(bench: dict[str, Any]) -> list[str]:
 
 def _failures_section(bench: dict[str, Any]) -> list[str]:
     bad = [m for m in bench["metrics"] + bench.get("nodrift_metrics", []) if m["status"] != "ok"]
+    unreadable = bench.get("load_errors") or []
     out = ["## Failed or missing captures", ""]
-    if not bad:
+    if not bad and not unreadable:
         return out + ["None.", ""]
+    out += [f"- ground truth {e['path']} could not be read, so none of its captures were scored: {e['error']}"
+            for e in unreadable]
     out += [f"- {m['property']}/{m['capture']}" + ("__nodrift" if m.get("variant") == "nodrift" else "")
             + f" ({m['tier']}): {m['status']}" + (f": {m['error']}" if m.get("error") else "") for m in bad]
     return out + [""]

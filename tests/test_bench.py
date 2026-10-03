@@ -619,6 +619,14 @@ def test_head_to_head_with_fake_magicplan_export(gt):
     assert row["measured"] == pytest.approx(comp["share"])
 
 
+def test_magicplan_template_placeholders_are_ignored():
+    from scan2scope.bench.h2h import load_dimensions
+
+    tmpl = load_dimensions(ROOT / "bench/templates/magicplan_dimensions.yaml")
+    assert set(tmpl["rooms"]) == {"01 hallway", "02 kitchen"} and not tmpl["flags"]
+    assert tmpl["rooms"]["02 kitchen"]["name"] == "Kitchen" and not tmpl["rooms"]["02 kitchen"]["walls"]
+
+
 def test_parse_quantity_units():
     assert parse_quantity("12,5 m²", "area") == pytest.approx(12.5)
     assert parse_quantity("100 sq ft", "area") == pytest.approx(9.290304)
@@ -671,8 +679,12 @@ def test_run_benchmark_with_fake_pipeline(gt, tmp_path):
     (raw / "photo_1").mkdir(parents=True)
     (raw / "photo_2").mkdir()
     (raw / "video_1.mov").write_bytes(b"")
+    broken = gt.root.parent / "broken" / "ground_truth.yaml"
+    broken.parent.mkdir()
+    broken.write_text("rooms: [unclosed\n")
     out = tmp_path / "runs"
     bench = run_benchmark(gt.root.parent, out, run_fn=fake_run)
+    assert len(bench["load_errors"]) == 1 and "could not be read" in (out / "benchmark_report.md").read_text()
     assert ("video_1__nodrift", False, False) in calls and ("video_1", True, True) in calls
     status = {m["capture"]: m["status"] for m in bench["metrics"]}
     assert status == {"photo_1": "ok", "photo_2": "failed", "video_1": "ok"}

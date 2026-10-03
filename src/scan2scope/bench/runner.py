@@ -18,6 +18,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from scan2scope.bench import h2h as h2h_mod
 from scan2scope.bench.ablation import NODRIFT_SUFFIX, drift_ablation
 from scan2scope.bench.gates import evaluate, load_gates
@@ -147,11 +149,13 @@ def run_benchmark(data_root: str | Path, out_dir: str | Path, *, cache_mode: str
     out_dir.mkdir(parents=True, exist_ok=True)
     cfg = load_gates(gates_path)
     gts: list[GroundTruth] = []
+    load_errors = []
     for path in find_properties(data_root):
         try:
             gts.append(load_ground_truth(path))
-        except (OSError, ValueError, TypeError) as exc:
+        except (OSError, ValueError, TypeError, yaml.YAMLError) as exc:
             log.error("cannot read %s: %s", path, exc)
+            load_errors.append({"path": str(path), "error": f"{type(exc).__name__}: {exc}"})
     if not gts:
         log.warning("no ground_truth.yaml under %s", data_root)
     runs = []
@@ -165,8 +169,11 @@ def run_benchmark(data_root: str | Path, out_dir: str | Path, *, cache_mode: str
             if needs_ablation(gt, cap):
                 runs.append(run_one(gt, cap, out_dir / gt.property / f"{cap.id}{NODRIFT_SUFFIX}",
                                     cache_mode=cache_mode, skip_run=skip_run, drift=False, run_fn=run_fn))
+    if only and not runs:
+        log.warning("no capture matched --only %s", " ".join(only))
     bench = score_runs(gts, runs, cfg)
     bench["data_root"] = str(data_root)
+    bench["load_errors"] = load_errors
     write_report(out_dir, bench)
     fails = bench["gates"]["ranked_failures"]
     log.info("benchmark: %d captures, %d failing gates%s", len(bench["metrics"]), len(fails),
