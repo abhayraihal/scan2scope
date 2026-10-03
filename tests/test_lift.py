@@ -17,6 +17,7 @@ from scan2scope.semantics.detector import (
     Detection,
     DetectorConfig,
     GroundingDinoDetector,
+    PromptSet,
     decode,
     nms,
 )
@@ -302,9 +303,14 @@ def test_decode_thresholds_nms_and_class_mapping():
            "phrase_scores": np.array([[0.50, 0.1, 0.1, 0.1, 0.1], [0.45, 0.1, 0.1, 0.1, 0.1],
                                       [0.1, 0.1, 0.1, 0.1, 0.40], [0.9, 0.1, 0.1, 0.1, 0.1],
                                       [0.48, 0.1, 0.1, 0.1, 0.1], [0.30, 0.1, 0.1, 0.1, 0.1]], np.float32)}
-    dets = decode(raw, DAMAGE_PROMPTS, 1000, 800, DetectorConfig())
+    prompt = PromptSet("damage", DAMAGE_PROMPTS.phrases, DAMAGE_PROMPTS.classes, box_threshold=0.35)
+    dets = decode(raw, prompt, 1000, 800, DetectorConfig())
     assert [(d.cls, round(d.score, 2)) for d in dets] == [("water_stain", 0.5), ("peeling_paint", 0.4)]
     assert dets[0].box == pytest.approx([100, 80, 300, 240])
+    assert dets[0].class_scores == pytest.approx({"water_stain": 0.5, "mold": 0.1, "crack": 0.1, "hole": 0.1,
+                                                  "peeling_paint": 0.1})
+    low = decode(raw, DAMAGE_PROMPTS, 1000, 800, DetectorConfig())  # the damage floor keeps the 0.30 box too
+    assert [round(d.score, 2) for d in low] == [0.5, 0.4, 0.3]
     objs = decode({"boxes": raw["boxes"][:1], "phrase_scores": np.array([[0.1] * 9 + [0.33]], np.float32)},
                   OBJECT_PROMPTS, 1000, 800, DetectorConfig())
     assert objs[0].cls == "washing_machine" and objs[0].kind == "object"
@@ -321,7 +327,41 @@ def test_nms_drops_contained_boxes():
 def test_prompt_text_format():
     assert DAMAGE_PROMPTS.text == "water stain. mold. crack. hole. peeling paint."
     assert OBJECT_PROMPTS.text.endswith("refrigerator. washing machine.")
-    assert DAMAGE_PROMPTS.box_threshold == 0.35 and OBJECT_PROMPTS.box_threshold == 0.30
+    assert DAMAGE_PROMPTS.box_threshold == 0.2 and OBJECT_PROMPTS.box_threshold == 0.30
+
+
+def test_synonym_phrases_score_their_class_and_class_thresholds_apply():
+    prompt = PromptSet("damage", ("crack", "hairline crack", "hole"), ("crack", "crack", "hole"), 0.35,
+                       class_thresholds=(("crack", 0.25),))
+    assert prompt.class_names == ("crack", "hole") and prompt.threshold("crack") == 0.25
+    raw = {"boxes": np.array([[0.1, 0.1, 0.2, 0.4], [0.5, 0.5, 0.6, 0.6]], np.float32),
+           "phrase_scores": np.array([[0.1, 0.3, 0.05], [0.05, 0.1, 0.3]], np.float32)}
+    dets = decode(raw, prompt, 100, 100, DetectorConfig())
+    assert [(d.cls, round(d.score, 2)) for d in dets] == [("crack", 0.3)]  # the hole at 0.30 is under 0.35
+
+
+def test_tiles_cover_the_image_and_map_boxes_back():
+    from scan2scope.semantics.detector import concat_raw, tile_rects, tile_to_image
+
+    rects = tile_rects(1280, 960, 2, 0.2)
+    assert rects == [(0, 0, 768, 576), (512, 0, 1280, 576), (0, 384, 768, 960), (512, 384, 1280, 960)]
+    assert tile_rects(1280, 960, 1, 0.2) == []
+    raw = {"boxes": np.array([[0.5, 0.5, 1.0, 1.0]], np.float32), "phrase_scores": np.full((1, 5), 0.3, np.float32)}
+    full = tile_to_image(raw, rects[3], 1280, 960)
+    assert full["boxes"][0] == pytest.approx([(512 + 384) / 1280, (384 + 288) / 960, 1.0, 1.0])
+    both = concat_raw([raw, full], 5)
+    assert both["boxes"].shape == (2, 4) and both["phrase_scores"].shape == (2, 5)
+
+
+def test_tile_detections_add_only_what_the_full_view_missed():
+    from scan2scope.semantics.detector import merge_tile_detections
+
+    full = [Detection("crack", "damage", np.array([100, 100, 200, 120.0]), 0.3)]
+    tiles = [Detection("crack", "damage", np.array([102, 101, 198, 121.0]), 0.35),  # the same crack again
+             Detection("crack", "damage", np.array([400, 300, 440, 380.0]), 0.25),  # a small crack only a tile saw
+             Detection("hole", "damage", np.array([105, 100, 195, 118.0]), 0.3)]  # other class: kept
+    out = merge_tile_detections(full, tiles, 0.5, 0.85)
+    assert [(d.cls, d.source) for d in out] == [("crack", "full"), ("crack", "tile"), ("hole", "tile")]
 
 
 def test_damage_inside_window_box_is_suppressed():
