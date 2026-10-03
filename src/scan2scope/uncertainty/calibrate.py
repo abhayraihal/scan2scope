@@ -13,9 +13,10 @@ import datetime as dt
 import logging
 import math
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 import yaml
@@ -128,7 +129,7 @@ def fit_q(records: Iterable[Any], *, path: str | Path = CALIBRATION_PATH, write:
             "coverage_as_reported": round(sum(r.score <= 1.0 for r in rs) / len(rs), 4),
             "by_kind": {k: {"n": len(v), "empirical_quantile": _r4(room_quantile(v, level))}
                         for k, v in sorted(kinds.items())},
-            "fitted": dt.date.today().isoformat(),
+            "fitted": dt.datetime.now(dt.UTC).date().isoformat(),
         }
         if n_rooms >= min_rooms:
             quant = room_quantile(rs, conformal_level(n_rooms, level))

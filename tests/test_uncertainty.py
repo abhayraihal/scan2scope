@@ -11,8 +11,14 @@ from _output_plan import make_damage, make_plan
 
 from scan2scope.types import TIERS, Measurement
 from scan2scope.uncertainty import annotate
-from scan2scope.uncertainty.calibrate import (as_record, conformal_level, fit_q, loro_coverage, room_quantile,
-                                              write_calibration)
+from scan2scope.uncertainty.calibrate import (
+    as_record,
+    conformal_level,
+    fit_q,
+    loro_coverage,
+    room_quantile,
+    write_calibration,
+)
 from scan2scope.uncertainty.model import load_priors
 
 Z = 1.645
@@ -111,7 +117,7 @@ def test_observed_fraction_and_few_points_inflate_additive_term():
 
 
 def test_area_perimeter_and_footprint_formulas():
-    plan, _, rec = run("video")
+    plan, _, _ = run("video")
     s = 0.03
     r1, r2 = plan.rooms
     a = math.hypot(0.025, 0.004)

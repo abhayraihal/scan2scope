@@ -15,9 +15,10 @@ from __future__ import annotations
 
 import logging
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import yaml
 
@@ -201,9 +202,7 @@ def _room_flags(room: Room, plan: Plan) -> set[str]:
     flags = {str(f) for f in room.flags}
     for f in plan.flags:
         name, _, target = str(f).partition(":")
-        if not target:
-            flags.add(name)
-        elif target in names:
+        if not target or target in names:
             flags.add(name)
     return flags
 
@@ -298,7 +297,7 @@ def annotate(plan: Plan, damage: list[DamageRegion] | None, *, tier: str, qualit
         a0 = add["length"] * f_room
         try:
             t_area = _annotate_room(mdl, room, add, f_room)
-        except Exception as exc:  # one odd room must not cost the whole result its intervals
+        except Exception as exc:  # noqa: BLE001 - one odd room must not cost the whole result its intervals
             log.warning("intervals for room %s failed (%s); using the fallback", room.id, exc)
             plan.flags.append(f"uncertainty_failed:{room.id}")
             t_area = abs(_num(getattr(room.perimeter, "value", 0.0)) or 0.0) * a0
@@ -322,7 +321,7 @@ def annotate(plan: Plan, damage: list[DamageRegion] | None, *, tier: str, qualit
                 mdl.length(m, a_d)
             bb_perim = 2.0 * (abs(_num(d.width.value) or 0.0) + abs(_num(d.height.value) or 0.0))
             mdl.area(d.area, bb_perim * a_d)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - same for one odd damage region
             log.warning("intervals for damage %s failed (%s); using the fallback", getattr(d, "id", "?"), exc)
             plan.flags.append(f"uncertainty_failed:{getattr(d, 'id', '?')}")
 
