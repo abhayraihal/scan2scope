@@ -88,6 +88,48 @@ def symmetric_layout() -> list[Spec]:
     ]
 
 
+def _box_exit(rect: tuple[float, float, float, float], c: np.ndarray,
+              D: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Ray parameter where rays c + t D leave the box rect x [0, CEILING], and the face: walls 0-3 in
+    rect_polygon edge order, 4 for floor or ceiling."""
+    x0, y0, x1, y1 = rect
+
+    def leave(lo: float, hi: float, ck: float, dk: np.ndarray) -> np.ndarray:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            return np.where(dk > 0, (hi - ck) / dk, np.where(dk < 0, (lo - ck) / dk, np.inf))
+
+    tx, ty = leave(x0, x1, c[0], D[:, 0]), leave(y0, y1, c[1], D[:, 1])
+    tz = leave(0.0, CEILING, c[2], D[:, 2])
+    t = np.minimum(np.minimum(tx, ty), tz)
+    face = np.where(t == tz, 4, np.where(tx <= ty, np.where(D[:, 0] > 0, 1, 3), np.where(D[:, 1] > 0, 2, 0)))
+    return t, face
+
+
+def raycast(specs: dict[str, Spec], spec: Spec, T_wc: np.ndarray,
+            shape: tuple[int, int] = (12, 16)) -> np.ndarray:
+    """Point map (true frame) of a view inside spec's room; rays through a door go on into the next room."""
+    h, w = shape
+    jj, ii = np.meshgrid((np.arange(w) + 0.5) * W_IMG / w - 0.5, (np.arange(h) + 0.5) * H_IMG / h - 0.5)
+    rays = np.stack([jj, ii, np.ones_like(jj)], -1).reshape(-1, 3) @ np.linalg.inv(K_IMG).T
+    D = rays / np.linalg.norm(rays, axis=1, keepdims=True) @ T_wc[:3, :3].T
+    c = T_wc[:3, 3]
+    t, face = _box_exit(spec.rect, c, D)
+    P = c + t[:, None] * D
+    x0, y0, x1, y1 = spec.rect
+    for wi, off, width, leads in spec.doors:
+        centre = (x0 + off + width / 2, y0 + off + width / 2, x1 - off - width / 2, y1 - off - width / 2)[wi]
+        along = P[:, 0] if wi in (0, 2) else P[:, 1]
+        through = (face == wi) & (P[:, 2] < DOOR_H) & (np.abs(along - centre) <= width / 2)
+        if not through.any():
+            continue
+        if leads in specs:
+            t2, _ = _box_exit(specs[leads].rect, c, D[through])
+        else:
+            t2 = t[through] + 3.0
+        P[through] = c + t2[:, None] * D[through]
+    return P.reshape(h, w, 3)
+
+
 @dataclass
 class Capture:
     scenes: list[Scene]
@@ -97,7 +139,7 @@ class Capture:
 
 
 def make_capture(specs: list[Spec], seed: int, *, scale: dict[str, float] | None = None,
-                 wall_noise: float = 0.0, door_noise: float = 0.0) -> Capture:
+                 wall_noise: float = 0.0, door_noise: float = 0.0, pointmaps: bool = True) -> Capture:
     """Scenes and single-room plans in random per-room frames.
 
     wall_noise and door_noise (metres, 1 sigma) perturb what the layout reports (each wall position, door
@@ -105,6 +147,7 @@ def make_capture(specs: list[Spec], seed: int, *, scale: dict[str, float] | None
     """
     rng = np.random.default_rng(seed)
     cap = Capture([], [], {}, {})
+    by_hint = {sp.hint: sp for sp in specs}
     for spec in specs:
         theta, t, z0 = rng.uniform(-np.pi, np.pi), rng.uniform(-3.0, 3.0, 2), rng.uniform(-1.6, -1.2)
         s = (scale or {}).get(spec.hint, 1.0)
@@ -159,20 +202,25 @@ def make_capture(specs: list[Spec], seed: int, *, scale: dict[str, float] | None
             vid = f"{spec.hint}/{k:02d}"
             T_local = S3 @ T_true
             T_local[:3, :3] /= s
-            views.append(CameraView(vid, None, W_IMG, H_IMG, K_IMG.copy(), T_local, room_hint=spec.hint))
-            cap.views[vid] = {"T_true": T_true, "room": spec.hint, "leads_to": leads, "doorway": doorway}
+            pm = raycast(by_hint, spec, T_true) if pointmaps else None
+            pm_local = pm @ S3[:3, :3].T + S3[:3, 3] if pm is not None else None
+            views.append(CameraView(vid, None, W_IMG, H_IMG, K_IMG.copy(), T_local, pointmap=pm_local,
+                                    room_hint=spec.hint))
+            cap.views[vid] = {"T_true": T_true, "room": spec.hint, "leads_to": leads, "doorway": doorway,
+                              "pm_true": pm}
         pts, nrm = [], []
         for w in range(4):
             a, b = poly[w], poly[(w + 1) % 4]
             d = (b - a) / np.linalg.norm(b - a)
-            for u in np.arange(0.1, np.linalg.norm(b - a), 0.25):
-                for z in np.arange(0.2, CEILING, 0.4):
+            for u in np.arange(0.05, np.linalg.norm(b - a), 0.1):
+                for z in np.arange(0.1, CEILING, 0.2):
                     pts.append(np.r_[a + u * d, z])
                     nrm.append(np.r_[-d[1], d[0], 0.0])
-        for x in np.arange(spec.rect[0] + 0.2, spec.rect[2], 0.4):
-            for y in np.arange(spec.rect[1] + 0.2, spec.rect[3], 0.4):
-                pts.append(np.r_[x, y, 0.0])
-                nrm.append(np.r_[0.0, 0.0, 1.0])
+        for x in np.arange(spec.rect[0] + 0.1, spec.rect[2], 0.2):
+            for y in np.arange(spec.rect[1] + 0.1, spec.rect[3], 0.2):
+                for z, nz in ((0.0, 1.0), (CEILING, -1.0)):
+                    pts.append(np.r_[x, y, z])
+                    nrm.append(np.r_[0.0, 0.0, nz])
         P = np.asarray(pts) @ S3[:3, :3].T + S3[:3, 3]
         N = np.asarray(nrm) @ Rotation.from_euler("z", theta).as_matrix().T
         cap.scenes.append(Scene("photo", views, P.astype(np.float32), N.astype(np.float32), np.ones(len(P)),
@@ -216,7 +264,13 @@ def fake_runner(cap: Capture, specs: list[Spec], seed: int = 7, *, noise_pos: fl
             Tr = np.eye(4)
             Tr[:3, :3] = G_R @ T[:3, :3] @ noise
             Tr[:3, 3] = G_s * G_R @ (T[:3, 3] + rng.normal(size=3) * noise_pos / np.sqrt(3)) + G_t
-            out.append(SimpleNamespace(T_wc=Tr, pts3d=None))
+            pts = None
+            if info["pm_true"] is not None:
+                # the view's points move with the pose it was given, wrong or not
+                T0 = info["T_true"]
+                P = (info["pm_true"] - T0[:3, 3]) @ T0[:3, :3] @ T[:3, :3].T + T[:3, 3]
+                pts = G_s * (P + rng.normal(size=P.shape) * 0.01) @ G_R.T + G_t
+            out.append(SimpleNamespace(T_wc=Tr, pts3d=pts))
         return out
 
     run.calls = calls
@@ -317,12 +371,20 @@ def test_doorway_photos_recover_layout(tmp_path):
         walls = np.abs(scene.normals[:, 2]) < 0.5
         d = [poly.exterior.distance(Point(p)) for p in scene.points[walls, :2]]
         assert max(d) < 1e-3
-        assert np.abs(scene.points[~walls, 2]).max() < 1e-4
+        floor = scene.normals[:, 2] > 0.5
+        assert np.abs(scene.points[floor, 2]).max() < 1e-4
+        assert np.abs(scene.points[~walls & ~floor, 2] - CEILING).max() < 1e-4
         assert room.floor_z == pytest.approx(0.0, abs=1e-6)
         assert room.ceiling_z == pytest.approx(CEILING, abs=1e-6)
+        before = {v.id: v for v in cap.scenes[[s.room_hint for s in cap.scenes].index(scene.room_hint)].views}
         for v in scene.views:
             assert np.allclose(v.T_wc[:3, :3] @ v.T_wc[:3, :3].T, np.eye(3), atol=1e-9)
             assert poly.buffer(0.01).contains(Point(v.center[:2]))
+            # point maps moved rigidly with their camera
+            v0 = before[v.id]
+            cam = (v.pointmap - v.T_wc[:3, 3]) @ v.T_wc[:3, :3]
+            cam0 = (v0.pointmap - v0.T_wc[:3, 3]) @ v0.T_wc[:3, :3]
+            assert np.allclose(cam, cam0, atol=1e-6)
     # input scenes and plans are not modified
     assert cap.plans[0].rooms[0].id == "R1" and cap.plans[1].rooms[0].id == "R1"
     assert cap.scenes[0].meta.get("stitch") is None
@@ -493,6 +555,21 @@ def test_doorway_photo_places_a_room_whose_layout_missed_the_door():
     assert plan.rooms[0].openings[2].connects_to == "R4"
     assert max(centre_errors(plan, specs).values()) < 0.15
     assert max_overlap(plan) <= 0.05
+
+
+def test_view_looking_out_of_a_room_without_doors_places_it():
+    specs = layout(k_width=0.8, b_width=1.02, w_width=0.62, entry=0.92)
+    cap = make_capture(specs, seed=19)
+    cap.plans[3].rooms[0].openings = []  # neither layout found the bathroom door
+    cap.plans[0].rooms[0].openings = [o for o in cap.plans[0].rooms[0].openings if o.id != "R1-O3"]
+    plan, _ = stitch_rooms(cap.scenes, cap.plans, None, runner=fake_runner(cap, specs, seed=4))
+    assert adjacency_hints(plan) == true_adjacency(specs)
+    bath = next(a for a in plan.adjacency if "R4" in (a.room_a, a.room_b))
+    assert bath.source == "doorway_photo" and bath.opening_a is None and bath.opening_b is None
+    assert max(centre_errors(plan, specs).values()) < 0.15
+    assert max_overlap(plan) <= 0.05
+    regs = [r for r in plan.meta["stitch"]["doorway_registrations"] if r["room_a"] == "R4"]
+    assert regs and all(r["opening_a"] is None for r in regs)
 
 
 def test_runner_failure_falls_back_to_door_matching():
