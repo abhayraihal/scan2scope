@@ -172,6 +172,20 @@ def make_scene(syn: Synth, *, noise: float = 0.01, normal_noise: float = 0.03, d
                  weights=W.astype(np.float32), view_index=V.astype(np.int64), room_hint=room_hint)
 
 
+def shear_wall_x(scene: Scene, x_lo: float, x_hi: float, y_mid: float, deg: float) -> Scene:
+    """Turn the x-facing wall between x_lo and x_hi by `deg` about y = y_mid (an out-of-square wall)."""
+    P, N = scene.points.astype(float).copy(), scene.normals.astype(float).copy()
+    sel = (P[:, 0] > x_lo) & (P[:, 0] < x_hi)
+    k = np.tan(np.radians(deg))
+    P[sel, 0] += (P[sel, 1] - y_mid) * k
+    face = sel & (np.abs(N[:, 0]) > 0.7)
+    c, s = np.cos(np.radians(deg)), np.sin(np.radians(deg))
+    nx, ny = N[face, 0].copy(), N[face, 1].copy()
+    N[face, 0], N[face, 1] = c * nx + s * ny, -s * nx + c * ny
+    return Scene(scene.tier, scene.views, P.astype(np.float32), N.astype(np.float32), scene.weights,
+                 scene.view_index, room_hint=scene.room_hint)
+
+
 def to_world(xy: np.ndarray, yaw_deg: float = 0.0, shift: tuple[float, float] = (0.0, 0.0)) -> np.ndarray:
     c, s = np.cos(np.radians(yaw_deg)), np.sin(np.radians(yaw_deg))
     xy = np.asarray(xy, float)

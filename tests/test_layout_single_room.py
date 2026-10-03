@@ -143,6 +143,18 @@ def test_photo_like_views_with_rigid_misalignment(syn, seed):
     assert abs(door.width.value - 0.9) < 0.05
 
 
+@pytest.mark.parametrize("deg", [3.0, 6.0])
+def test_out_of_square_wall_stays_one_wall(syn, deg):
+    sc = lf.shear_wall_x(lf.make_scene(syn, noise=0.01), 3.95, 4.45, 1.55, deg)
+    plan = build_plan(sc)
+    room = plan.rooms[0]
+    assert len(room.walls) == 4
+    assert lf.cyclic_match([w.length.value for w in room.walls], [4.2, 3.1, 4.2, 3.1]) < 0.03
+    assert sorted(o.type for o in room.openings) == ["door", "window"]
+    slanted = [f for w in room.walls for f in w.flags if f.startswith("wall_slanted")]
+    assert len(slanted) == 1 and abs(float(slanted[0].split(":")[1].rstrip("deg")) - deg) < 1.0
+
+
 def test_single_room_mode_and_label_from_folder_name(syn):
     sc = lf.make_scene(syn, noise=0.01, room_hint="02 kitchen", tier="photo")
     plan = build_plan(sc, single_room=True)
