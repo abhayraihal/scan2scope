@@ -322,13 +322,13 @@ def _wall_dims(ax: Any, room: _Room, labels: _Labels, others: list[Any]) -> None
         text = f"{w.short} {fmt_pm(w.length)}"
         _, h = labels.size(text, fs)
         mid = (w.p0 + w.p1) / 2
-        probe = mid - w.n_in * (WALL_T + 0.3)
-        sides = [(w.n_in, 0.06 + h / 2)]
-        if not any(_inside(s, probe) for s in others):
-            sides.insert(0, (-w.n_in, WALL_T + 0.05 + h / 2))  # outside first, own room as the fallback
-        cands = [mid + n * (base + k * h * 1.1) + w.u * s for n, base in sides
-                 for s in (0.0, 0.22 * w.L, -0.22 * w.L) for k in range(4)]
-        labels.place(cands, text, fs, _upright(w.u), color=INK, bbox=LABEL_BOX)
+        shifts = (0.0, 0.22 * w.L, -0.22 * w.L)
+        outside = [mid - w.n_in * (WALL_T + 0.05 + h / 2 + k * h * 1.1) + w.u * s for s in shifts for k in range(4)]
+        inside = [mid + w.n_in * (0.06 + h / 2 + k * h * 1.1) + w.u * s for s in shifts for k in range(4)]
+        # Outside first, own room as the fallback; never inside another room, where it would read as its wall.
+        valid = ([c for c in outside if not any(_inside(s, c) for s in others)]
+                 + [c for c in inside if room.shape.is_empty or _inside(room.shape, c)])
+        labels.place(valid or outside, text, fs, _upright(w.u), color=INK, bbox=LABEL_BOX)
 
 
 def _opening_labels(room: _Room, labels: _Labels) -> None:
