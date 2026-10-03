@@ -102,7 +102,7 @@ def _load_rgb(path: Path) -> np.ndarray:
 def mapanything_runner(views: list[CameraView], key: dict, cache: Any) -> Any:
     """Default runner: MapAnything on the views' image files with their intrinsics."""
     if any(v.image_path is None or not Path(v.image_path).is_file() for v in views):
-        log.info("stitch: doorway registration skipped, image files are missing")
+        log.debug("stitch: doorway registration skipped, image files are missing")
         return None
     from scan2scope.geometry.mapanything_backend import MapAnythingRunner
 
