@@ -46,6 +46,33 @@ def _git_commit() -> str | None:
         return None
 
 
+def _reject_mirror_openings(plan, objects) -> list[str]:
+    """Drop windows and openings that coincide with a detected mirror: the reflected room behind a mirror
+    looks like see-through evidence to the layout stage."""
+    import numpy as np
+
+    mirrors = [o for o in objects if getattr(o, "cls", None) == "mirror"]
+    flags = []
+    for room in plan.rooms:
+        keep = []
+        for op in room.openings:
+            hit = None
+            if op.connects_to is None and op.center is not None:
+                for m in mirrors:
+                    d = float(np.linalg.norm(np.asarray(m.xy, float) - np.asarray(op.center, float)))
+                    if d < max(0.5 * op.width.value, 0.4):
+                        hit = m
+                        break
+            if hit is None:
+                keep.append(op)
+            else:
+                flags.append(f"opening_rejected_mirror:{op.id}")
+        room.openings = keep
+    removed = {f.split(":", 1)[1] for f in flags}
+    plan.adjacency = [a for a in plan.adjacency if a.opening_a not in removed and a.opening_b not in removed]
+    return flags
+
+
 def _empty_plan():
     from scan2scope.types import Measurement, Plan
 
@@ -133,6 +160,7 @@ def run_capture(
                 sem = analyze(scenes, plan, work_dir, cache=cache)
                 damage, objects = sem.damage, sem.objects
                 stage_errors.extend(getattr(sem, "flags", []))
+                plan.flags.extend(_reject_mirror_openings(plan, objects))
             except Exception as exc:  # semantics must never block the geometric result
                 log.warning("semantics failed: %s", exc)
                 log.debug(traceback.format_exc())
