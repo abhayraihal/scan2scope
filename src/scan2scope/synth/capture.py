@@ -420,7 +420,8 @@ def lidar_measurement(depth: np.ndarray, cos_inc: np.ndarray, rng: np.random.Gen
                       max_range: float = 5.0) -> tuple[np.ndarray, np.ndarray]:
     """ARKit-like depth (uint16 mm) and confidence (uint8 0/1/2) from a noise-free z-depth render.
 
-    Noise sigma is 0.004 + 0.006 * depth (half white, half spatially smooth); depth edges get mixed pixels,
+    Noise sigma is 0.004 + 0.006 * depth (a quarter of the variance white, the rest spatially smooth, as ARKit
+    depth is a densified, filtered map); depth edges get mixed pixels,
     grazing angles drop out, nothing returns beyond max_range. Confidence is 2 under 3 m at incidence under
     60 degrees, 1 under 4.5 m, else 0. rng=None gives the noise-free measurement with the same confidence rule.
     """
@@ -434,7 +435,7 @@ def lidar_measurement(depth: np.ndarray, cos_inc: np.ndarray, rng: np.random.Gen
         sigma = 0.004 + 0.006 * zt
         smooth = gaussian_filter(rng.standard_normal(z.shape), 4.0)
         smooth /= max(float(smooth.std()), 1e-9)
-        zm = zt + sigma * np.sqrt(0.5) * (rng.standard_normal(z.shape) + smooth)
+        zm = zt + sigma * (0.5 * rng.standard_normal(z.shape) + np.sqrt(0.75) * smooth)
         big = 1e6
         zmin = minimum_filter(np.where(valid, zt, big), 3)
         zmax = maximum_filter(np.where(valid, zt, -big), 3)
