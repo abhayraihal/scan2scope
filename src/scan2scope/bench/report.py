@@ -203,11 +203,11 @@ def _calibration_section(bench: dict[str, Any]) -> list[str]:
         if m.get("calibration_status"):
             q_status[m["tier"]].add(f"{m['calibration_status']}" + (f" q={m['q']:g}" if m.get("q") else ""))
     out += [CAL_NOTE, ""]
-    out += _table(["Tier", "Values", "Rooms", "Covered", "Coverage", "95% CI", "Contains 0.90", "Confident garbage",
-                   "Interval multiplier"],
+    out += _table(["Tier", "Values", "Rooms", "Covered", "Coverage", "95% CI", "Contains 0.90",
+                   "Mean half-width (% of GT)", "Confident garbage", "Interval multiplier"],
                   [[t, c["n"], c["rooms"], c["covered"], _pct(c["coverage"]), f"[{_pct(c['ci'][0])}, {_pct(c['ci'][1])}]",
-                    "yes" if c["contains_nominal"] else "no", c["confident_garbage"],
-                    ", ".join(sorted(q_status.get(t, []))) or ""]
+                    "yes" if c["contains_nominal"] else "no", _pct(c.get("mean_rel_half_width")),
+                    c["confident_garbage"], ", ".join(sorted(q_status.get(t, []))) or ""]
                    for t, c in sorted(cal.items(), key=lambda kv: TIERS.index(kv[0]) if kv[0] in TIERS else 9)])
     out += ["", "By kind (half-widths and errors in metres, or square metres for areas):", ""]
     out += _table(["Tier", "Kind", "n", "Coverage", "Mean half-width", "Mean |err|"],

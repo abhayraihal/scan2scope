@@ -113,8 +113,10 @@ def calibration(records: list[dict[str, Any]], *, level: float = 0.9, ci: float 
         for r in rs:
             kinds[r["kind"]].append(r)
         garbage = [r for r in rs if is_garbage(r, ratio)]
+        rel_hw = [r["half_width"] / abs(r["gt"]) for r in rs if r["gt"]]
         out[tier] = {
             "n": len(rs), "covered": k, "coverage": k / len(rs) if rs else None, "ci": [lo, hi], "ci_level": ci,
+            "mean_rel_half_width": sum(rel_hw) / len(rel_hw) if rel_hw else None,
             "level": level, "contains_nominal": lo <= level <= hi, "rooms": len({r["room"] for r in rs if r["room"]}),
             "confident_garbage": len(garbage), "garbage_items": [_rec_ref(r) for r in garbage],
             "by_kind": {kd: {"n": len(v), "covered": sum(bool(r["covered"]) for r in v),
@@ -373,6 +375,13 @@ def evaluate(metrics: list[dict[str, Any]], repeat: dict[str, Any] | None, ablat
                     row["shortfall"] = row["measured"]
                     row["score"] = row["measured"] - 1.0
             rows.append(row)
+            same = [{"item": s["room"], "capture": " vs ".join(s["captures"]), "property": s["property"],
+                     "pass": s["same_walls"] and s["same_openings"],
+                     "detail": f"{s['property']}/{s['room']} {' vs '.join(s['captures'])}: walls "
+                               f"{'/'.join(map(str, s['n_walls']))}, openings {'/'.join(map(str, s['n_openings']))}"}
+                    for s in (repeat or {}).get("structure", []) if s["tier"] == tier]
+            rows.append(check_gate("repeat_structure", tier, "repeat captures find the same walls and openings "
+                                   "in each room", same, pass_details=False))
         if "drift_ablation" in tcfg:
             rows.append(drift_gate(tier, tcfg["drift_ablation"], ms, ablation))
         rows += calibration_rows(tier, cal.get(tier), cal_cfg, level)

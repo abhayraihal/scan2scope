@@ -210,6 +210,34 @@ def test_wall_matching_survives_any_start_vertex(start):
     assert [o.status for o in ops] == ["matched"]
 
 
+def test_wall_matching_on_random_rectilinear_rooms():
+    from scan2scope.bench.groundtruth import GTOpening, GTWall
+
+    rng = np.random.default_rng(7)
+    for _ in range(60):
+        W, H = rng.uniform(2.0, 6.0, size=2)
+        a, b = rng.uniform(0.3, 0.7, size=2) * (W, H)
+        P = np.array([[(0, 0), (W, 0), (W, H), (0, H)], [(0, 0), (W, 0), (W, H), (a, H), (a, b), (0, b)]][
+            int(rng.integers(2))], float)
+        n = len(P)
+        cw = np.roll(P[::-1], -int(rng.integers(n)), axis=0)  # GT order: clockwise from a random entry wall
+        gt_walls = [GTWall(f"W{k + 1}", float(np.linalg.norm(cw[(k + 1) % n] - cw[k]))) for k in range(n)]
+        L1 = gt_walls[0].length
+        w = min(0.9, 0.6 * L1)
+        off = float(rng.uniform(0.0, L1 - w))
+        g = GTRoom("X", "X", gt_walls, [2.5], 2.5, [GTOpening("D1", "door", "W1", off, w, 2.0)], [])
+        Q = np.roll(P, -int(rng.integers(n)), axis=0)  # ours: counter-clockwise from a random corner
+        lengths = [float(np.linalg.norm(Q[(k + 1) % n] - Q[k])) * (1 + rng.normal(0, 0.02)) for k in range(n)]
+        k_door = next(k for k in range(n) if np.allclose(Q[k], cw[1]))  # our W1 starts at the GT W1's right end
+        pred = pred_rooms(result([room("R1", Q.tolist(), lengths=lengths,
+                                       openings=[(k_door, L1 - off - w, w, "door")])], adjacency=()))[0]
+        walls, ops = align_walls(g, pred)
+        got = dict(walls.pairs)
+        assert len(got) == n and [o.status for o in ops] == ["matched"]
+        for gi, pj in got.items():
+            assert np.allclose(pred.walls[pj]["start"], cw[(gi + 1) % n])
+
+
 def test_gt_listed_counter_clockwise_matches_in_same_orientation():
     from scan2scope.bench.groundtruth import GTOpening, GTWall
 
@@ -416,6 +444,12 @@ def test_repeatability_walls_and_ceiling_spread(gt):
     assert rows["photo", "repeatability"]["status"] == "fail"
     assert rows["photo", "repeatability"]["pass_share"] == pytest.approx(3 / 4)
     assert rows["photo", "ceiling_spread"]["status"] == "fail"
+    assert rows["photo", "repeat_structure"]["status"] == "pass"
+    kitchen["openings"] = kitchen["openings"][:1]
+    c = capture_metrics(gt, gt.capture("photo_2"), result([kitchen], adjacency=()))
+    rep = repeatability([a, c], cfg)
+    rows = {(r["tier"], r["gate"]): r for r in gates_mod.evaluate([a, c], rep, None, None, cfg)["rows"]}
+    assert rows["photo", "repeat_structure"]["status"] == "fail"
 
 
 def test_drift_ablation_and_gate(gt):
