@@ -303,6 +303,13 @@ def _room_label(ax: Any, room: _Room, labels: _Labels) -> None:
         lines.append(("placement uncertain", 6.5, {"color": UNCERTAIN, "fontstyle": "italic"}))
     sizes = [labels.size(text, fs) for text, fs, _ in lines]
     bw, bh = max(w for w, _ in sizes), sum(h for _, h in sizes)
+    if not room.shape.is_empty:  # small rooms get smaller text, down to 65%
+        minx, _, maxx, _ = room.shape.bounds
+        scale = max(0.65, min(1.0, 0.95 * (maxx - minx) / bw))
+        if scale < 1.0:
+            lines = [(text, fs * scale, kw) for text, fs, kw in lines]
+            sizes = [labels.size(text, fs) for text, fs, _ in lines]
+            bw, bh = max(w for w, _ in sizes), sum(h for _, h in sizes)
     # The block moves off damage and door swings when it can, but stays inside the room.
     centre = xy
     for dx, dy in ((0, 0), (0, 0.8), (0, -0.8), (0.45, 0), (-0.45, 0), (0, 1.6), (0, -1.6), (0.45, 0.8),
