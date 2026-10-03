@@ -1,7 +1,9 @@
-# Ground truth for the real benchmark room (iPhone 17, transferred over WhatsApp).
+# Ground truth for the real benchmark room. Captured with an iPhone 17; this copy went through WhatsApp's ordinary media send,
+# which recompresses photos to 1280x960 and video to 464x832 and strips EXIF: a degraded-input test of the same room. Laptop screens are blurred in the published files (scripts/blur_screens.py), and every
+# reported number is computed from those published files.
 # Readings were taken with a tape in inches and converted here: 162 in, 142 in (wall to wall), 130 in (floor to ceiling).
 # Which pair of walls is the longer one was not recorded; the matcher aligns walls by length.
-property: home
+property: bedroom_whatsapp
 measured_by: "owner (tape, inches)"
 instrument: "tape measure, inch scale"
 date: "2026-10-03"

@@ -1,0 +1,25 @@
+{
+ "repo": "abhayraihal/scan2scope",
+ "tag": "benchmark-data-v1",
+ "property": "bedroom_whatsapp",
+ "assets": [
+  {
+   "asset": "bedroom_whatsapp__photo_1.zip",
+   "size": 1208374,
+   "sha256": "9c4944db030bcb438b86c6f02bece1f542b5e95dbffe1a0dff71f0f5ebe0ac1f",
+   "extracts_to": "raw/"
+  },
+  {
+   "asset": "bedroom_whatsapp__video_1.mp4.zip",
+   "size": 10000965,
+   "sha256": "db407e0f6584bd5fcd02337828d3c75686356e254e82022cf88dd0562ff0010c",
+   "extracts_to": "raw/"
+  },
+  {
+   "asset": "bedroom_whatsapp__video_2.mp4.zip",
+   "size": 12197678,
+   "sha256": "03b9603d6b751186dfd4852dc830361d0cde1df4375dd180417e3ac1e9fa4de2",
+   "extracts_to": "raw/"
+  }
+ ]
+}

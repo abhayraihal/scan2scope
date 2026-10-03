@@ -1,0 +1,25 @@
+{
+ "repo": "abhayraihal/scan2scope",
+ "tag": "benchmark-data-v1",
+ "property": "bedroom",
+ "assets": [
+  {
+   "asset": "bedroom__photo_1.zip",
+   "size": 26843252,
+   "sha256": "18bba0474b4c8dea075cfb08323413d607d8e1f3f3ab75c26502cdc93a991b0b",
+   "extracts_to": "raw/"
+  },
+  {
+   "asset": "bedroom__video_1.mp4.zip",
+   "size": 48653484,
+   "sha256": "c35f51876f4831bf0f35196d8dd9965d3ffea4ead5e8f101738d8648efd64ed8",
+   "extracts_to": "raw/"
+  },
+  {
+   "asset": "bedroom__video_2.mp4.zip",
+   "size": 231910106,
+   "sha256": "30a0ad2de43b632c0a60d2c47c1070dad8cb26112ab769bec1a3cca6d07c280d",
+   "extracts_to": "raw/"
+  }
+ ]
+}
