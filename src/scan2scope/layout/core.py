@@ -19,7 +19,7 @@ log = logging.getLogger("scan2scope.layout")
 
 VOXEL = 0.02
 MAX_RAYS = 300_000
-MAX_FREE_RAYS = 150_000
+MAX_FREE_RAYS = 100_000
 FAR_LIMIT = 60.0
 
 
@@ -172,7 +172,8 @@ def build_plan(scene: Scene, *, single_room: bool = False) -> Plan:
     g2 = C.Grid2D(float(lo[0]), float(lo[1]), int(np.ceil((hi[0] - lo[0]) / C.FREE_RES)),
                   int(np.ceil((hi[1] - lo[1]) / C.FREE_RES)))
     nf = min(len(d.O), MAX_FREE_RAYS)
-    counts = (C.free_space(d.O[:nf, :2], d.E[:nf, :2], En[:nf, :2], g2, margin, rng) if nf
+    occ = C.occupancy(d.P, np.array([lo[0], lo[1], floor_z - 0.3]), np.array([hi[0], hi[1], ceil_z + 0.3]))
+    counts = (C.free_space(d.O[:nf], d.E[:nf], En[:nf, :2], g2, margin, rng, occ) if nf
               else np.zeros((g2.nx, g2.ny)))
     pos = counts[counts > 0]
     n_min = max(2.0, 0.03 * float(np.median(pos))) if len(pos) else 2.0

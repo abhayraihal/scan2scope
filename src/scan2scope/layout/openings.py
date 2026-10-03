@@ -226,12 +226,17 @@ def _fit_candidate(m: np.ndarray, occ: np.ndarray, cnt: np.ndarray, hits_s: np.n
     c0 = int(np.clip(np.floor(u0 / RES + 0.1 * (u1 - u0) / RES), 0, nu - 1))
     c1 = int(np.clip(np.ceil(u1 / RES - 0.1 * (u1 - u0) / RES), c0 + 1, nu))
     rowprof = cnt[c0:c1].sum(0)
-    rlevel = float(np.median(rowprof[rowprof > 0])) if (rowprof > 0).any() else 0.0
+    # wall level for the head/sill walk from the jamb-side wall density; inside a floor-to-ceiling gap the
+    # row profile holds only noise
+    rlevel = level * (c1 - c0) / max(len(rows), 1)
+    if rlevel <= 0 and (rowprof > 0).any():
+        rlevel = float(np.median(rowprof[rowprof > 0]))
     zstart = j0 + int(np.argmin(uniform_filter1d(rowprof, 5, mode="nearest")[j0:j1]))
     et = _edge(rowprof, zstart, 1, rlevel, nz, sb)
     header = et is not None
     z1 = fz + et * RES if et is not None else cz
-    if et is None and not empty[c0:c1, j1:].mean() > 0.7:
+    above = empty[c0:c1, j1:]
+    if et is None and above.size and above.mean() <= 0.7:
         flags.append("edge_unobserved:top")
     eb = _edge(rowprof, zstart, -1, rlevel, nz, sb)
     z0 = fz + eb * RES if eb is not None else fz

@@ -45,42 +45,72 @@ class Grid2D:
     res: float = FREE_RES
 
 
-def free_space(o2: np.ndarray, e2: np.ndarray, n2: np.ndarray, grid: Grid2D, margin: float,
-               rng: np.random.Generator, max_samples: int = 24_000_000, chunk: int = 2_000_000) -> np.ndarray:
-    """Ray samples per grid cell along camera-to-point segments in plan.
+@dataclass
+class Occupancy:
+    """Occupied 3-D voxels; a ray that enters one has hit a surface, whatever lies beyond it."""
 
-    Each segment stops `margin` short of its point measured along the point's horizontal normal, so rays
-    grazing a wall do not mark the wall body as free.
+    origin: np.ndarray
+    res: float
+    grid: np.ndarray  # (nx, ny, nz) bool
+
+
+def occupancy(P: np.ndarray, lo: np.ndarray, hi: np.ndarray, res: float = 0.05, min_count: int = 2) -> Occupancy:
+    dims = np.maximum(np.ceil((hi - lo) / res).astype(np.int64), 1)
+    idx = np.floor((P - lo) / res).astype(np.int64)
+    ok = ((idx >= 0) & (idx < dims)).all(1)
+    cnt = np.bincount(np.ravel_multi_index(idx[ok].T, dims), minlength=int(np.prod(dims)))
+    return Occupancy(np.asarray(lo, float), res, (cnt >= min_count).reshape(tuple(dims)))
+
+
+def free_space(o3: np.ndarray, e3: np.ndarray, n2: np.ndarray, grid: Grid2D, margin: float,
+               rng: np.random.Generator, occ: Occupancy | None = None, max_samples: int = 24_000_000,
+               chunk: int = 1_000_000) -> np.ndarray:
+    """Ray samples per plan cell along camera-to-point segments.
+
+    A segment stops `margin` short of its point, measured along the point's horizontal normal so rays
+    grazing a wall do not mark the wall body, and stops at the first occupied voxel it enters, so rays to
+    outliers behind a wall do not mark the space behind it.
     """
-    d = e2 - o2
-    L = np.linalg.norm(d, axis=1)
+    d3 = e3 - o3
+    L2 = np.linalg.norm(d3[:, :2], axis=1)
     nh = np.linalg.norm(n2, axis=1)
-    cos = np.abs((d * n2).sum(1)) / np.maximum(L * nh, 1e-12)
+    cos = np.abs((d3[:, :2] * n2).sum(1)) / np.maximum(L2 * nh, 1e-12)
     back = np.where(nh > 0.7, margin / np.maximum(cos, 0.2), margin)
-    Lf = L - back
-    ok = Lf > 0
-    o2, d, L, Lf = o2[ok], d[ok], L[ok], Lf[ok]
+    frac = 1.0 - back / np.maximum(L2, 1e-12)
+    ok = (L2 > 1e-6) & (frac > 0)
+    L3 = np.linalg.norm(d3, axis=1)
+    o3, u3, Lf = o3[ok], d3[ok] / L3[ok, None], (L3 * frac)[ok]
     counts = np.zeros(grid.nx * grid.ny)
-    if len(L) == 0:
+    if len(Lf) == 0:
         return counts.reshape(grid.nx, grid.ny)
-    u = d / L[:, None]
-    step = grid.res / 2
+    step = grid.res
     ns = np.ceil(Lf / step).astype(np.int64) + 1
     if ns.sum() > max_samples:
         keep = rng.random(len(ns)) < max_samples / ns.sum()
-        o2, u, Lf, ns = o2[keep], u[keep], Lf[keep], ns[keep]
+        o3, u3, Lf, ns = o3[keep], u3[keep], Lf[keep], ns[keep]
     cs = np.cumsum(ns)
     start = 0
     while start < len(ns):
         base = cs[start - 1] if start else 0
         end = max(int(np.searchsorted(cs, base + chunk, side="right")), start + 1)
         nn = ns[start:end]
-        rid = np.repeat(np.arange(start, end), nn)
+        rid = np.repeat(np.arange(end - start), nn)
         k = np.arange(len(rid)) - np.repeat(np.cumsum(nn) - nn, nn)
-        s = np.minimum(k * step, Lf[rid])
-        ix = np.floor((o2[rid, 0] + u[rid, 0] * s - grid.x0) / grid.res).astype(np.int64)
-        iy = np.floor((o2[rid, 1] + u[rid, 1] * s - grid.y0) / grid.res).astype(np.int64)
-        m = (ix >= 0) & (ix < grid.nx) & (iy >= 0) & (iy < grid.ny)
+        s = np.minimum(k * step, Lf[start:end][rid])
+        p = o3[start:end][rid] + u3[start:end][rid] * s[:, None]
+        keep = np.ones(len(rid), bool)
+        if occ is not None:
+            j = np.floor((p - occ.origin) / occ.res).astype(np.int64)
+            inb = ((j >= 0) & (j < occ.grid.shape)).all(1)
+            hit = np.zeros(len(rid), bool)
+            hit[inb] = occ.grid[j[inb, 0], j[inb, 1], j[inb, 2]]
+            hit &= s > 0.1  # ignore a camera's own neighbourhood
+            first = np.full(end - start, np.iinfo(np.int64).max)
+            np.minimum.at(first, rid[hit], k[hit])
+            keep = k < first[rid]
+        ix = np.floor((p[:, 0] - grid.x0) / grid.res).astype(np.int64)
+        iy = np.floor((p[:, 1] - grid.y0) / grid.res).astype(np.int64)
+        m = keep & (ix >= 0) & (ix < grid.nx) & (iy >= 0) & (iy < grid.ny)
         counts += np.bincount(ix[m] * grid.ny + iy[m], minlength=grid.nx * grid.ny)
         start = end
     return counts.reshape(grid.nx, grid.ny)
@@ -154,7 +184,7 @@ def close_groups(gx: list[LineGroup], gy: list[LineGroup], grids: tuple[TGrid, T
                 if a == 0 or b == len(closed):
                     continue
                 length = (b - a) * grid.res
-                door_sized = (length <= DOOR_MAX + 1e-9 and g.solid[a - 1] and g.solid[b]
+                door_sized = (length <= DOOR_MAX + 1e-9 and g.solid[max(a - 2, 0):a].any() and g.solid[b:b + 2].any()
                               and not _corridor(g, others, ogrid, grid.t0 + a * grid.res, grid.t0 + b * grid.res))
                 if length < SMALL_GAP - 1e-9 or door_sized:
                     closed[a:b] = True
@@ -237,21 +267,26 @@ def build_complex(gx: list[LineGroup], gy: list[LineGroup], grids: tuple[TGrid, 
     inside = coverage >= INSIDE_COVERAGE
     cx = Complex(xs, ys, gx, gy, grids, coverage, _cell_share(floor, grid, xs, ys), thin, inside,
                  np.zeros((max(nx - 1, 0), ny), bool), np.zeros((nx, max(ny - 1, 0)), bool))
+    wide_v = np.zeros_like(cx.open_v)
+    wide_h = np.zeros_like(cx.open_h)
     for i in range(nx - 1):
         for j in range(ny):
             c = cx.segment(0, i + 1, ys[j], ys[j + 1])
             cx.open_v[i, j] = _is_open(c, ys[j + 1] - ys[j], grids[0].res)
+            wide_v[i, j] = cx.open_v[i, j] and c.mean() <= 0.5
     for i in range(nx):
         for j in range(ny - 1):
             c = cx.segment(1, j + 1, xs[i], xs[i + 1])
             cx.open_h[i, j] = _is_open(c, xs[i + 1] - xs[i], grids[1].res)
-    # thin cells that lost their free space to the ray margin inherit it across open boundaries
+            wide_h[i, j] = cx.open_h[i, j] and c.mean() <= 0.5
+    # thin cells that lost their free space to the ray margin inherit it across boundaries that are mostly
+    # open (furniture slivers, niches, corridor strips); a wall body with a single gap is not one of them
     for _ in range(10):
         grow = np.zeros_like(inside)
-        grow[:-1] |= inside[1:] & cx.open_v
-        grow[1:] |= inside[:-1] & cx.open_v
-        grow[:, :-1] |= inside[:, 1:] & cx.open_h
-        grow[:, 1:] |= inside[:, :-1] & cx.open_h
+        grow[:-1] |= inside[1:] & wide_v
+        grow[1:] |= inside[:-1] & wide_v
+        grow[:, :-1] |= inside[:, 1:] & wide_h
+        grow[:, 1:] |= inside[:, :-1] & wide_h
         new = grow & thin & ~inside
         if not new.any():
             break
