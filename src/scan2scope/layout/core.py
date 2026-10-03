@@ -5,13 +5,17 @@ from __future__ import annotations
 import logging
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
+import shapely
+from shapely.geometry import Polygon
 
 from scan2scope.layout import cells as C
 from scan2scope.layout import floor_ceiling as FC
 from scan2scope.layout import openings as OP
+from scan2scope.layout import refine as R
 from scan2scope.layout import walls as W
 from scan2scope.types import Adjacency, Measurement, Opening, Plan, Room, Scene, Wall
 
@@ -325,6 +329,27 @@ def _face_evidence(lines: list[W.WallLine], axis: int, coord: float, n_sign: int
     return _Face(int(m.sum()), rms, q.sigma, flags, q.slope, q.t_mid)
 
 
+def _claimable(cx: C.Complex, room_of_cell: np.ndarray, k: int) -> Callable[[Polygon], bool]:
+    """Test for a region of the plan: True when no room other than room k holds any of its cells."""
+
+    def ok(region: Polygon) -> bool:
+        return bool(np.isin(room_of_cell[_cells_in(cx, region)], (-1, k)).all())
+
+    return ok
+
+
+def _cells_in(cx: C.Complex, region: Polygon) -> tuple[np.ndarray, np.ndarray]:
+    """Indices of the cells whose centres lie inside the region."""
+    x0, y0, x1, y1 = region.bounds
+    i0, i1 = max(int(np.searchsorted(cx.xs, x0, "right")) - 1, 0), int(np.searchsorted(cx.xs, x1))
+    j0, j1 = max(int(np.searchsorted(cx.ys, y0, "right")) - 1, 0), int(np.searchsorted(cx.ys, y1))
+    ii, jj = np.meshgrid(np.arange(i0, min(i1, cx.shape[0])), np.arange(j0, min(j1, cx.shape[1])),
+                         indexing="ij")
+    ii, jj = ii.ravel(), jj.ravel()
+    inside = shapely.contains_xy(region, 0.5 * (cx.xs[ii] + cx.xs[ii + 1]), 0.5 * (cx.ys[jj] + cx.ys[jj + 1]))
+    return ii[inside], jj[inside]
+
+
 def _cell_of(cx: C.Complex, xy: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     nx, ny = cx.shape
     i = np.searchsorted(cx.xs, xy[:, 0]) - 1
@@ -348,12 +373,14 @@ def _assemble(scene: Scene, d: _Data, lines: list[W.WallLine], cx: C.Complex, ro
     else:
         up, down = d.N[:, 2] > FC.HORIZONTAL_NZ, d.N[:, 2] < -FC.HORIZONTAL_NZ
     cam_room = np.where(d.cam_ok, _room_at(cx, room_of_cell, d.cams[:, :2]), -1) if len(d.cams) else []
+    pts = R.WallPoints.build(d.P, d.N, d.wp, d.wf, fc.floor.z - 0.3, fc.ceiling.z + 0.3)
     rooms: list[Room] = []
     polys_m: list[np.ndarray] = []
+    n_filled = n_steps = 0
     for k, g in enumerate(groups):
         rid = f"R{k + 1}"
         rflags: list[str] = []
-        poly_m, hole = C.cells_polygon(cx, [c for r in g for c in regs[r].cells])
+        poly_c, hole = C.cells_polygon(cx, [c for r in g for c in regs[r].cells])
         if hole > 1e-6:
             rflags.append(f"holes_filled:{hole:.2f}")
         fm, cm = (vroom == k) & up, (vroom == k) & down
@@ -375,6 +402,20 @@ def _assemble(scene: Scene, d: _Data, lines: list[W.WallLine], cx: C.Complex, ro
                   "floor_tilt": fl.tilt, "ceiling_tilt": ce.tilt, "observed_fraction": ceil_obs,
                   "ceiling_observed": bool(ce.observed), "noise_sigma": sigma}
 
+        # the room's own faces: furniture notches filled, edges refitted, short steps removed
+        out = R.room_outline(poly_c, pts, fl.z, ce.z, sigma, _claimable(cx, room_of_cell, k))
+        if out is None:
+            poly_m, fits = poly_c, None
+            rflags.append("outline_not_refined")
+        else:
+            poly_m, fits = out.polygon, [e.fit for e in out.edges]
+            for region in out.filled:
+                room_of_cell[_cells_in(cx, region)] = k
+            if out.filled:
+                rflags.append(f"furniture_filled:{len(out.filled)}")
+            n_filled += len(out.filled)
+            n_steps += out.steps
+
         K = len(poly_m)
         edges = []
         for e in range(K):
@@ -383,7 +424,11 @@ def _assemble(scene: Scene, d: _Data, lines: list[W.WallLine], cx: C.Complex, ro
             axis, coord, t0, t1 = (1, p[1], p[0], q[0]) if abs(dx) >= abs(dy) else (0, p[0], p[1], q[1])
             nin = np.array([-dy, dx]) / max(float(np.hypot(dx, dy)), 1e-12)
             n_sign = int(np.sign(nin[axis])) or 1
-            face = _face_evidence(lines, axis, coord, n_sign, min(t0, t1), max(t0, t1))
+            if fits is None:
+                face = _face_evidence(lines, axis, coord, n_sign, min(t0, t1), max(t0, t1))
+            else:
+                fit = fits[e]
+                face = _Face(fit.n, fit.rms, fit.sigma, fit.flags, fit.slope, fit.t_mid)
             frame = OP.WallFrame(axis, float(coord), n_sign, float(t0), 1 if t1 > t0 else -1,
                                  float(abs(t1 - t0)), fl.z, ce.z, face.slope, face.t_mid)
             wa = OP.analyze_wall(frame, d.P, d.N, d.wp, d.wn, d.O, d.E, face.sigma if face.n >= 30 else sigma)
@@ -405,7 +450,8 @@ def _assemble(scene: Scene, d: _Data, lines: list[W.WallLine], cx: C.Complex, ro
             walls.append(Wall(wid, rid, Rw @ p, Rw @ q, length, _m(hgt, "height", **lev_ev), Rw @ nin,
                               float(np.clip(wa.observed_fraction, 0, 1)),
                               {"n_points": face.n, "fit_rms": face.rms, "face_sigma": face.sigma,
-                               "n_plane_points": wa.n_points}, list(face.flags) + wa.flags))
+                               "n_plane_points": wa.n_points, "refined": bool(fits and fits[e].refined)},
+                              list(face.flags) + wa.flags))
             for f in wa.openings:
                 t = frame.t_start + frame.t_dir * 0.5 * (f.u0 + f.u1)
                 c_m = np.array([frame.coord, t]) if frame.axis == 0 else np.array([t, frame.coord])
@@ -439,8 +485,9 @@ def _assemble(scene: Scene, d: _Data, lines: list[W.WallLine], cx: C.Complex, ro
                           {"n_cells": sum(len(regs[r].cells) for r in g), "coverage": regs[g[0]].coverage,
                            "boundary_support": regs[g[0]].support,
                            "n_cameras": int(sum(regs[r].n_cams for r in g)),
-                           "polygon_manhattan": poly_m.tolist()}))
+                           "polygon_manhattan": poly_m.tolist(), "polygon_cells": poly_c.tolist()}))
         polys_m.append(poly_m)
+    meta["outline"] = {"furniture_filled": n_filled, "steps_removed": n_steps}
 
     adjacency = _connect(rooms, cx, room_of_cell)
     allp = np.concatenate(polys_m)
