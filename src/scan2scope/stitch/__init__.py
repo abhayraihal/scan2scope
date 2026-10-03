@@ -290,6 +290,8 @@ def _assemble(rooms: list[StitchRoom], sol: Solution, hyps: list[Hypothesis], re
             out[i].flags.append(flag)
     for i in sol.shift:
         flags.append(f"placement_adjusted:{rooms[i].id}")
+    for p, q in sol.overlaps:
+        flags.append(f"overlap_unresolved:{rooms[min(p, q)].id}-{rooms[max(p, q)].id}")
 
     for sr in rooms:
         T = sol.T.get(sr.index, np.eye(3))
@@ -343,6 +345,7 @@ def _assemble(rooms: list[StitchRoom], sol: Solution, hyps: list[Hypothesis], re
         "relative_scale": {sr.id: None if scales.get(sr.index) is None else round(scales[sr.index], 4)
                            for sr in rooms},
         "adjusted": {rooms[i].id: np.round(s, 3).tolist() for i, s in sol.shift.items()},
+        "separated": {rooms[i].id: np.round(s, 3).tolist() for i, s in sol.separated.items()},
         "components": [[rooms[i].id for i in c] for c in sol.components],
         "transforms": {sr.id: {"yaw_deg": round(float(np.degrees(yaw2(sol.T[sr.index]))), 4),
                                "t": np.round(sol.T[sr.index][:2, 2], 4).tolist(),

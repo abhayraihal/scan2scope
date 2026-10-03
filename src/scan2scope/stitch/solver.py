@@ -375,6 +375,44 @@ def _improve_and_flag(rooms: list[StitchRoom], edges: list[Edge], tree: Tree, me
     return tree, ambiguous
 
 
+_SEPARATIONS = sorted(
+    (r * np.array([np.cos(a), np.sin(a)]) for r in np.arange(0.01, 0.081, 0.01)
+     for a in np.radians(np.arange(0, 360, 45))),
+    key=lambda s: float(np.linalg.norm(s)),
+)
+
+
+def _separate(rooms: list[StitchRoom], T: dict[int, np.ndarray], tree: Tree, params: Params,
+              ) -> tuple[dict[int, np.ndarray], list[tuple[int, int]]]:
+    """Move rooms by a few centimetres so raw polygons, not just shrunk ones, overlap by at most the limit.
+
+    Rooms are visited in placement order and a move carries the rooms placed from that room with it.
+    """
+    raw = {r: shrunk_polygon(rooms[r], T[r], 0.0) for r in tree.order}
+    children: dict[int, list[int]] = {}
+    for c, (p, _) in tree.parent.items():
+        children.setdefault(p, []).append(c)
+    moved: dict[int, np.ndarray] = {}
+    unresolved: list[tuple[int, int]] = []
+    for idx, r in enumerate(tree.order[1:], start=1):
+        earlier = {q: raw[q] for q in tree.order[:idx]}
+        if raw[r] is None or not _blockers(raw[r], earlier, params.max_overlap_m2):
+            continue
+        for s in _SEPARATIONS:
+            if not _blockers(shrunk_polygon(rooms[r], rigid2(0.0, s) @ T[r], 0.0), earlier, params.max_overlap_m2):
+                stack = [r]
+                while stack:
+                    q = stack.pop()
+                    T[q] = rigid2(0.0, s) @ T[q]
+                    raw[q] = shrunk_polygon(rooms[q], T[q], 0.0)
+                    stack += children.get(q, [])
+                moved[r] = s
+                break
+        else:
+            unresolved += [(q, r) for q in _blockers(raw[r], earlier, params.max_overlap_m2)]
+    return moved, unresolved
+
+
 def _pick_root(cands: set[int], edges: list[Edge]) -> int:
     def key(r: int) -> tuple[int, float, int]:
         inc = [e for e in edges if r in (e.i, e.j) and e.other(r) in cands]
@@ -395,6 +433,8 @@ class Solution:
     edge_status: dict[int, str]
     components: list[list[int]]
     root: int | None
+    separated: dict[int, np.ndarray] = field(default_factory=dict)  # final few-centimetre moves, property frame
+    overlaps: list[tuple[int, int]] = field(default_factory=list)  # raw overlaps the separation could not remove
 
 
 def _bbox(rooms: list[StitchRoom], T: dict[int, np.ndarray], ids: list[int]) -> np.ndarray | None:
@@ -435,6 +475,9 @@ def solve(rooms: list[StitchRoom], hyps: list[Hypothesis], params: Params | None
         if bb is not None and bb[3] - bb[1] > bb[2] - bb[0] + 1e-6:
             R0 = rigid2(np.pi / 2) @ R0
         Tc = {r: R0 @ tree.T[r] for r in tree.order}
+        moved, unresolved = _separate(rooms, Tc, tree, params)
+        sol.separated.update(moved)
+        sol.overlaps += unresolved
         bb = _bbox(rooms, Tc, tree.order)
         if bb is not None and right is not None:
             shift = rigid2(0.0, (right + params.gap - bb[0], base_y - bb[1]))
