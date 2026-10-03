@@ -1,4 +1,4 @@
-"""Blur laptop, monitor and TV screens in photos and videos before they are published as benchmark data.
+"""Blur laptops (their screens show text) in photos and videos before they are published as benchmark data.
 
     python scripts/blur_screens.py SRC_DIR DST_DIR
 
@@ -18,7 +18,8 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageFilter
 
-PROMPT = "laptop screen . computer monitor . television screen ."
+PROMPT = "laptop ."
+MAX_BOX_FRACTION = 0.08  # a dark window can score as a screen; real laptop boxes are small
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".heic", ".heif"}
 VIDEO_EXT = {".mp4", ".mov", ".m4v"}
 
@@ -45,7 +46,9 @@ class ScreenFinder:
             out = self.model(**inputs)
         res = self.processor.post_process_grounded_object_detection(
             out, inputs.input_ids, threshold=self.threshold, text_threshold=0.25, target_sizes=[img.size[::-1]])[0]
-        return [tuple(int(round(v)) for v in b) for b in res["boxes"].cpu().numpy().tolist()]
+        w, h = img.size
+        boxes = [tuple(int(round(v)) for v in b) for b in res["boxes"].cpu().numpy().tolist()]
+        return [b for b in boxes if (b[2] - b[0]) * (b[3] - b[1]) <= MAX_BOX_FRACTION * w * h]
 
 
 def blur_boxes(img: Image.Image, boxes: list[tuple[int, int, int, int]], pad: float = 0.08) -> Image.Image:
