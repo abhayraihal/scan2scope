@@ -103,6 +103,7 @@ def test_measurements_carry_evidence_without_intervals(clean):
     for m in ms:
         assert m.lo is None and m.hi is None
         assert {"n_points", "fit_rms", "observed_fraction"} <= set(m.evidence)
+        assert "sigma" not in m.evidence  # reserved for the uncertainty stage
     for o in room.openings:
         assert "edge_rms" in o.width.evidence
     assert {"floor_rms", "ceiling_rms"} <= set(room.ceiling_height.evidence)

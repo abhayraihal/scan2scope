@@ -396,11 +396,11 @@ def _assemble(scene: Scene, d: _Data, lines: list[W.WallLine], cx: C.Complex, ro
             wid = f"{rid}-W{e + 1}"
             prev_f, next_f = edges[e - 1][3], edges[(e + 1) % K][3]
             length = _m(frame.length, "length", n_points=face.n, fit_rms=face.rms,
-                        observed_fraction=wa.observed_fraction, sigma=face.sigma, end_fit_rms=[prev_f.rms, next_f.rms],
+                        observed_fraction=wa.observed_fraction, face_sigma=face.sigma, end_fit_rms=[prev_f.rms, next_f.rms],
                         end_n_points=[prev_f.n, next_f.n], noise_sigma=sigma)
             walls.append(Wall(wid, rid, Rw @ p, Rw @ q, length, _m(hgt, "height", **lev_ev), Rw @ nin,
                               float(np.clip(wa.observed_fraction, 0, 1)),
-                              {"n_points": face.n, "fit_rms": face.rms, "sigma": face.sigma,
+                              {"n_points": face.n, "fit_rms": face.rms, "face_sigma": face.sigma,
                                "n_plane_points": wa.n_points}, list(face.flags) + wa.flags))
             for f in wa.openings:
                 t = frame.t_start + frame.t_dir * 0.5 * (f.u0 + f.u1)
