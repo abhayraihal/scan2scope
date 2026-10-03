@@ -184,6 +184,6 @@ class OutputCache:
                 import torch
 
                 return f"{device}:{torch.cuda.get_device_name(0)}"
-            except Exception:
+            except (RuntimeError, AssertionError):
                 return device
         return device

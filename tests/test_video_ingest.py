@@ -1,3 +1,4 @@
+import itertools
 import json
 from pathlib import Path
 
@@ -23,7 +24,7 @@ def _encoder() -> str:
         try:
             av.codec.Codec(name, "w")
             return name
-        except Exception:
+        except ValueError:  # UnknownCodecError
             continue
     pytest.skip("no H.264 or MPEG-4 encoder in this PyAV build")
 
@@ -106,7 +107,7 @@ def test_sharpest_frame_per_window_in_order(tmp_path):
     p = make_video(tmp_path / "walk.mp4", 120, blur=lambda i: 0 if i % 15 == 7 else 5)
     recs = sample_frames(p, tmp_path / "frames", target_fps=2.0, max_frames=240)
     assert [r.index for r in recs] == [15 * k + 7 for k in range(8)]
-    assert all(b.t > a.t for a, b in zip(recs, recs[1:]))
+    assert all(b.t > a.t for a, b in itertools.pairwise(recs))
     assert recs[0].t == pytest.approx(7 / 30, abs=1e-3)
     for r in recs:
         assert r.path.name == f"frame_{r.index:05d}.jpg" and r.path.is_file()
@@ -164,7 +165,7 @@ def test_portrait_rotation_applied(tmp_path):
 def test_ten_bit_hlg_marked_hdr_and_written_as_8bit(tmp_path):
     try:
         p = make_video(tmp_path / "hdr.mov", 20, pix_fmt="yuv420p10le", trc=18)
-    except Exception as exc:  # pragma: no cover - encoder without 10-bit support
+    except (ValueError, av.error.FFmpegError) as exc:  # pragma: no cover - no 10-bit encoder
         pytest.skip(f"no 10-bit encoder: {exc}")
     info = probe(p)
     assert info.is_hdr and "10" in info.pix_fmt

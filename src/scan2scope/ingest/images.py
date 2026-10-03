@@ -7,7 +7,6 @@ import math
 import re
 import struct
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -164,14 +163,18 @@ def _num(v: Any) -> float | None:
     return f if math.isfinite(f) else None
 
 
+_EXIF_DATETIME = re.compile(r"(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})")
+
+
 def _iso_datetime(value: Any, offset: Any) -> str | None:
+    """EXIF 'YYYY:MM:DD HH:MM:SS' (local time) as ISO 8601, with OffsetTimeOriginal appended when present."""
     raw = _text(value)
     if raw is None:
         return None
-    try:
-        s = datetime.strptime(raw[:19], "%Y:%m:%d %H:%M:%S").isoformat()
-    except ValueError:
+    m = _EXIF_DATETIME.match(raw)
+    if not m:
         return raw
+    s = "{}-{}-{}T{}:{}:{}".format(*m.groups())
     off = _text(offset)
     if off and re.fullmatch(r"[+-]\d{2}:\d{2}", off):
         s += off

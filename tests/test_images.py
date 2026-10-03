@@ -127,7 +127,7 @@ def test_heic_uses_decoded_pixels_without_second_rotation(tmp_path):
     p = tmp_path / "IMG_0002.HEIC"
     try:
         Image.fromarray(a).save(p, exif=exif, quality=95)
-    except Exception as exc:  # pragma: no cover - libheif built without an encoder
+    except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover - libheif without an encoder
         pytest.skip(f"cannot encode HEIC here: {exc}")
     rgb, info = load_image(p)
     # libheif applies the container transform and pillow-heif resets the EXIF tag, so nothing is rotated twice.

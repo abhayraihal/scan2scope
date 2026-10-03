@@ -62,24 +62,21 @@ class FrameRecord:
 
 def rotate_upright(img: np.ndarray, rotation_deg: int) -> np.ndarray:
     """Rotate an (H, W, ...) image clockwise by rotation_deg, a multiple of 90."""
-    k = (int(round(rotation_deg / 90.0))) % 4
+    k = round(rotation_deg / 90.0) % 4
     return np.ascontiguousarray(np.rot90(img, k=-k)) if k else img
 
 
 def _clockwise_from_ccw(ccw_deg: float) -> int:
-    return int(round(-ccw_deg / 90.0)) % 4 * 90
+    return round(-ccw_deg / 90.0) % 4 * 90
 
 
 def _frame_rotation(frame: Any, stream: Any) -> int:
     """Clockwise display rotation from the frame's display matrix, or the legacy 'rotate' stream tag."""
-    try:
-        ccw = float(frame.rotation)
-    except Exception:
-        ccw = 0.0
+    ccw = float(frame.rotation)  # 0 when the frame carries no display matrix
     if ccw:
         return _clockwise_from_ccw(ccw)
     try:
-        return int(round(float(stream.metadata.get("rotate", 0)) / 90.0)) % 4 * 90
+        return round(float(stream.metadata.get("rotate", 0)) / 90.0) % 4 * 90
     except (TypeError, ValueError):
         return 0
 
@@ -140,7 +137,7 @@ def probe(path: str | Path) -> VideoInfo:
         elif n_frames and fps:
             duration = n_frames / fps
         if not n_frames and duration and fps:
-            n_frames = int(round(duration * fps))
+            n_frames = round(duration * fps)
         width, height, trc, rotation = cc.width, cc.height, cc.color_trc, 0
         try:
             frame = next(container.decode(stream), None)
