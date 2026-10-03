@@ -372,16 +372,20 @@ def _timing_section(bench: dict[str, Any]) -> list[str]:
 
 
 def _failures_section(bench: dict[str, Any]) -> list[str]:
-    bad = [m for m in bench["metrics"] + bench.get("nodrift_metrics", []) if m["status"] != "ok"]
+    every = bench["metrics"] + bench.get("nodrift_metrics", [])
+    bad = [m for m in every if m["status"] != "ok"]
+    stage = [m for m in every if m["status"] == "ok" and m.get("stage_failures")]
     unreadable = bench.get("load_errors") or []
     out = ["## Failed or missing captures", ""]
-    if not bad and not unreadable:
+    if not bad and not unreadable and not stage:
         out += ["None.", ""]
         return out
     out += [f"- ground truth {e['path']} could not be read, so none of its captures were scored: "
             f"{e['error']}" for e in unreadable]
     out += [f"- {_cap(m)} ({m['tier']}): {m['status']}" + (f": {m['error']}" if m.get("error") else "")
             for m in bad]
+    out += [f"- {_cap(m)} ({m['tier']}): result written, but a stage failed: {', '.join(m['stage_failures'])}"
+            for m in stage]
     out.append("")
     return out
 

@@ -370,11 +370,15 @@ def _repeat_rows(tier: str, spec: dict[str, Any], repeat: dict[str, Any] | None)
 
 
 def _produced_row(tier: str, ms: list[dict[str, Any]]) -> dict[str, Any]:
-    items = [_ref({"item": m["capture"], "capture": m["capture"], "property": m["property"]},
-                  detail=f"{m['property']}/{m['capture']}: {m['status']}"
-                         + (f" ({m['error']})" if m.get("error") else ""), **{"pass": m["status"] == "ok"})
-             for m in ms]
-    return check_gate("result_produced", tier, "every capture returns a scored result", items,
+    """A capture passes when it was scored and its geometry stage did not fail (an empty plan)."""
+    items = []
+    for m in ms:
+        geo = [f for f in m.get("stage_failures") or [] if f.startswith("geometry_failed")]
+        why = m.get("error") or (geo[0] if geo else None)
+        detail = f"{m['property']}/{m['capture']}: {m['status']}" + (f" ({why})" if why else "")
+        items.append(_ref({"item": m["capture"], "capture": m["capture"], "property": m["property"]},
+                          detail=detail, **{"pass": m["status"] == "ok" and not geo}))
+    return check_gate("result_produced", tier, "every capture returns a scored result with geometry", items,
                       pass_details=False)
 
 

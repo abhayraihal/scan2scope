@@ -564,6 +564,22 @@ def test_failed_capture_counts_every_item_as_missing(gt):
     assert rows["photo", "calibration"]["status"] == "n.a."
 
 
+def test_empty_result_after_a_geometry_failure_fails_result_produced(gt, tmp_path):
+    res = result([], adjacency=(), footprint=0.0)
+    res["capture"]["flags"] = ["geometry_failed:RuntimeError:no frames"]
+    m = capture_metrics(gt, gt.capture("photo_1"), res)
+    assert m["status"] == "ok" and m["stage_failures"] == ["geometry_failed:RuntimeError:no frames"]
+    assert m["rooms"]["missed"] == ["01 hallway", "02 kitchen"]
+    run = {"property": "home", "capture": "photo_1", "tier": "photo", "variant": "main", "status": "ok",
+           "error": None, "run_s": 1.0, "result": res}
+    bench = score_runs([gt], [run], gates_mod.load_gates())
+    rows = {(r["tier"], r["gate"]): r for r in bench["gates"]["rows"]}
+    assert rows["photo", "result_produced"]["status"] == "fail"
+    assert "geometry_failed" in rows["photo", "result_produced"]["measured_text"]
+    text = write_report(tmp_path / "r", bench)["report"].read_text()
+    assert "result written, but a stage failed: geometry_failed" in text
+
+
 def test_clopper_pearson_and_calibration_gate():
     from scipy.stats import binomtest
 

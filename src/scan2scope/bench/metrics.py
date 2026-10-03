@@ -29,6 +29,7 @@ log = logging.getLogger("scan2scope.bench")
 KINDS = ("wall_length", "ceiling_height", "opening_width", "opening_height", "floor_area", "footprint",
          "damage_area", "damage_length")
 REPEAT_DEFAULT = {"abs": 0.01, "rel": 0.005, "rule": "max"}
+STAGE_FAILURES = ("geometry_failed", "semantics_failed")  # capture flags the pipeline sets when a stage fails
 
 
 def record(kind: str, item: str, gt_value: float, m: Any, *, tier: str, room: str | None, capture: str,
@@ -84,7 +85,7 @@ def _empty(gt: GroundTruth, capture: GTCapture) -> dict[str, Any]:
         "damage": {"gt": sum(len(r.damage) for r in rooms), "matched": 0, "class_ok": 0, "missed": 0,
                    "phantom": 0, "phantom_unscored": 0, "items": []},
         "adjacency": None, "overlap": None, "drift": None, "timing": None, "q": None,
-        "calibration_status": None, "by_gt": {}, "match": None,
+        "calibration_status": None, "by_gt": {}, "match": None, "stage_failures": [],
     }
 
 
@@ -304,7 +305,9 @@ def _score(out: dict[str, Any], gt: GroundTruth, capture: GTCapture, result: dic
     stages = timing.get("stages") if isinstance(timing.get("stages"), dict) else {}
     out["timing"] = {"run_s": run_s, "total_s": num(timing.get("total_s")),
                      "stages": {str(k): num(v) for k, v in stages.items()}}
-    out["flags"] += [str(f) for f in cap.get("flags") or []]
+    cap_flags = [str(f) for f in cap.get("flags") or []]
+    out["flags"] += cap_flags
+    out["stage_failures"] = [f for f in cap_flags if f.startswith(STAGE_FAILURES)]
     return out
 
 
