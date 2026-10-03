@@ -253,6 +253,17 @@ def test_gt_listed_counter_clockwise_matches_in_same_orientation():
     assert [o.status for o in ops] == ["matched"]
 
 
+def test_square_room_without_openings_is_ambiguous_but_rectangle_with_door_is_not(gt):
+    from scan2scope.bench.groundtruth import GTWall
+
+    square = GTRoom("S", "S", [GTWall(f"W{k + 1}", 3.0) for k in range(4)], [2.5], 2.5, [], [])
+    pred = pred_rooms(result([room("R1", [(0, 0), (3, 0), (3, 3), (0, 3)])], adjacency=()))[0]
+    walls, _ = align_walls(square, pred)
+    assert walls.ambiguous and walls.ties == 8
+    m = capture_metrics(gt, gt.capture("photo_1"), result(good_rooms()))
+    assert not any("ambiguous" in f for f in m["flags"])
+
+
 def test_offsets_from_the_wrong_end_are_flagged_not_missed():
     g = _l_gt_room()
     g.openings[0].offset = 2.6  # measured from the west (right) end by mistake

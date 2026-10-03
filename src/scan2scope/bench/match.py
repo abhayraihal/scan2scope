@@ -129,7 +129,8 @@ class WallAlignment:
     missed: list[int]  # GT wall indices without a predicted wall
     extra: list[int]  # predicted wall indices without a GT wall
     cost: float
-    ties: int = 1
+    ties: int = 1  # candidates within the length tolerance of the best
+    ambiguous: bool = False  # another tied candidate with a different assignment lines the openings up as well
     mirrored: bool = False  # GT offsets read from the right end (a measuring slip); set only when it matches more
 
 
@@ -367,6 +368,7 @@ def align_walls(gt_room: GTRoom, pred: PredRoom) -> tuple[WallAlignment, list[Op
     scored.sort(key=lambda t: t[0])
     _, best, ops = scored[0]
     best.ties = len(tied)
+    best.ambiguous = any(k[:2] == scored[0][0][:2] and set(c.pairs) != set(best.pairs) for k, c, _ in scored[1:])
     if any(o.status == "missed" for o in ops):
         alt = dataclasses.replace(best, mirrored=True)
         alt_ops = match_openings(gt_room, pred, alt)
@@ -604,8 +606,8 @@ def match_capture(gt: GroundTruth, capture: GTCapture | None, result: dict[str, 
         rm.damage = match_damage(g, rm, by_id[pid], damage)
         if walls.orientation != "reversed":
             rm.flags.append("gt_walls_counter_clockwise")
-        if walls.ties > 1:
-            rm.flags.append(f"wall_alignment_ties:{walls.ties}")
+        if walls.ambiguous:
+            rm.flags.append("wall_alignment_ambiguous")
         if walls.mirrored:
             rm.flags.append("gt_offsets_mirrored")
         rooms.append(rm)
