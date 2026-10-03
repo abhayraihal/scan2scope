@@ -43,13 +43,17 @@ def render_box(T_wc):
 
 class FakeRunner:
     """Renders each call in the frame of its first camera, with a random per-call Sim(3) and an optional bend
-    that grows with the position in the call (yaw, tilt, height and scale), so chained chunks drift."""
+    that grows with the position in the call (yaw, tilt, height and scale), so chained chunks drift.
 
-    def __init__(self, poses_by_sha, bend=(0.0, 0.0, 0.0, 0.0), seed=0, invalid=()):
+    spread maps a chunk's first frame to a factor on its camera spacing: the call keeps every view's depth map
+    but moves its cameras (and their points) apart by that factor, as MapAnything does on some real chunks."""
+
+    def __init__(self, poses_by_sha, bend=(0.0, 0.0, 0.0, 0.0), seed=0, invalid=(), spread=None):
         self.poses = poses_by_sha
         self.bend = bend
         self.seed = seed
         self.invalid = set(invalid)  # image hashes that come back without a usable pose
+        self.spread = dict(spread or {})
         self.calls = []
 
     def infer(self, images, intrinsics=None, key=None, cache=None):
@@ -80,6 +84,14 @@ class FakeRunner:
                 T_wc=np.eye(4) if bad else T_out, K=K_TRUE.copy(), metric_scale=float(se3.decompose_sim3(D)[0]),
                 image_size=(W, H), resized_size=(W, H), crop=(0, 0), intrinsics_given=Ks[i] is not None,
                 pose_ok=not bad))
+        lam = self.spread.get((key or {}).get("chunk", [None])[0])
+        if lam is not None:
+            c0 = out[0].T_wc[:3, 3].copy()
+            for p in out:
+                shift = (lam - 1.0) * (p.T_wc[:3, 3] - c0)
+                p.T_wc = p.T_wc.copy()
+                p.T_wc[:3, 3] += shift
+                p.pts3d = np.where(p.mask[..., None], p.pts3d + shift, 0.0).astype(np.float32)
         return out
 
 
@@ -470,6 +482,73 @@ def test_plan_chunks_spreads_the_overlap_evenly():
     overlaps = [spans[i][1] - spans[i + 1][0] for i in range(len(spans) - 1)]
     assert min(overlaps) >= 9 and max(overlaps) - min(overlaps) <= 1
     assert len(video.plan_chunks(71, 24, 5)) == 4 and len(video.plan_chunks(120, 24, 5)) == 7
+
+
+def _two_runs(tmp_path, spread):
+    """One chunk's frames rendered twice: the second run keeps every depth map but spreads its cameras."""
+    frames, by_sha, _ = _loop_frames(tmp_path, n=40)
+    imgs = [np.asarray(Image.open(f.path).convert("RGB")) for f in frames[:6]]
+    a = FakeRunner(by_sha).infer(imgs, key={"chunk": [0, 6]})
+    b = FakeRunner(by_sha, seed=3, spread={0: spread}).infer(imgs, key={"chunk": [0, 6]})
+    return a, b
+
+
+def test_align_runs_keeps_a_consistent_link_on_its_joint_fit(tmp_path):
+    a, b = _two_runs(tmp_path, 1.0)
+    lk = video.align_runs(a, b, list(range(6)), seed=1)
+    assert lk.ok and lk.method == "points" and lk.camera_disagreement < 0.01 and lk.n_frames_ok == 6
+    assert lk.joint_inlier_frac > 0.9 and len(lk.frames_used) == 6
+
+
+def test_align_runs_refuses_runs_that_disagree_about_the_cameras(tmp_path):
+    a, b = _two_runs(tmp_path, 2.5)
+    lk = video.align_runs(a, b, list(range(6)), seed=1)
+    # every frame still registers on its own (same depth maps), the joint fit does not, and the cameras of the
+    # two runs end up far apart under any single transform
+    assert lk.n_frames_ok == 6 and lk.joint_inlier_frac < video.ALIGN_GOOD_INLIERS
+    assert lk.method in ("points_subset", "single_frame") and not lk.ok
+    assert lk.camera_disagreement > video.LINK_MAX_DISAGREE and lk.reason.startswith("cameras_disagree")
+    rec = lk.record()
+    assert rec["align_method"] == lk.method and rec["align_ok"] is False
+    json.dumps(rec)
+
+
+def test_video_inconsistent_chunk_is_dropped_not_chained(tmp_path):
+    frames, by_sha, poses = _loop_frames(tmp_path)
+    # chunk 1 (frames 5-12) keeps its depth maps but spreads its cameras 2.5x, as MapAnything does on some chunks
+    s = video.build_scene_from_frames(frames, drift_correction=False, runner=FakeRunner(by_sha, spread={5: 2.5}),
+                                      chunk_size=8, overlap=3, loop_frames=4)
+    flags = s.meta["flags"]
+    assert "chunk_align_failed:1" in flags and "chunk_align_failed:2" in flags
+    assert "video_segment_dropped:0-8" in flags and not any(f.startswith("chunk_align_fallback") for f in flags)
+    q = s.meta["quality"]
+    assert q["frames_dropped"] == 9 and q["n_chunks_used"] == 6 and q["n_chunks"] == 8
+    chunks = s.meta["drift"]["chunks"]
+    assert [c["kept"] for c in chunks] == [False, False] + [True] * 6
+    assert chunks[1]["align_camera_disagreement"] > video.LINK_MAX_DISAGREE
+    ok = s.meta["frames"]["pose_ok"]
+    assert not any(ok[:9]) and all(ok[9:]) and all(v.meta["frame_index"] >= 9 for v in s.views)
+    ate, _ = _ate([T for T, o in zip(s.meta["frames"]["T_wc"], ok) if o], poses[9:])
+    assert ate < 0.05
+    clean = video.build_scene_from_frames(frames, drift_correction=False, runner=FakeRunner(by_sha), chunk_size=8,
+                                          overlap=3, loop_frames=4)
+    assert not any(f.startswith(("chunk_align", "video_segment")) for f in clean.meta["flags"])
+    assert s.scale_log_sigma > clean.scale_log_sigma
+    json.dumps(s.meta["drift"])
+
+
+def test_video_loop_registration_bridges_a_refused_link(tmp_path):
+    frames, by_sha, poses = _loop_frames(tmp_path)
+    s = video.build_scene_from_frames(frames, drift_correction=True, runner=FakeRunner(by_sha, spread={5: 2.5}),
+                                      chunk_size=8, overlap=3, loop_frames=4)
+    flags = s.meta["flags"]
+    assert "chunk_align_loop_bridge" in flags and "video_segment_dropped:8-8" in flags
+    assert s.meta["drift"]["loop_closure"]["reason"] == "used_as_link"
+    assert [c["kept"] for c in s.meta["drift"]["chunks"]] == [True, False] + [True] * 6
+    ok = s.meta["frames"]["pose_ok"]
+    assert sum(ok) == 39 and not ok[8]
+    ate, _ = _ate([T for T, o in zip(s.meta["frames"]["T_wc"], ok) if o], [P for P, o in zip(poses, ok) if o])
+    assert ate < 0.05
 
 
 def _loop_frames(tmp_path, n=40, radius=1.0):
