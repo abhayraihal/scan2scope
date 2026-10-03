@@ -192,13 +192,6 @@ class VoxelAccumulator:
         return pts, nrm, sw / cnt, tags.copy()
 
 
-def voxel_reduce(points, normals, weights, voxel) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    acc = VoxelAccumulator(voxel)
-    acc.add(points, normals, weights)
-    p, n, w, _ = acc.result()
-    return p, n, w
-
-
 # ------------------------------------------------------------------------------------------- small helpers
 
 def _inv(T: np.ndarray) -> np.ndarray:
