@@ -25,6 +25,8 @@ uv run scan2scope run ~/Downloads/IMG_0042.MOV         # video tier
 uv run scan2scope run ~/Downloads/recording.zip        # LiDAR tier: Stray Scanner share-sheet zip
 ```
 
+Measured from a fresh clone with empty dependency and model caches on 2026-10-03 (M4 MacBook, 16 GB, about 11 MB/s download): clone 6 s, `uv sync --all-extras` 75 s, `fetch-weights` 9.6 min, `doctor` 19 s, then about 50 s for a first photo-tier run including model loading. That is about 12.5 minutes from clone to a result; the weight download dominates and scales with the connection.
+
 The tier is detected from the files (`--tier` overrides it). Each run writes `out/<capture>/result.json` (validated against [schema/scan2scope.schema.json](schema/scan2scope.schema.json)), `plan.svg` and `plan.png` (the stitched plan), `rooms/<id>.svg`, and prints every wall, opening and ceiling height with its interval and the ids used on the plan.
 
 Useful flags: `--no-drift` turns drift correction off (used for the ablation), `--cache replay` reuses stored model outputs instead of running the models, `--no-semantics` skips damage detection.
