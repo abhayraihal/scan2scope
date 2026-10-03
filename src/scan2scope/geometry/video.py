@@ -3,7 +3,8 @@ on the shared frames, then loop closure, gravity, floor and Manhattan anchoring,
 
 A link between two chunks is refused when the two runs put the shared cameras far apart (align_runs); the loop
 registration can stand in for one refused link, and chunks that stay unconnected are dropped with a
-video_segment_dropped flag. The measured disagreement widens the capture's scale interval.
+video_segment_dropped flag. The measured disagreement widens the capture's scale interval, and so does a
+predicted focal the protocol's camera cannot have (mapanything_backend.focal_check).
 
 Frame sampling here is a thin stand-in for scan2scope.ingest.video.sample_frames; integration can switch to the
 ingest version once it lands.
