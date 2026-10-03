@@ -9,6 +9,7 @@
 #   OUT       output folder (default: <repo>/runs/fixloop); before/ and after/ are replaced on each run
 #   CACHE     model-output cache mode passed to the benchmark: live (default), replay or off
 #   GPU_LOCK  lock file; when set, each benchmark run holds it via lockf -k (shared machines)
+#   BENCH_ARGS extra arguments for the benchmark CLI, e.g. --no-semantics for synthetic captures
 set -euo pipefail
 
 if [ "$#" -ne 3 ]; then
@@ -59,14 +60,16 @@ for side in before after; do
   sha=$before_sha
   [ "$side" = after ] && sha=$after_sha
   echo "== $side: $(git -C "$repo" log -1 --format='%h %s' "$sha")"
-  bench "$side" "$side"
+  # shellcheck disable=SC2086
+  bench "$side" "$side" ${BENCH_ARGS:-}
 done
 
 # Score both runs with the after ref's harness and gates when those differ, so only the pipeline differs.
 rescored=()
 if ! git -C "$repo" diff --quiet "$before_sha" "$after_sha" -- src/scan2scope/bench bench/gates.yaml; then
   echo "== harness or gates changed between the refs: rescoring the before run with the after harness"
-  bench before after --skip-run
+  # shellcheck disable=SC2086
+  bench before after --skip-run ${BENCH_ARGS:-}
   rescored=(--rescored)
 fi
 
