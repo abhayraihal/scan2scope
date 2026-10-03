@@ -120,7 +120,8 @@ def make_scene(syn: Synth, *, noise: float = 0.01, normal_noise: float = 0.03, d
                seed: int = 0, tier: str = "lidar", room_hint: str | None = None, depth_noise: float = 0.0,
                view_jitter: tuple[float, float] = (0.0, 0.0)) -> Scene:
     """depth_noise: extra noise along each ray as a fraction of depth; view_jitter: per-view rigid error
-    (translation sigma in m, rotation sigma in degrees) like multi-view inconsistency in feed-forward models."""
+    (translation sigma in m, rotation sigma in degrees), like multi-view inconsistency in feed-forward
+    models."""
     rng = np.random.default_rng(seed)
     pts, nrm, vidx, views = [], [], [], []
     for i, cam in enumerate(syn.cams):
@@ -131,7 +132,8 @@ def make_scene(syn: Synth, *, noise: float = 0.01, normal_noise: float = 0.03, d
             p = p + ray / depth * rng.normal(0.0, depth_noise, (len(p), 1)) * depth
         if view_jitter[0] > 0 or view_jitter[1] > 0:
             ax = rng.normal(size=3)
-            Rj = Rotation.from_rotvec(ax / np.linalg.norm(ax) * np.radians(rng.normal(0.0, view_jitter[1]))).as_matrix()
+            angle = np.radians(rng.normal(0.0, view_jitter[1]))
+            Rj = Rotation.from_rotvec(ax / np.linalg.norm(ax) * angle).as_matrix()
             c = T[:3, 3]
             p = (p - c) @ Rj.T + c + rng.normal(0.0, view_jitter[0], 3)
             n = n @ Rj.T
@@ -209,7 +211,7 @@ def opening_center(op: Opening, yaw_deg: float = 0.0, shift: tuple[float, float]
 
 
 def cyclic_match(found: list[float], truth: list[float]) -> float:
-    """Largest error of found wall lengths against truth under the best cyclic shift (inf on a count mismatch)."""
+    """Largest wall length error against truth under the best cyclic shift (inf on a count mismatch)."""
     if len(found) != len(truth):
         return float("inf")
     f, t = np.asarray(found), np.asarray(truth)
@@ -276,14 +278,20 @@ def two_areas(passage: str) -> Synth:
     "cased" (2.0 m wide with a header at 2.1 m).
     """
     y0, y1, top = {"wide": (0.8, 3.0, H), "narrow": (1.0, 2.0, H), "cased": (0.5, 2.5, 2.1)}[passage]
-    free = [Box((0, 0, 0), (4.0, 3.0, H)), Box((4.12, 0, 0), (8.12, 3.0, H)), Box((4.0, y0, 0), (4.12, y1, top))]
-    cams = [Cam((0.5, 0.5, 1.5), 35), Cam((3.4, 2.5, 1.5), -140), Cam((0.6, 2.5, 1.5), -30), Cam((2.0, 1.5, 1.5), 0),
-            Cam((7.6, 0.5, 1.5), 145), Cam((4.7, 2.5, 1.5), -40), Cam((7.5, 2.5, 1.5), -150), Cam((6.0, 1.5, 1.5), 180)]
+    free = [Box((0, 0, 0), (4.0, 3.0, H)), Box((4.12, 0, 0), (8.12, 3.0, H)),
+            Box((4.0, y0, 0), (4.12, y1, top))]
+    cams = [Cam((0.5, 0.5, 1.5), 35), Cam((3.4, 2.5, 1.5), -140), Cam((0.6, 2.5, 1.5), -30),
+            Cam((2.0, 1.5, 1.5), 0), Cam((7.6, 0.5, 1.5), 145), Cam((4.7, 2.5, 1.5), -40),
+            Cam((7.5, 2.5, 1.5), -150), Cam((6.0, 1.5, 1.5), 180)]
     for c in cams:
         c.room = "west" if c.pos[0] < 4.0 else "east"
     rooms = {"west": [(0, 0, 4.0, 3.0)], "east": [(4.12, 0, 8.12, 3.0)]}
     ops = [Opening("west", "opening" if passage != "cased" else "door", "x", 4.0, y0, y1, 0.0, top, "east")]
     return Synth(free, [], cams, H, rooms, ops)
+
+
+def _room_of(rooms: dict[str, list[tuple[float, float, float, float]]], x: float, y: float) -> str:
+    return next(k for k, rs in rooms.items() if any(r[0] <= x <= r[2] and r[1] <= y <= r[3] for r in rs))
 
 
 def corridor_aligned() -> Synth:
@@ -293,7 +301,8 @@ def corridor_aligned() -> Synth:
     free = [Box((r[0], r[1], 0), (r[2], r[3], H)) for rs in rooms.values() for r in rs]
     doors = [("A", 1.0, 1.9, 1.0), ("B", 4.2, 5.1, 1.0), ("C", 1.0, 1.9, -0.12), ("D", 4.2, 5.1, -0.12)]
     free += [Box((a, y, 0), (b, y + 0.12, 2.05)) for _, a, b, y in doors]
-    cams = [Cam((0.5, 0.5, 1.5), 0), Cam((3.06, 0.5, 1.5), 0), Cam((3.06, 0.5, 1.5), 180), Cam((5.6, 0.5, 1.5), 180),
+    cams = [Cam((0.5, 0.5, 1.5), 0), Cam((3.06, 0.5, 1.5), 0), Cam((3.06, 0.5, 1.5), 180),
+            Cam((5.6, 0.5, 1.5), 180),
             Cam((1.45, 0.5, 1.5), 90, -5), Cam((4.65, 0.5, 1.5), 90, -5), Cam((1.45, 0.5, 1.5), -90, -5),
             Cam((4.65, 0.5, 1.5), -90, -5)]
     for name in "ABCD":
@@ -302,11 +311,12 @@ def corridor_aligned() -> Synth:
                  Cam((x1 - 0.5, y1 - 0.5, 1.5), -140), Cam((x0 + 0.5, y1 - 0.5, 1.5), -40)]
     for c in cams:
         x, y = c.pos[:2]
-        c.room = next(k for k, rs in rooms.items() if any(r[0] <= x <= r[2] and r[1] <= y <= r[3] for r in rs))
+        c.room = _room_of(rooms, x, y)
     ops = []
     for name, a, b, y in doors:
         face_k, face_r = (y, y + 0.12) if name in "AB" else (y + 0.12, y)
-        ops += [Opening("K", "door", "y", face_k, a, b, 0, 2.05, name), Opening(name, "door", "y", face_r, a, b, 0, 2.05, "K")]
+        ops += [Opening("K", "door", "y", face_k, a, b, 0, 2.05, name),
+                Opening(name, "door", "y", face_r, a, b, 0, 2.05, "K")]
     return Synth(free, [], cams, H, rooms, ops)
 
 
@@ -332,10 +342,14 @@ def hallway_three_rooms() -> Synth:
             Cam((6.8, 2.2, 1.5), -45), Cam((7.4, 0.55, 1.5), 180, -10)]
     for c in cams:
         x, y = c.pos[:2]
-        c.room = next(k for k, rs in rooms.items() if any(r[0] <= x <= r[2] and r[1] <= y <= r[3] for r in rs))
-    ops = [Opening("H", "door", "y", 1.2, 1.0, 1.9, 0, 2.05, "A"), Opening("A", "door", "y", 1.32, 1.0, 1.9, 0, 2.05, "H"),
-           Opening("H", "door", "y", 1.2, 4.3, 5.2, 0, 2.05, "B"), Opening("B", "door", "y", 1.32, 4.3, 5.2, 0, 2.05, "H"),
-           Opening("H", "door", "x", 6.2, 0.15, 0.95, 0, 2.05, "C"), Opening("C", "door", "x", 6.32, 0.15, 0.95, 0, 2.05, "H"),
-           Opening("A", "window", "y", 4.5, 0.9, 2.1, 0.9, 2.1), Opening("B", "window", "y", 4.5, 4.0, 5.4, 0.9, 2.1),
+        c.room = _room_of(rooms, x, y)
+    ops = [Opening("H", "door", "y", 1.2, 1.0, 1.9, 0, 2.05, "A"),
+           Opening("A", "door", "y", 1.32, 1.0, 1.9, 0, 2.05, "H"),
+           Opening("H", "door", "y", 1.2, 4.3, 5.2, 0, 2.05, "B"),
+           Opening("B", "door", "y", 1.32, 4.3, 5.2, 0, 2.05, "H"),
+           Opening("H", "door", "x", 6.2, 0.15, 0.95, 0, 2.05, "C"),
+           Opening("C", "door", "x", 6.32, 0.15, 0.95, 0, 2.05, "H"),
+           Opening("A", "window", "y", 4.5, 0.9, 2.1, 0.9, 2.1),
+           Opening("B", "window", "y", 4.5, 4.0, 5.4, 0.9, 2.1),
            Opening("C", "window", "x", 8.5, 0.8, 1.8, 1.2, 2.0)]
     return Synth(free, [], cams, H, rooms, ops)

@@ -74,7 +74,7 @@ class WallAnalysis:
 
 
 def _cross(prof: np.ndarray, start: int, step: int, half: float, max_bins: int) -> float | None:
-    """Walk from bin `start` in direction `step` to the first bin >= half; interpolated position in bin units."""
+    """Walk from bin `start` in direction `step` to the first bin >= half; interpolated position in bins."""
     n = len(prof)
     j = start
     for _ in range(8):  # step back into the gap if the seed overshot onto the wall
@@ -285,14 +285,15 @@ def _fit_candidate(m: np.ndarray, cnt: np.ndarray, hits_s: np.ndarray, see_s: np
             return None
 
     er_rows = _central_rows(nz, z0, z1, fz)
-    n_edge = int(sum((cnt[max(int(e / RES) - 5, 0):int(e / RES) + 5][:, er_rows] > 0).sum() for e in (u0, u1)))
+    n_edge = int(sum((cnt[max(int(e / RES) - 5, 0):int(e / RES) + 5][:, er_rows] > 0).sum()
+                     for e in (u0, u1)))
     rms_l, rms_r = _edge_rms(cnt, er_rows, u0, u1, sigma)
     conf = float(np.clip(min(see_ratio, 1.0) * (0.6 + 0.4 * box_empty), 0, 1))
     if not (left_obs and right_obs):
         conf *= 0.7
     erms = float(np.sqrt(0.5 * (rms_l ** 2 + rms_r ** 2)))
-    return OpeningFit(typ, float(u0), float(u1), float(z0), float(z1), header, see_ratio, erms, (rms_l, rms_r),
-                      (left_obs, right_obs, header), n_edge, see_frac, conf, flags)
+    return OpeningFit(typ, float(u0), float(u1), float(z0), float(z1), header, see_ratio, erms,
+                      (rms_l, rms_r), (left_obs, right_obs, header), n_edge, see_frac, conf, flags)
 
 
 def _central_rows(nz: int, z0: float, z1: float, fz: float) -> np.ndarray:
@@ -339,7 +340,8 @@ def _dedupe(fits: list[OpeningFit]) -> list[OpeningFit]:
         for g in out:
             du = min(f.u1, g.u1) - max(f.u0, g.u0)
             dz = min(f.z1, g.z1) - max(f.z0, g.z0)
-            if du > 0 and dz > 0 and du * dz > 0.5 * min((f.u1 - f.u0) * (f.z1 - f.z0), (g.u1 - g.u0) * (g.z1 - g.z0)):
+            smaller = min((f.u1 - f.u0) * (f.z1 - f.z0), (g.u1 - g.u0) * (g.z1 - g.z0))
+            if du > 0 and dz > 0 and du * dz > 0.5 * smaller:
                 dup = True
                 break
         if not dup:

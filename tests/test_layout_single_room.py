@@ -182,7 +182,8 @@ def test_two_million_points_under_30s(syn):
     base = lf.make_scene(syn, noise=0.0)
     rng = np.random.default_rng(7)
     reps = int(np.ceil(2_000_000 / len(base.points)))
-    P = np.concatenate([base.points + rng.normal(0, 0.01, base.points.shape) for _ in range(reps)])[:2_000_000]
+    P = np.concatenate([base.points + rng.normal(0, 0.01, base.points.shape) for _ in range(reps)])
+    P = P[:2_000_000]
     k = len(P)
     sc = Scene("lidar", base.views, P.astype(np.float32), np.tile(base.normals, (reps, 1))[:k],
                np.tile(base.weights, reps)[:k], np.tile(base.view_index, reps)[:k])
@@ -266,8 +267,9 @@ def test_degenerate_input_returns_flagged_plan(case):
 def test_walls_without_rays_or_floor_fall_back_to_the_seen_extent():
     rng = np.random.default_rng(1)
     t, z = rng.uniform(0, 3, 4000), rng.uniform(0.2, 2.4, 4000)
-    P = np.concatenate([np.column_stack([t, np.zeros_like(t), z]), np.column_stack([t, np.full_like(t, 3), z]),
-                        np.column_stack([np.zeros_like(t), t, z]), np.column_stack([np.full_like(t, 3), t, z])])
+    zero, three = np.zeros_like(t), np.full_like(t, 3)
+    P = np.concatenate([np.column_stack([t, zero, z]), np.column_stack([t, three, z]),
+                        np.column_stack([zero, t, z]), np.column_stack([three, t, z])])
     N = np.concatenate([np.tile(v, (4000, 1)) for v in ([0, 1, 0], [0, -1, 0], [1, 0, 0], [-1, 0, 0])])
     sc = Scene("photo", [_view()], P, N.astype(float), np.ones(len(P)), np.full(len(P), -1))
     plan = build_plan(sc, single_room=True)

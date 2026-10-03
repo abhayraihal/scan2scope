@@ -31,7 +31,7 @@ class _Data:
     N: np.ndarray
     wp: np.ndarray  # mean confidence per voxel (peak finding, occupancy)
     wf: np.ndarray  # summed confidence per voxel (fits)
-    wn: np.ndarray  # length of the confidence-weighted normal sum; its projection on a wall normal is face mass
+    wn: np.ndarray  # length of the confidence-weighted normal sum; projected on a wall normal: face mass
     O: np.ndarray  # ray origins (raw point subsample), Manhattan frame
     E: np.ndarray  # ray ends
     cams: np.ndarray  # camera centres, Manhattan frame
@@ -127,8 +127,8 @@ def _m(value: float, kind: str = "length", unit: str = "m", **evidence) -> Measu
 
 
 def _empty_plan(flags: list[str], meta: dict) -> Plan:
-    return Plan(rooms=[], adjacency=[], footprint_area=_m(0.0, "area", "m2"), extent_x=_m(0.0), extent_y=_m(0.0),
-                flags=flags + ["no_rooms"], meta={"layout": meta})
+    return Plan(rooms=[], adjacency=[], footprint_area=_m(0.0, "area", "m2"), extent_x=_m(0.0),
+                extent_y=_m(0.0), flags=flags + ["no_rooms"], meta={"layout": meta})
 
 
 def _grids(P: np.ndarray, cams: np.ndarray, pad: float = 1.0) -> tuple[tuple[W.TGrid, W.TGrid], tuple]:
@@ -203,7 +203,8 @@ def build_plan(scene: Scene, *, single_room: bool = False) -> Plan:
     lines += _closure_lines(lines, free, g2, grids, flags)
     gx, gy = C.group_lines(lines, 0), C.group_lines(lines, 1)
     t_thin = max(0.2, 2 * margin + 0.05)
-    meta.update({"manhattan_angle_deg": round(float(np.degrees(theta)), 3), "manhattan_concentration": round(conc, 3),
+    meta.update({"manhattan_angle_deg": round(float(np.degrees(theta)), 3),
+                 "manhattan_concentration": round(conc, 3),
                  "noise_sigma": round(sigma, 4), "ray_margin": round(margin, 4), "floor_z": round(floor_z, 4),
                  "ceiling_z": round(ceil_z, 4), "n_voxels": len(Pv), "n_rays": len(d.O),
                  "n_lines": len([q for q in lines if not q.synthetic]), "free_min_count": round(n_min, 2)})
@@ -303,7 +304,8 @@ class _Face:
     t_mid: float = 0.0
 
 
-def _face_evidence(lines: list[W.WallLine], axis: int, coord: float, n_sign: int, ta: float, tb: float) -> _Face:
+def _face_evidence(lines: list[W.WallLine], axis: int, coord: float, n_sign: int, ta: float,
+                   tb: float) -> _Face:
     """Inlier statistics of the observed wall face that a polygon edge lies on, restricted to the edge."""
     cand = [q for q in lines if q.axis == axis and not q.synthetic and abs(q.coord - coord) <= 0.015]
     match = [q for q in cand if q.sign == n_sign]
@@ -318,7 +320,8 @@ def _face_evidence(lines: list[W.WallLine], axis: int, coord: float, n_sign: int
     r = q.r_pts[m] + (q.coord - coord)
     w = q.w_pts[m]
     rms = float(np.sqrt(np.average(r ** 2, weights=w)))
-    flags = (f"wall_slanted:{np.degrees(np.arctan(q.slope)):.1f}deg",) if abs(q.slope) > np.tan(np.radians(1.0)) else ()
+    slanted = abs(q.slope) > np.tan(np.radians(1.0))
+    flags = (f"wall_slanted:{np.degrees(np.arctan(q.slope)):.1f}deg",) if slanted else ()
     return _Face(int(m.sum()), rms, q.sigma, flags, q.slope, q.t_mid)
 
 
@@ -367,10 +370,10 @@ def _assemble(scene: Scene, d: _Data, lines: list[W.WallLine], cx: C.Complex, ro
             rflags.append("levels_from_global")
         hgt = ce.z - fl.z
         ceil_obs = _ceiling_coverage(cx, room_of_cell, k, d.P[cm & (np.abs(d.P[:, 2] - ce.z) < 0.1), :2])
-        lev_ev = {"n_points": int(fl.n + ce.n), "fit_rms": float(np.hypot(fl.rms, ce.rms)), "floor_rms": fl.rms,
-                  "ceiling_rms": ce.rms, "floor_n": fl.n, "ceiling_n": ce.n, "floor_tilt": fl.tilt,
-                  "ceiling_tilt": ce.tilt, "observed_fraction": ceil_obs, "ceiling_observed": bool(ce.observed),
-                  "noise_sigma": sigma}
+        lev_ev = {"n_points": int(fl.n + ce.n), "fit_rms": float(np.hypot(fl.rms, ce.rms)),
+                  "floor_rms": fl.rms, "ceiling_rms": ce.rms, "floor_n": fl.n, "ceiling_n": ce.n,
+                  "floor_tilt": fl.tilt, "ceiling_tilt": ce.tilt, "observed_fraction": ceil_obs,
+                  "ceiling_observed": bool(ce.observed), "noise_sigma": sigma}
 
         K = len(poly_m)
         edges = []
@@ -381,8 +384,8 @@ def _assemble(scene: Scene, d: _Data, lines: list[W.WallLine], cx: C.Complex, ro
             nin = np.array([-dy, dx]) / max(float(np.hypot(dx, dy)), 1e-12)
             n_sign = int(np.sign(nin[axis])) or 1
             face = _face_evidence(lines, axis, coord, n_sign, min(t0, t1), max(t0, t1))
-            frame = OP.WallFrame(axis, float(coord), n_sign, float(t0), 1 if t1 > t0 else -1, float(abs(t1 - t0)),
-                                 fl.z, ce.z, face.slope, face.t_mid)
+            frame = OP.WallFrame(axis, float(coord), n_sign, float(t0), 1 if t1 > t0 else -1,
+                                 float(abs(t1 - t0)), fl.z, ce.z, face.slope, face.t_mid)
             wa = OP.analyze_wall(frame, d.P, d.N, d.wp, d.wn, d.O, d.E, face.sigma if face.n >= 30 else sigma)
             if face.n < 30 and wa.openings:
                 # without the room's own wall face there is no gap to measure, only rays into the unknown
@@ -396,8 +399,9 @@ def _assemble(scene: Scene, d: _Data, lines: list[W.WallLine], cx: C.Complex, ro
             wid = f"{rid}-W{e + 1}"
             prev_f, next_f = edges[e - 1][3], edges[(e + 1) % K][3]
             length = _m(frame.length, "length", n_points=face.n, fit_rms=face.rms,
-                        observed_fraction=wa.observed_fraction, face_sigma=face.sigma, end_fit_rms=[prev_f.rms, next_f.rms],
-                        end_n_points=[prev_f.n, next_f.n], noise_sigma=sigma)
+                        observed_fraction=wa.observed_fraction, face_sigma=face.sigma,
+                        end_fit_rms=[prev_f.rms, next_f.rms], end_n_points=[prev_f.n, next_f.n],
+                        noise_sigma=sigma)
             walls.append(Wall(wid, rid, Rw @ p, Rw @ q, length, _m(hgt, "height", **lev_ev), Rw @ nin,
                               float(np.clip(wa.observed_fraction, 0, 1)),
                               {"n_points": face.n, "fit_rms": face.rms, "face_sigma": face.sigma,
@@ -412,7 +416,8 @@ def _assemble(scene: Scene, d: _Data, lines: list[W.WallLine], cx: C.Complex, ro
                 op = Opening(f"{rid}-O{len(openings) + 1}", rid, wid, f.type, _m(f.u0, "offset", **ev),
                              _m(f.u1 - f.u0, "width", **ev),
                              _m((f.z1 - f.z0) if is_win else (f.z1 - fl.z), "height", **ev),
-                             _m(f.z0 - fl.z, "height", **ev) if is_win else None, Rw @ c_m, None, f.confidence,
+                             _m(f.z0 - fl.z, "height", **ev) if is_win else None, Rw @ c_m, None,
+                             f.confidence,
                              {"header": f.header, "u0": f.u0, "u1": f.u1, "z0": f.z0, "z1": f.z1,
                               "_probe": (c_m, nin)}, list(f.flags))
                 openings.append(op)
@@ -432,7 +437,8 @@ def _assemble(scene: Scene, d: _Data, lines: list[W.WallLine], cx: C.Complex, ro
                           _m(hgt, "height", **lev_ev), _m(area, "area", "m2", **area_ev),
                           _m(float(wl.sum()), "length", **area_ev), view_ids, source, rflags,
                           {"n_cells": sum(len(regs[r].cells) for r in g), "coverage": regs[g[0]].coverage,
-                           "boundary_support": regs[g[0]].support, "n_cameras": int(sum(regs[r].n_cams for r in g)),
+                           "boundary_support": regs[g[0]].support,
+                           "n_cameras": int(sum(regs[r].n_cams for r in g)),
                            "polygon_manhattan": poly_m.tolist()}))
         polys_m.append(poly_m)
 
@@ -442,7 +448,8 @@ def _assemble(scene: Scene, d: _Data, lines: list[W.WallLine], cx: C.Complex, ro
     tot_ev = {"n_rooms": len(rooms), "frame": "manhattan", "manhattan_angle_deg": float(np.degrees(theta)),
               "n_points": int(sum(r.floor_area.evidence["n_points"] for r in rooms)),
               "fit_rms": float(np.mean([r.floor_area.evidence["fit_rms"] for r in rooms])),
-              "observed_fraction": float(np.mean([r.floor_area.evidence["observed_fraction"] for r in rooms])),
+              "observed_fraction": float(np.mean([r.floor_area.evidence["observed_fraction"]
+                                                  for r in rooms])),
               "noise_sigma": sigma}
     footprint = _m(sum(r.floor_area.value for r in rooms), "area", "m2", **tot_ev)
     return Plan(rooms, adjacency, footprint, _m(ext[0], "length", **tot_ev), _m(ext[1], "length", **tot_ev),
@@ -454,7 +461,8 @@ def _shoelace(p: np.ndarray) -> float:
     return float(0.5 * (np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))))
 
 
-def _ceiling_coverage(cx: C.Complex, room_of_cell: np.ndarray, k: int, xy: np.ndarray, res: float = 0.25) -> float:
+def _ceiling_coverage(cx: C.Complex, room_of_cell: np.ndarray, k: int, xy: np.ndarray,
+                      res: float = 0.25) -> float:
     """Share of the room's area (on a 25 cm grid) with ceiling inliers."""
     ii, jj = np.nonzero(room_of_cell == k)
     if len(ii) == 0:

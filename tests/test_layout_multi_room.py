@@ -73,8 +73,8 @@ def test_passage_width_decides_open_plan(passage, n_rooms, noisy):
 @pytest.mark.parametrize("seed,yaw", [(201, -29.0), (202, -18.0), (206, 26.0)])
 def test_misregistered_views_do_not_open_blank_walls(seed, yaw):
     """Per-view rigid errors and depth noise push wall points behind the face; that is not see-through."""
-    kw = {"noise": 0.03, "normal_noise": 0.15, "drop": 0.3, "outliers": 0.05, "seed": seed, "depth_noise": 0.01,
-          "view_jitter": (0.03, 0.6)}
+    kw = {"noise": 0.03, "normal_noise": 0.15, "drop": 0.3, "outliers": 0.05, "seed": seed,
+          "depth_noise": 0.01, "view_jitter": (0.03, 0.6)}
     plan = build_plan(lf.make_scene(lf.two_areas("narrow"), yaw_deg=yaw, rays=FAST, **kw))
     assert len(plan.rooms) == 2
     for r in plan.rooms:

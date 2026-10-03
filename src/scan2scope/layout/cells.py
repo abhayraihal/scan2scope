@@ -54,7 +54,8 @@ class Occupancy:
     grid: np.ndarray  # (nx, ny, nz) bool
 
 
-def occupancy(P: np.ndarray, lo: np.ndarray, hi: np.ndarray, res: float = 0.05, min_count: int = 2) -> Occupancy:
+def occupancy(P: np.ndarray, lo: np.ndarray, hi: np.ndarray, res: float = 0.05,
+              min_count: int = 2) -> Occupancy:
     dims = np.maximum(np.ceil((hi - lo) / res).astype(np.int64), 1)
     idx = np.floor((P - lo) / res).astype(np.int64)
     ok = ((idx >= 0) & (idx < dims)).all(1)
@@ -144,7 +145,8 @@ def group_lines(lines: list[WallLine], axis: int) -> list[LineGroup]:
             g.upper = g.upper | q.upper
             g.synthetic = g.synthetic and q.synthetic
         else:
-            groups.append(LineGroup(axis, q.coord, [i], q.solid.copy(), q.upper.copy(), synthetic=q.synthetic))
+            groups.append(LineGroup(axis, q.coord, [i], q.solid.copy(), q.upper.copy(),
+                                    synthetic=q.synthetic))
         last = q.coord
     for g in groups:
         w = np.array([max(lines[i].area, 1e-6) for i in g.members])
@@ -161,7 +163,7 @@ def runs(mask: np.ndarray) -> list[tuple[int, int]]:
 
 
 def _corridor(g: LineGroup, others: list[LineGroup], ogrid: TGrid, ta: float, tb: float) -> bool:
-    """True when a perpendicular wall runs through either end of the gap, i.e. the line only crosses a corridor."""
+    """True when a perpendicular wall runs through either end of the gap: the line only crosses a corridor."""
     for te in (ta, tb):
         for og in others:
             if og.synthetic or abs(og.coord - te) > 0.2:
@@ -174,7 +176,7 @@ def _corridor(g: LineGroup, others: list[LineGroup], ogrid: TGrid, ta: float, tb
 
 
 def _solid_run(solid: np.ndarray, i: int, step: int) -> int:
-    """Length in bins of the solid run starting at bin i (or the next) in direction step, one-bin holes bridged."""
+    """Bins in the solid run starting at bin i (or the next) in direction step, one-bin holes bridged."""
     n = len(solid)
     if 0 <= i < n and not solid[i]:
         i += step
@@ -201,8 +203,9 @@ def close_groups(gx: list[LineGroup], gy: list[LineGroup], grids: tuple[TGrid, T
                 # a header-less door-sized gap separates rooms only in a real wall: wall on both sides, and a
                 # substantial piece on at least one (two door jambs facing across a corridor do not qualify)
                 sides = sorted((_solid_run(g.solid, a - 1, -1), _solid_run(g.solid, b, 1)))
-                door_sized = (length <= DOOR_MAX + 1e-9 and sides[0] * grid.res >= 0.1 and sides[1] * grid.res >= 0.4
-                              and not _corridor(g, others, ogrid, grid.t0 + a * grid.res, grid.t0 + b * grid.res))
+                ta, tb = grid.t0 + a * grid.res, grid.t0 + b * grid.res
+                door_sized = (length <= DOOR_MAX + 1e-9 and sides[0] * grid.res >= 0.1
+                              and sides[1] * grid.res >= 0.4 and not _corridor(g, others, ogrid, ta, tb))
                 if length < SMALL_GAP - 1e-9 or door_sized:
                     closed[a:b] = True
             g.closed = closed
@@ -215,7 +218,8 @@ def _sat(mask: np.ndarray) -> np.ndarray:
 
 
 def _integral(S: np.ndarray, grid: Grid2D, x: np.ndarray, y: np.ndarray) -> np.ndarray:
-    """Integral of the mask over [x0, x] x [y0, y]; bilinear in the SAT is exact for a piecewise-constant mask."""
+    """Integral of the mask over [x0, x] x [y0, y]; bilinear in the SAT is exact for a piecewise-constant
+    mask."""
     gx = np.clip((x - grid.x0) / grid.res, 0, grid.nx)
     gy = np.clip((y - grid.y0) / grid.res, 0, grid.ny)
     i = np.minimum(np.floor(gx).astype(np.int64), grid.nx - 1)
@@ -246,7 +250,7 @@ class Complex:
         return len(self.xs) - 1, len(self.ys) - 1
 
     def segment(self, axis: int, k: int, a: float, b: float, which: str = "closed") -> np.ndarray:
-        """Profile bins (closed or upper) of the boundary on line group k of `axis` between t = a and t = b."""
+        """Profile bins (closed or upper) of the boundary on line group k of `axis` for t in [a, b]."""
         g = (self.gx if axis == 0 else self.gy)[k]
         prof = g.closed if which == "closed" else g.upper
         grid = self.grids[axis]
@@ -323,7 +327,7 @@ class Region:
     floor_cov: float = 0.0
     first_cam: int = 1 << 30
     neighbors: dict[int, float] = field(default_factory=dict)  # region index -> shared boundary length
-    neighbors_tall: dict[int, float] = field(default_factory=dict)  # same, where wall reaches door-head height
+    neighbors_tall: dict[int, float] = field(default_factory=dict)  # same, where the wall reaches door heads
 
 
 def label_regions(cx: Complex) -> np.ndarray:
@@ -376,7 +380,8 @@ def region_stats(cx: Complex, lab: np.ndarray, cam_xy: np.ndarray) -> list[Regio
                     tall = length * float(cx.segment(axis, k, a0, a1, "upper").mean())
                     nb_tall[int(other)] = nb_tall.get(int(other), 0.0) + tall
         regs.append(Region(list(zip(ii.tolist(), jj.tolist())), float(a.sum()),
-                           (float(xs[ii].min()), float(ys[jj].min()), float(xs[ii + 1].max()), float(ys[jj + 1].max())),
+                           (float(xs[ii].min()), float(ys[jj].min()), float(xs[ii + 1].max()),
+                            float(ys[jj + 1].max())),
                            len(cams), float(np.average(cx.coverage[ii, jj], weights=a)),
                            sup_len / max(tot_len, 1e-9), float(np.average(cx.floor_cov[ii, jj], weights=a)),
                            min(cams) if cams else 1 << 30, nb, nb_tall))
@@ -384,7 +389,7 @@ def region_stats(cx: Complex, lab: np.ndarray, cam_xy: np.ndarray) -> list[Regio
 
 
 def select_rooms(regs: list[Region], t_thin: float, single_room: bool) -> tuple[list[list[int]], list[str]]:
-    """Group regions into rooms. Returns lists of region indices (the first is the room's main region) and flags."""
+    """Group regions into rooms: lists of region indices (the first is the room's main region) and flags."""
     flags: list[str] = []
     kind = []
     for r in regs:
@@ -395,14 +400,15 @@ def select_rooms(regs: list[Region], t_thin: float, single_room: bool) -> tuple[
             kind.append("small")
         elif r.n_cams > 0:
             kind.append("room")
-        elif r.coverage >= NO_CAMERA_COVERAGE and r.support >= NO_CAMERA_SUPPORT and r.floor_cov >= NO_CAMERA_FLOOR:
+        elif (r.coverage >= NO_CAMERA_COVERAGE and r.support >= NO_CAMERA_SUPPORT
+              and r.floor_cov >= NO_CAMERA_FLOOR):
             kind.append("room")
             flags.append("room_without_cameras")
         else:
             kind.append("reject")
     for k, (r, c) in enumerate(zip(regs, kind)):
-        log.debug("region %d %s: area %.2f bbox %s cams %d coverage %.2f support %.2f floor %.2f", k, c, r.area,
-                  tuple(round(v, 2) for v in r.bbox), r.n_cams, r.coverage, r.support, r.floor_cov)
+        log.debug("region %d %s: area %.2f bbox %s cams %d coverage %.2f support %.2f floor %.2f", k, c,
+                  r.area, tuple(round(v, 2) for v in r.bbox), r.n_cams, r.coverage, r.support, r.floor_cov)
     rooms = {k: [k] for k, c in enumerate(kind) if c == "room"}
     for k, c in enumerate(kind):
         if c != "small":
@@ -425,7 +431,7 @@ def select_rooms(regs: list[Region], t_thin: float, single_room: bool) -> tuple[
 
 
 def cells_polygon(cx: Complex, cells: list[tuple[int, int]]) -> tuple[np.ndarray, float]:
-    """Counter-clockwise outline of a union of cells with collinear vertices removed; returns it and the hole area."""
+    """Counter-clockwise outline of a union of cells without collinear vertices, and the filled hole area."""
     xs, ys = cx.xs, cx.ys
     u = unary_union([sbox(xs[i], ys[j], xs[i + 1], ys[j + 1]) for i, j in cells])
     if u.geom_type != "Polygon":

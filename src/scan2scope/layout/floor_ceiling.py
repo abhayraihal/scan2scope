@@ -83,7 +83,7 @@ def hist_peaks(v: np.ndarray, w: np.ndarray, lo: float, hi: float, bin_size: flo
 
 def refine(v: np.ndarray, w: np.ndarray, c0: float, win0: float, win_min: float = 0.015,
            win_max: float = 0.12, iters: int = 4) -> tuple[float, float, float, np.ndarray, float]:
-    """Weighted mean of inliers with a window that follows the robust spread. Returns c, sigma, rms, mask, window."""
+    """Weighted mean of inliers in a window that follows the robust spread: c, sigma, rms, mask, window."""
     c, win, s = float(c0), float(win0), float(win0) / 2.5
     m = np.abs(v - c) < win
     for _ in range(iters):
@@ -124,7 +124,7 @@ def _level(z: np.ndarray, w_fit: np.ndarray, peaks: list[Peak], pick: str, sigma
 
 def estimate(z: np.ndarray, nz: np.ndarray, w_peak: np.ndarray, w_fit: np.ndarray, xy: np.ndarray,
              cam_z: np.ndarray | None = None) -> FloorCeiling:
-    """Global floor (lowest strong up-facing peak) and ceiling (highest strong down-facing peak >= 1.8 m above)."""
+    """Global floor (lowest strong up-facing peak) and ceiling (highest strong down-facing peak, 1.8 m up)."""
     flags: list[str] = []
     up, down = nz > HORIZONTAL_NZ, nz < -HORIZONTAL_NZ
     if (up.sum() < 30) != (down.sum() < 30) and (np.abs(nz) > HORIZONTAL_NZ).sum() >= 30:
@@ -169,7 +169,8 @@ def estimate(z: np.ndarray, nz: np.ndarray, w_peak: np.ndarray, w_fit: np.ndarra
         flags.append("ceiling_not_observed")
         vert = np.abs(nz) < 0.3  # walls stop at the ceiling; all points would include outdoor geometry
         top = float(np.percentile(z[vert], 99.5)) if vert.sum() >= 30 else floor.z + DEFAULT_CEILING_HEIGHT
-        c = top if MIN_CEILING_HEIGHT <= top - floor.z <= MAX_CEILING_HEIGHT else floor.z + DEFAULT_CEILING_HEIGHT
+        plausible = MIN_CEILING_HEIGHT <= top - floor.z <= MAX_CEILING_HEIGHT
+        c = top if plausible else floor.z + DEFAULT_CEILING_HEIGHT
         ceiling = Level(c, observed=False)
     else:
         sel = down & (np.abs(z - ceiling.z) < ceiling.window)
@@ -181,7 +182,8 @@ def estimate(z: np.ndarray, nz: np.ndarray, w_peak: np.ndarray, w_fit: np.ndarra
 
 def room_level(z: np.ndarray, w_peak: np.ndarray, w_fit: np.ndarray, xy: np.ndarray, z_global: float,
                pick: str, sigma: float, search: float = 0.25) -> Level | None:
-    """Per-room level: strongest-side peak within +-search of the global level, then the weighted median of inliers."""
+    """Per-room level: lowest or highest strong peak within +-search of the global level, then the weighted
+    median of its inliers."""
     m = np.abs(z - z_global) < search
     if m.sum() < 30:
         return None

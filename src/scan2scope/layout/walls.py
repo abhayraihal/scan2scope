@@ -170,13 +170,13 @@ def _near(x: float, kept: list[WallLine], tol: float) -> bool:
 
 def _near_range(lo: float, hi: float, kept: list[WallLine], tol: float) -> bool:
     """True when the offsets [lo, hi] spanned by a line overlap an accepted line's span (plus tol)."""
-    return any(lo < q.coord + tol + abs(q.slope) * q.half_span and hi > q.coord - tol - abs(q.slope) * q.half_span
-               for q in kept)
+    return any(lo < q.coord + tol + abs(q.slope) * q.half_span
+               and hi > q.coord - tol - abs(q.slope) * q.half_span for q in kept)
 
 
 def detect_lines(P: np.ndarray, N: np.ndarray, w_peak: np.ndarray, w_fit: np.ndarray, floor_z: float,
                  ceil_z: float, sigma0: float, grids: tuple[TGrid, TGrid]) -> tuple[list[WallLine], float]:
-    """Wall lines for the four face directions. Returns the lines and the area-weighted wall noise estimate."""
+    """Wall lines for the four face directions, and the area-weighted wall noise estimate."""
     codes = direction_codes(N[:, :2])
     merge_tol = max(0.04, 2.0 * sigma0)
     lines: list[WallLine] = []
@@ -207,7 +207,7 @@ def detect_lines(P: np.ndarray, N: np.ndarray, w_peak: np.ndarray, w_fit: np.nda
             j0, j1 = (int(x) for x in np.searchsorted(v, [c - SLANT_REACH, c + SLANT_REACH]))
             free = np.arange(j0, j1)[~used[j0:j1]]
             if len(free) > 1.15 * len(idx) or s > 1.5 * sigma0:
-                # a wall a few degrees off axis spreads over several histogram bins: fit it as one rotated line
+                # a wall a few degrees off axis spreads over many histogram bins: fit one rotated line
                 a_, b_, tm_ = _slant_fit(t[free], v[free], wf[free], c, max(2.5 * sigma0, 0.02))
                 r_all = v[free] - (a_ + b_ * (t[free] - tm_))
                 inl = np.abs(r_all) < max(win, 2.5 * sigma0)
