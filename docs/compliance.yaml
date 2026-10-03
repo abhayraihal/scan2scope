@@ -1,143 +1,188 @@
-# Mapping from requirement id (docs/requirements.yaml) to where it is met. Rendered by
-# scripts/make_compliance_matrix.py into docs/compliance_matrix.md. A key ending in * covers every id with that prefix
-# unless a more specific key exists. Statuses: pass, fail, partial, deviation, n/a.
+# Mapping from requirement id (docs/requirements.yaml) to where it is met, rendered by scripts/make_compliance_matrix.py into docs/compliance_matrix.md.
+# A key ending in * covers every id with that prefix unless a more specific key exists. Statuses: pass, fail, partial, deviation, n/a.
+# GATE rows take their status from the final benchmark reports (docs/benchmark_report.md, generated copies in docs/benchmark/): pass when every tier with data passes, fail when none does, partial when the tiers differ, when the gate could not be measured on benchmark data, or when the report says the data are too few to show the property (calibration on one real room). Each note names the tier and whether its data is real (the one bedroom, iPhone 17) or synthetic (LiDAR).
+# Audited on 2026-10-04 against the final runs (the real room as bedroom and its WhatsApp copy bedroom_whatsapp, 6 captures, rerun at 7d26d19 with the geometry of the live run at 226bcff and damage detection recomputed; 4 synthetic LiDAR properties, 12 captures, at 226bcff) and README.md, docs/technical_report.md, docs/benchmark_report.md and docs/device_matrix.md as reviewed at 03:30 IST.
 
-CAP-01: {path: "docs/capture_protocol.md", artifact: "own capture route and pipeline", status: pass}
-CAP-02: {path: "docs/capture_protocol.md", artifact: "Route 2, stock-capture protocol", status: pass}
-CAP-03: {path: "docs/design.md", artifact: "Route 1 not taken", status: n/a, note: "Route 2 chosen"}
-CAP-04: {path: "docs/design.md", artifact: "Route 1 not taken", status: n/a, note: "Route 2 chosen"}
-CAP-05: {path: "docs/design.md", artifact: "Route 1 not taken", status: n/a, note: "Route 2 chosen"}
-CAP-06: {path: "docs/capture_protocol.md", artifact: "Camera app (photo, video), Stray Scanner 1.4 (LiDAR)", status: pass}
-CAP-07: {path: "docs/capture_protocol.md", artifact: "App Store tools only", status: pass}
-CAP-08: {path: "docs/capture_protocol.md", artifact: "one page (570 words)", status: pass}
-CAP-09: {path: "docs/capture_protocol.md", artifact: "plain steps", status: partial, note: "not yet followed by a non-engineer without help"}
-CAP-10: {path: "docs/capture_protocol.md", artifact: "install step", status: pass}
-CAP-11: {path: "docs/capture_protocol.md", artifact: "walking route per tier", status: pass}
-CAP-12: {path: "docs/capture_protocol.md", artifact: "duration per room and total", status: pass}
-CAP-13: {path: "docs/capture_protocol.md", artifact: "Avoid section", status: pass}
-CAP-14: {path: "docs/capture_protocol.md", artifact: "hand-off by USB cable, AirDrop or send-as-document", status: pass}
-CAP-15: {path: "docs/capture_protocol.md", artifact: "numbered literal steps", status: partial, note: "the real capture held the phone in portrait and one video aimed at furniture; protocol not yet tested by a third person"}
-CAP-16: {path: "docs/capture_protocol.md", artifact: "three tier sections", status: pass}
+CAP-01: {path: "docs/capture_protocol.md", artifact: "own capture route and pipeline", status: "pass"}
+CAP-02: {path: "docs/design.md", artifact: "Capture route section: Route 2, a one-page stock-capture protocol", status: "pass"}
+CAP-03: {path: "docs/design.md", artifact: "decision log: Route 1 (own iOS app) not taken", status: "n/a", note: "Route 2 chosen"}
+CAP-04: {path: "docs/design.md", artifact: "decision log: Route 1 (own iOS app) not taken", status: "n/a", note: "Route 2 chosen"}
+CAP-05: {path: "docs/design.md", artifact: "decision log: Route 1 (own iOS app) not taken", status: "n/a", note: "Route 2 chosen"}
+CAP-06: {path: "docs/capture_protocol.md", artifact: "Camera app for photo and video, Stray Scanner for LiDAR (version 1.4 in README.md and docs/device_matrix.md)", status: "pass"}
+CAP-07: {path: "docs/capture_protocol.md", artifact: "native Camera app and Stray Scanner (free, App Store)", status: "pass"}
+CAP-08: {path: "docs/capture_protocol.md", artifact: "one page, 570 words", status: "pass"}
+CAP-09: {path: "docs/capture_protocol.md", artifact: "plain numbered steps", status: "partial", note: "not yet followed by a non-engineer without help"}
+CAP-10: {path: "docs/capture_protocol.md", artifact: "Stray Scanner install step; nothing to install for photo and video", status: "pass"}
+CAP-11: {path: "docs/capture_protocol.md", artifact: "walking route per tier", status: "pass"}
+CAP-12: {path: "docs/capture_protocol.md", artifact: "about 1 minute per room, under 8 minutes in total", status: "pass"}
+CAP-13: {path: "docs/capture_protocol.md", artifact: "Avoid section", status: "pass"}
+CAP-14: {path: "docs/capture_protocol.md", artifact: "Hand off section: USB-C cable (Image Capture, Finder), AirDrop, or send as a document", status: "pass"}
+CAP-15: {path: "docs/capture_protocol.md", artifact: "numbered literal steps", status: "partial", note: "the owner's own capture strayed from the page: both clips filmed in portrait where it says sideways, video_2 at 4K and aimed at furniture, 5 photos where it recommends 6 to 8; no third person has followed it yet"}
+CAP-16: {path: "docs/capture_protocol.md", artifact: "one section per tier plus a Pro-model check", status: "pass"}
 
-TIER-01: {path: "src/scan2scope/geometry", artifact: "photo.py, video.py, lidar.py", status: pass}
-TIER-02: {path: "schema/scan2scope.schema.json", artifact: "one schema for every tier", status: pass}
-TIER-03: {path: "src/scan2scope/uncertainty", artifact: "per-tier error model", status: partial, note: "widening follows evidence; calibration shown only where ground truth exists (see benchmark report)"}
-TIER-04: {path: "src/scan2scope/ingest/detect.py", artifact: "2-8 photos per room (more are capped, fewer flagged)", status: pass}
-TIER-05: {path: "docs/device_matrix.md", artifact: "tested on iPhone 17", status: pass}
-TIER-06: {path: "src/scan2scope/geometry/photo.py", artifact: "RGB and EXIF focal only", status: pass}
-TIER-07: {path: "src/scan2scope/ingest/images.py", artifact: "list_room_folders", status: pass}
-TIER-08: {path: "src/scan2scope/stitch", artifact: "stitch_rooms", status: partial, note: "stitching implemented and unit-tested; the real benchmark has one room, so photo stitching is not shown on real data"}
-TIER-09: {path: "src/scan2scope/uncertainty/priors.yaml", artifact: "photo tier priors", status: pass}
-TIER-10: {path: "src/scan2scope/pipeline.py", artifact: "geometry failures still give a schema-valid result", status: pass}
-TIER-11: {path: "src/scan2scope/geometry/video.py", artifact: "video tier", status: pass}
-TIER-12: {path: "docs/device_matrix.md", artifact: "tested on iPhone 17 (1080p and 4K)", status: pass}
-TIER-13: {path: "src/scan2scope/ingest/stray.py", artifact: "depth, poses, per-frame intrinsics", status: pass}
-TIER-14: {path: "docs/device_matrix.md", artifact: "15 Pro to 18 Pro Max", status: partial, note: "no LiDAR phone available; LiDAR tier benchmarked on synthetic captures and run on a public real Stray Scanner recording"}
-TIER-15: {path: "docs/device_matrix.md", artifact: "device matrix", status: pass}
-TIER-16: {path: "docs/device_matrix.md", artifact: "measured accuracy per tier", status: pass}
-TIER-17: {path: "src/scan2scope/ingest", artifact: "HEIC (pillow-heif), HEVC and HDR video (PyAV)", status: pass}
+TIER-01: {path: "src/scan2scope/geometry", artifact: "photo.py, video.py, lidar.py", status: "pass", note: "photo and video ran on the real room; LiDAR on 12 synthetic captures and the public Stray Scanner office recording"}
+TIER-02: {path: "schema/scan2scope.schema.json", artifact: "one schema for every tier; damage, concealed_damage_flags and scope are required at every tier", status: "pass"}
+TIER-03: {path: "src/scan2scope/uncertainty", artifact: "per-tier error model, widened by evidence", status: "partial", note: "mean half-width 3.1% of the true value on synthetic LiDAR, 27.2% (video) and 33.0% (photo) on the real room. Photo 14/14 and video 25/28 values covered on one real room, too few rooms to show calibration; LiDAR (synthetic) 479/560 (85.5%), 95% CI [82.3%, 88.3%] excludes 0.90"}
+TIER-04: {path: "src/scan2scope/ingest/detect.py", artifact: "rooms outside 2 to 8 photos are flagged; over 8 are cut to 8 in geometry/photo.py", status: "pass"}
+TIER-05: {path: "docs/device_matrix.md", artifact: "photo tier on any iPhone 15 or newer", status: "partial", note: "tested on one phone, an iPhone 17 (not a Pro); the EXIF-stripped WhatsApp copies (1280x960) also ran, with wider intervals; the other 15 models are untested"}
+TIER-06: {path: "src/scan2scope/geometry/photo.py", artifact: "MapAnything on the RGB photos with EXIF intrinsics; no depth or poses are read", status: "pass"}
+TIER-07: {path: "src/scan2scope/ingest/images.py", artifact: "list_room_folders: one room per subfolder", status: "pass"}
+TIER-08: {path: "src/scan2scope/stitch", artifact: "stitch_rooms", status: "partial", note: "stitching passes its unit tests (synthetic rooms, a stand-in for MapAnything); the benchmark has no multi-room photo capture, real or synthetic"}
+TIER-09: {path: "src/scan2scope/uncertainty/priors.yaml", artifact: "photo additive terms 4 cm against 2.5 cm (video) and 0.8 cm (LiDAR); photo scale sigma 0.15 log in geometry/photo.py", status: "pass", note: "mean half-width 33.0% of the tape value at the photo tier against 27.2% at the video tier, real room"}
+TIER-10: {path: "src/scan2scope/pipeline.py", artifact: "a geometry failure gives an empty plan flagged geometry_failed, still schema-valid; a single image runs as a one-room folder", status: "pass", note: "6 of 6 real and 12 of 12 synthetic runs returned a result"}
+TIER-11: {path: "src/scan2scope/geometry/video.py", artifact: "video tier", status: "pass", note: "ran on two real clips (57 s at 1080p, 49 s at 4K) and their WhatsApp copies (464x832)"}
+TIER-12: {path: "docs/device_matrix.md", artifact: "video tier on any iPhone 15 or newer", status: "partial", note: "tested on one phone, an iPhone 17, at 1080p and 4K; the other 15 models are untested"}
+TIER-13: {path: "src/scan2scope/ingest/stray.py", artifact: "Stray Scanner depth, confidence, per-frame poses and intrinsics", status: "pass"}
+TIER-14: {path: "docs/device_matrix.md", artifact: "iPhone 15 Pro to 18 Pro Max", status: "partial", note: "no LiDAR phone was available: the LiDAR tier is benchmarked on 12 synthetic captures and has run on the public Stray Scanner office recording, which has no tape ground truth; Stray Scanner 1.4 is not confirmed on the 18 Pro models"}
+TIER-15: {path: "docs/device_matrix.md", artifact: "tiers and tools for 16 models", status: "pass"}
+TIER-16: {path: "docs/device_matrix.md", artifact: "accuracy each tier delivered", status: "pass", note: "photo and video from one real room, LiDAR from synthetic captures; the matrix says the photo and video n is too small for a general accuracy"}
+TIER-17: {path: "src/scan2scope/ingest", artifact: "HEIC through pillow-heif, HEVC and 10-bit HDR video through PyAV", status: "pass", note: "covered only by unit tests on generated files; the iPhone 17 files were JPEG and H.264 SDR"}
 
-OUT-01: {path: "schema/scan2scope.schema.json", artifact: "result.json", status: pass}
-OUT-02: {path: "src/scan2scope/layout", artifact: "rooms[]", status: pass}
-OUT-03: {path: "src/scan2scope/layout", artifact: "rooms[].walls[].length", status: pass}
-OUT-04: {path: "src/scan2scope/layout", artifact: "rooms[].ceiling_height", status: pass}
-OUT-05: {path: "src/scan2scope/layout", artifact: "rooms[].floor_area", status: pass}
-OUT-06: {path: "src/scan2scope/layout/openings.py", artifact: "rooms[].openings[]", status: pass}
-OUT-07: {path: "src/scan2scope/stitch", artifact: "property block and plan.svg", status: pass}
-OUT-08: {path: "src/scan2scope/layout", artifact: "property.adjacency", status: partial, note: "shown on synthetic multi-room captures"}
-OUT-09: {path: "src/scan2scope/semantics/lift.py", artifact: "damage[].surface_id", status: pass}
-OUT-10: {path: "src/scan2scope/semantics", artifact: "damage[].class", status: pass}
-OUT-11: {path: "src/scan2scope/semantics/lift.py", artifact: "damage[].area, width, height, length", status: pass}
-OUT-12: {path: "src/scan2scope/rules/concealed_damage.yaml", artifact: "concealed_damage_flags[]", status: pass}
-OUT-13: {path: "src/scan2scope/rules/engine.py", artifact: "concealed_damage_flags[].rule_id", status: pass}
-OUT-14: {path: "src/scan2scope/scope/catalog.yaml", artifact: "scope[]", status: pass}
-OUT-15: {path: "src/scan2scope/scope/generator.py", artifact: "scope[].surface_id", status: pass}
-OUT-16: {path: "src/scan2scope/uncertainty", artifact: "every measurement has lo, hi", status: pass}
-OUT-17: {path: "src/scan2scope/cli.py", artifact: "scan2scope run CAPTURE", status: pass}
-OUT-18: {path: "src/scan2scope/output/schema.py", artifact: "validated on every run", status: pass}
-OUT-19: {path: "src/scan2scope/output/render.py", artifact: "plan.svg, plan.png, rooms/*.svg", status: pass}
-OUT-20: {path: "src/scan2scope/output/render.py", artifact: "one stitched plan per capture", status: pass}
-OUT-21: {path: "src/scan2scope/output/render.py", artifact: "consumer-style plan with dimensions", status: pass}
-OUT-22: {path: "src/scan2scope/stitch/solver.py", artifact: "unplaced rooms placed without overlap and flagged", status: pass}
-OUT-23: {path: "src/scan2scope/stitch", artifact: "adjacency from doors", status: partial, note: "shown on synthetic data only"}
-OUT-24: {path: "src/scan2scope/output/render.py", artifact: "wall labels on every room", status: pass}
-OUT-25: {path: "src/scan2scope/pipeline.py", artifact: "stitched plan from every tier", status: pass}
-OUT-26: {path: "src/scan2scope/cache.py", artifact: "--cache replay reproduces results; live MPS runs are not bit-identical", status: partial}
+OUT-01: {path: "schema/scan2scope.schema.json", artifact: "result.json contract", status: "pass", note: "all 18 final runs (6 real, 12 synthetic) wrote a schema-valid result.json"}
+OUT-02: {path: "src/scan2scope/layout", artifact: "rooms[] with polygon", status: "pass"}
+OUT-03: {path: "src/scan2scope/layout", artifact: "rooms[].walls[].length", status: "pass"}
+OUT-04: {path: "src/scan2scope/layout", artifact: "rooms[].ceiling_height", status: "pass"}
+OUT-05: {path: "src/scan2scope/layout", artifact: "rooms[].floor_area", status: "pass"}
+OUT-06: {path: "src/scan2scope/layout/openings.py", artifact: "rooms[].openings[] with type, wall_id, offset, width and height", status: "pass"}
+OUT-07: {path: "src/scan2scope/output/writer.py", artifact: "property block (footprint, extents, adjacency) and plan.svg", status: "pass", note: "multi-room plans come from the 12 synthetic LiDAR captures; no real multi-room capture"}
+OUT-08: {path: "src/scan2scope/layout", artifact: "property.adjacency from shared openings (stitch for photo rooms)", status: "partial", note: "adjacency exact on 9 of 12 synthetic LiDAR captures; the 3 misses are the strong-drift captures; photo-tier adjacency only in unit tests; no real multi-room capture"}
+OUT-09: {path: "src/scan2scope/semantics/lift.py", artifact: "damage[].surface_id", status: "pass"}
+OUT-10: {path: "src/scan2scope/semantics", artifact: "damage[].class", status: "pass"}
+OUT-11: {path: "src/scan2scope/semantics/lift.py", artifact: "damage[].area, width, height, length", status: "pass"}
+OUT-12: {path: "src/scan2scope/rules/concealed_damage.yaml", artifact: "11 rules; concealed_damage_flags[]", status: "pass"}
+OUT-13: {path: "src/scan2scope/rules/engine.py", artifact: "concealed_damage_flags[].rule_id and the inputs that fired it", status: "pass"}
+OUT-14: {path: "src/scan2scope/scope/catalog.yaml", artifact: "scope[]", status: "pass"}
+OUT-15: {path: "src/scan2scope/scope/generator.py", artifact: "scope[].surface_id", status: "pass"}
+OUT-16: {path: "schema/scan2scope.schema.json", artifact: "every measurement requires value, lo, hi and unit", status: "pass"}
+OUT-17: {path: "src/scan2scope/cli.py", artifact: "scan2scope run CAPTURE", status: "pass"}
+OUT-18: {path: "src/scan2scope/pipeline.py", artifact: "schema.validate runs before result.json is written", status: "pass"}
+OUT-19: {path: "src/scan2scope/output/render.py", artifact: "plan.svg, plan.png, rooms/*.svg", status: "pass"}
+OUT-20: {path: "src/scan2scope/output/render.py", artifact: "one plan.png of the whole property per capture", status: "pass"}
+OUT-21: {path: "src/scan2scope/output/render.py", artifact: "walls, door swings, wall labels with intervals, room area and ceiling, scale bar", status: "pass"}
+OUT-22: {path: "src/scan2scope/stitch/solver.py", artifact: "rooms that cannot be placed are laid out without overlap and flagged placement_uncertain", status: "partial", note: "LiDAR (synthetic): 58 of 60 room instances found and placed; the 2 missing are in strong-drift captures"}
+OUT-23: {path: "src/scan2scope/layout", artifact: "adjacency from shared openings; stitch for photo rooms", status: "partial", note: "LiDAR (synthetic): exact adjacency on 9 of 12 captures; in 2 strong-drift captures a room is missing, so it is not connected; photo rooms connect only in unit tests"}
+OUT-24: {path: "src/scan2scope/output/render.py", artifact: "every wall labelled with length and half-width; every room with area and ceiling height", status: "pass"}
+OUT-25: {path: "src/scan2scope/pipeline.py", artifact: "one plan per capture at every tier", status: "partial", note: "multi-room plans shown only on synthetic LiDAR; photo stitching only in unit tests; no multi-room video was captured"}
+OUT-26: {path: "src/scan2scope/cache.py", artifact: "content-keyed model-output cache", status: "partial", note: "live reruns of bedroom/photo_1 and bedroom/video_1 with every model output recomputed matched walls, ceilings, floor areas and intervals to 0.1 mm and gave the same damage regions, and reruns of 5 synthetic LiDAR captures reproduced the reported rows; the other four real captures were not rerun"}
 
-BENCH-01: {path: "bench/data", artifact: "own benchmark", status: pass}
-BENCH-02: {path: "bench/data/home/ground_truth.yaml", artifact: "composition", status: deviation, note: "one real room only (owner's time); multi-room shown on synthetic LiDAR captures"}
-BENCH-03: {path: "bench/synthetic", artifact: "synthetic 4-6 room properties", status: deviation, note: "no real multi-room capture"}
-BENCH-04: {path: "bench/synthetic", artifact: "hallway in every synthetic property", status: deviation, note: "synthetic only"}
-BENCH-05: {path: "bench/data/home", artifact: "furnished bedroom", status: pass}
-BENCH-06: {path: "bench/data/home", artifact: "paper crack taped to a wall", status: pass}
-BENCH-07: {path: "bench/data/home", artifact: "one staged class (crack)", status: deviation, note: "second class not staged"}
-BENCH-08: {path: "bench/data/home", artifact: "photo and video of the same room", status: deviation, note: "no LiDAR phone; LiDAR tier synthetic"}
-BENCH-09: {path: "bench/synthetic", artifact: "multi-room LiDAR only", status: deviation}
-BENCH-10: {path: "bench/data/home/raw/photo_1", artifact: "room folders", status: pass}
-BENCH-11: {path: "src/scan2scope/stitch", artifact: "no real multi-room photo set", status: deviation}
-BENCH-12: {path: "bench/data/home", artifact: "video_1 and video_2 of the same room", status: pass}
-BENCH-13: {path: "bench/data/home/ground_truth.yaml", artifact: "tape walls and ceiling", status: partial, note: "openings and damage extents not measured"}
-BENCH-14: {path: "bench/data/home/raw_manifest.json", artifact: "raw photos and videos as release assets (laptop screens blurred)", status: pass}
-BENCH-15: {path: "bench/data/home/ground_truth.yaml", artifact: "ground truth", status: pass}
-BENCH-16: {path: "docs/technical_report.md", artifact: "mirror and night window in the real room; glass on synthetic", status: partial, note: "no wet-look surface or low-light capture"}
+BENCH-01: {path: "bench/data/bedroom/ground_truth.yaml", artifact: "own benchmark: one real room in two copies plus 4 synthetic LiDAR properties", status: "pass"}
+BENCH-02: {path: "bench/data/bedroom/ground_truth.yaml", artifact: "composition", status: "deviation", note: "one real room only (owner's time); no real multi-room set, second damage class or LiDAR capture; multi-room and LiDAR come from synthetic captures"}
+BENCH-03: {path: "src/scan2scope/synth", artifact: "4 synthetic properties of 4 to 6 rooms, each with a hallway (scan2scope synth --properties 4 --seed 0)", status: "deviation", note: "no real multi-room capture"}
+BENCH-04: {path: "src/scan2scope/synth", artifact: "hallway in every synthetic property", status: "deviation", note: "synthetic only"}
+BENCH-05: {path: "bench/data/bedroom/ground_truth.yaml", artifact: "furnished bedroom: bed, desk and chair, wardrobe", status: "pass"}
+BENCH-06: {path: "bench/data/bedroom/ground_truth.yaml", artifact: "paper sheet with a drawn crack taped to a wall", status: "pass", note: "its size was not measured, so damage is not scored; the drawn line was not reported in the final runs (technical report section 9)"}
+BENCH-07: {path: "bench/data/bedroom/ground_truth.yaml", artifact: "one staged class (crack)", status: "deviation", note: "second class not staged"}
+BENCH-08: {path: "bench/data/bedroom/ground_truth.yaml", artifact: "photo and video of the same room", status: "deviation", note: "no LiDAR phone, so no real LiDAR capture; the LiDAR tier is benchmarked on synthetic captures"}
+BENCH-09: {path: "src/scan2scope/synth", artifact: "multi-room set at the LiDAR tier only", status: "deviation", note: "synthetic; no photo or video multi-room set"}
+BENCH-10: {path: "bench/data/bedroom/raw_manifest.json", artifact: "bedroom__photo_1.zip unpacks to raw/photo_1/01 bedroom", status: "deviation", note: "folder format followed for the one real room; there is no multi-room photo set"}
+BENCH-11: {path: "src/scan2scope/stitch", artifact: "no multi-room photo set to stitch", status: "deviation", note: "stitching shown only in unit tests"}
+BENCH-12: {path: "bench/data/bedroom/ground_truth.yaml", artifact: "video_1 (57 s, 1080p) and video_2 (49 s, 4K) of the same room", status: "pass"}
+BENCH-13: {path: "bench/data/bedroom/ground_truth.yaml", artifact: "tape: walls 162 and 142 in, ceiling 130 in", status: "partial", note: "openings and damage extents not measured; readings in whole inches and one ceiling point, where docs/ground_truth_protocol.md asks for millimetres and three ceiling points"}
+BENCH-14: {path: "bench/data/bedroom/raw_manifest.json", artifact: "photos and videos as 6 release assets (tag benchmark-data-v1, 331 MB) pinned by SHA-256", status: "pass", note: "laptop screens blurred, EXIF kept in the originals; bedroom_whatsapp holds the same captures after WhatsApp recompression"}
+BENCH-15: {path: "bench/data/bedroom/ground_truth.yaml", artifact: "ground truth for bedroom and bedroom_whatsapp", status: "pass"}
+BENCH-16: {path: "bench/data/bedroom/ground_truth.yaml", artifact: "real room has a small wall mirror and a window at night; synthetic windows have nothing behind them", status: "partial", note: "no wet-look surface and no low-light capture"}
 
-GATE-*: {path: "docs/benchmark_report.md", artifact: "gate tables per tier", status: partial, note: "see the benchmark report for pass or fail per gate"}
-GATE-01: {path: "bench/gates.yaml", artifact: "Round 1 gates not provided; own thresholds marked assumed", status: deviation}
-GATE-09: {path: "docs/benchmark_report.md", artifact: "ceiling bias or spread section", status: pass}
-GATE-12: {path: "docs/technical_report.md", artifact: "section 4 drift handling", status: pass}
-GATE-13: {path: "docs/benchmark_report.md", artifact: "drift ablation table", status: pass}
-GATE-14: {path: "src/scan2scope/geometry/drift.py", artifact: "poses corrected, never used as-is", status: pass}
-GATE-20: {path: "src/scan2scope/stitch", artifact: "multi-room photo path exists", status: partial, note: "not shown on real data"}
+GATE-01: {path: "bench/gates.yaml", artifact: "own thresholds; those the brief does not state are marked assumed: true", status: "deviation", note: "Round 1 gates not provided"}
+GATE-02: {path: "docs/benchmark_report.md", artifact: "opening_width gate", status: "fail", note: "LiDAR (synthetic): 61 of 202 scored openings within 2 cm (192 true openings plus 10 phantoms); 34 of the 95 matched were off by more. Photo and video not scored: the real room's openings were not measured"}
+GATE-03: {path: "docs/benchmark_report.md", artifact: "opening_width gate, pass share", status: "fail", note: "LiDAR (synthetic): 30.2% (61 of 202) against 85%. Photo and video not scored (real openings not measured)"}
+GATE-04: {path: "docs/benchmark_report.md", artifact: "missed openings scored as failures", status: "fail", note: "LiDAR (synthetic): 97 of the 192 true openings missed, every window among them; they are the largest part of the 141 failing items"}
+GATE-05: {path: "docs/benchmark_report.md", artifact: "phantom openings scored as failures", status: "fail", note: "LiDAR (synthetic): 10 phantom openings counted. Openings found in the real room are not scored, because none were measured"}
+GATE-06: {path: "docs/benchmark_report.md", artifact: "ceiling_height gate", status: "fail", note: "LiDAR (synthetic): 58 of 60 rooms within 1.5 cm (worst 0.5 cm), 2 rooms not found. Real room (tape 3.302 m): photo -65.4 and -58.9 cm, video -44.0 to -102.5 cm; none of the 6 captures is within the assumed 8% (photo) or 3% (video) bound"}
+GATE-07: {path: "docs/benchmark_report.md", artifact: "ceiling_spread gate", status: "partial", note: "LiDAR (synthetic): 20 of 20 rooms within 1 cm, max 0.6 cm, pass. Video (real): 58.5 cm (originals) and 39.3 cm (WhatsApp copies) between video_1 and video_2, fail. No repeat photo capture"}
+GATE-08: {path: "docs/benchmark_report.md", artifact: "ceiling accuracy and spread scored separately", status: "fail", note: "photo (real): biased, mean error -62.2 cm. Video (real): biased (-70.3 cm) and unrepeatable. LiDAR (synthetic): accurate and repeatable on the 58 rooms found; 2 rooms not found"}
+GATE-09: {path: "docs/benchmark_report.md", artifact: "Ceiling height: bias or spread section", status: "pass", note: "photo bias and video both (real); LiDAR neither on the rooms found (synthetic)"}
+GATE-10: {path: "docs/benchmark_report.md", artifact: "repeatability gate and table", status: "fail", note: "video (real): 1 of 8 wall pairs within max(1 cm, 0.5%), 0 of 8 under the strict min reading, worst 193.5 cm. LiDAR (synthetic): 155 of 232 (66.8%), strict 92 of 232, worst 389.1 cm. No repeat photo capture"}
+GATE-11: {path: "docs/benchmark_report.md", artifact: "repeat_structure gate", status: "fail", note: "video (real): 0 of 2 room pairs found the same walls (4 against 8, 4 against 6). LiDAR (synthetic): 36 of 56 room pairs; 2 strong-drift captures each lose a room"}
+GATE-12: {path: "docs/technical_report.md", artifact: "section 4, drift handling for LiDAR and video", status: "pass", note: "the multi-room captures are synthetic LiDAR"}
+GATE-13: {path: "docs/benchmark_report.md", artifact: "drift ablation table, correction on and off", status: "pass", note: "12 synthetic LiDAR captures, footprint error within 3.6% either way: with correction on it was smaller on 5 and larger on 7 (mean absolute 0.92% on, 0.87% off), and the mean wall error was higher on 8 (worst synth_3/lidar_drift, 19.9 cm on against 2.1 cm off). No real multi-room capture"}
+GATE-14: {path: "docs/benchmark_report.md", artifact: "drift_ablation gate and per-capture drift records", status: "pass", note: "correction ran on all 12 synthetic LiDAR captures (17 to 71 of 120 loop closures accepted) and all 4 real videos; on the public office recording it accepted 71 of 122 loop closures"}
+GATE-15: {path: "tests/test_stitch.py", artifact: "stitch tests on synthetic rooms with a stand-in for MapAnything", status: "partial", note: "not measured on benchmark data: no multi-room photo capture, so the photo stitch gate is n.a. in both reports; each real photo capture (one room folder) gave one plan"}
+GATE-16: {path: "tests/test_stitch.py", artifact: "adjacency asserted against the true layout", status: "partial", note: "not measured: the benchmark has no multi-room photo capture, real or synthetic"}
+GATE-17: {path: "src/scan2scope/stitch/solver.py", artifact: "no overlap as a hard constraint; the tests assert under 0.05 m2", status: "partial", note: "not measured: the benchmark has no multi-room photo capture, real or synthetic"}
+GATE-18: {path: "docs/benchmark_report.md", artifact: "photo footprint", status: "fail", note: "no multi-room photo capture, real or synthetic. On the one real room the footprint (its floor area) was -11.5% (originals) and -7.8% (WhatsApp copy) off the tape: 1 of 2 within 8%"}
+GATE-19: {path: "docs/benchmark_report.md", artifact: "photo footprint intervals", status: "partial", note: "real room: both photo floor-area intervals contain the tape area, mean half-width 7.44 m2 on 14.84 m2; one room is too few to show calibration"}
+GATE-20: {path: "src/scan2scope/stitch", artifact: "multi-room photo path: doorway-photo registration, door matching, no-overlap solver", status: "partial", note: "passes its unit tests on synthetic rooms; the benchmark has no multi-room photo capture, real or synthetic"}
+GATE-21: {path: "docs/benchmark_report.md", artifact: "photo wall_length gate", status: "pass", note: "real room: 8 of 8 walls within 8%, worst -7.5% (WhatsApp copy); one room, so 4 walls in two copies of the same 5 photos"}
+GATE-22: {path: "docs/benchmark_report.md", artifact: "photo wall-length coverage", status: "partial", note: "real room: 8 of 8 intervals contain the tape length, mean half-width 1.01 m against a mean error of 0.20 m; one room (two copies) is too few to show calibration, and q stays at its prior 1.0"}
+GATE-23: {path: "docs/benchmark_report.md", artifact: "video wall_length gate", status: "fail", note: "real room: 1 of 16 walls within 3%; worst -209.7 cm (-58.1%) on video_2"}
+GATE-24: {path: "docs/benchmark_report.md", artifact: "calibration section per tier", status: "partial", note: "scored at all three tiers. Photo 14/14 and video 25/28 values covered on the real room, too few rooms to show calibration; LiDAR (synthetic) 479/560 (85.5%), 95% CI [82.3%, 88.3%] excludes 0.90, fail"}
 
-H2H-*: {path: "bench/data/home/magicplan/room.ifc", artifact: "magicplan free-plan export contained no room geometry", status: fail, note: "head-to-head not done"}
-H2H-05: {path: "docs/benchmark_report.md", artifact: "magicplan (free Starter plan)", status: partial}
+H2H-*: {path: "docs/benchmark_report.md", artifact: "Head-to-head against magicplan: not done", status: "fail", note: "no LiDAR tier on a real room, and the one magicplan export has no room geometry; no other app's data was captured"}
+H2H-05: {path: "README.md", artifact: "magicplan, free Starter plan", status: "partial", note: "named, but no comparison was made"}
+H2H-06: {path: "docs/benchmark_report.md", artifact: "app version not recorded", status: "fail"}
+H2H-07: {path: "bench/data/bedroom/magicplan/room.ifc", artifact: "the one magicplan export (IFC, 1,978 bytes)", status: "partial", note: "submitted, but it holds a project and a building with no spaces, walls, doors or windows"}
+H2H-12: {path: "README.md", artifact: "free Starter plan used", status: "partial", note: "the comparison failed on the export's missing geometry, and no other free app's data was captured"}
 
-FIX-*: {path: "docs/fixloop", artifact: "declaration, before and after runs, diff, post-mortem", status: pass}
-FIX-13: {path: "docs/fixloop/postmortem.md", artifact: "why the gate stayed failing and the prediction missed", status: pass}
+FIX-01: {path: "docs/fixloop/declaration.md", artifact: "one page, 671 words, tag fixloop-declared", status: "pass"}
+FIX-02: {path: "docs/fixloop/declaration.md", artifact: "section 1: LiDAR repeatability, rank 1 under the committed ranking rule", status: "pass", note: "the benchmark then held only the synthetic LiDAR set; in the final reports it still ranks first (score 195.3, against 106.3 for the real room's top failing gate, video repeatability)"}
+FIX-03: {path: "docs/fixloop/declaration.md", artifact: "34.7% (82 of 236 wall pairs)", status: "pass"}
+FIX-04: {path: "docs/fixloop/declaration.md", artifact: "section 2: layout makes repeat captures disagree (shared wall lines, steps, furniture notches)", status: "pass"}
+FIX-05: {path: "docs/fixloop/declaration.md", artifact: "section 2: wall-count errors and the noise check on rectangle pairs", status: "pass"}
+FIX-06: {path: "docs/fixloop/declaration.md", artifact: "section 3: per-room wall refit, step removal, furniture filter", status: "pass"}
+FIX-07: {path: "docs/fixloop/declaration.md", artifact: "85% predicted (75 to 95%)", status: "pass"}
+FIX-08: {path: "src/scan2scope/layout/refine.py", artifact: "tag fixloop-after (4f7a16e, 9b98d00, a8b11e2, 9661e65), layout code and tests only", status: "pass"}
+FIX-09: {path: "docs/fixloop/before", artifact: "benchmark report and gates at fixloop-before", status: "pass"}
+FIX-10: {path: "docs/fixloop/after", artifact: "benchmark report and gates at fixloop-after", status: "pass"}
+FIX-11: {path: "scripts/fixloop.sh", artifact: "benchmarks both tags from clean worktrees on the seeded synthetic set", status: "pass"}
+FIX-12: {path: "docs/fixloop/diff.md", artifact: "gate table and code diff written by scripts/fixloop.sh", status: "pass"}
+FIX-13: {path: "docs/fixloop/postmortem.md", artifact: "why the gate still fails and the prediction missed", status: "pass", note: "after 155/232 (66.8%) against the predicted 85%; pose drift left after correction (0.9 to 5.9 cm RMS camera error) was underweighted"}
+FIX-14: {path: "docs/fixloop/declaration.md", artifact: "tag fixloop-declared (4b544c2) committed at 18:41 IST, before the fix commits at 20:01 to 20:07 IST", status: "pass"}
 
-PROC-*: {path: "git history", artifact: "incremental commits and merges since 2026-10-03", status: pass}
-PROC-06: {path: "docs/design.md", artifact: "decision log", status: n/a, note: "defended live"}
+PROC-01: {path: "git log main", artifact: "203 commits and 13 merges between 2026-10-03 13:20 and 2026-10-04 00:43 IST", status: "pass"}
+PROC-02: {path: "git log main", artifact: "one change per commit, messages say what changed", status: "pass"}
+PROC-03: {path: "git log main", artifact: "commits spread over the build, feature branches merged into main", status: "pass"}
+PROC-04: {path: "git log main", artifact: "every commit authored by abhayraihal", status: "pass"}
+PROC-05: {path: "README.md", artifact: "AI assistance section", status: "n/a", note: "permission, nothing to deliver"}
+PROC-06: {path: "docs/design.md", artifact: "decision log with alternatives and reasons", status: "n/a", note: "defended live"}
 
-DEL-01: {path: "docs/compliance_matrix.md", artifact: "this matrix", status: pass}
-DEL-02: {path: "docs/capture_protocol.md", artifact: "one-page protocol", status: pass}
-DEL-03: {path: "docs/device_matrix.md", artifact: "device matrix", status: pass}
-DEL-04: {path: "README.md", artifact: "clean-machine steps with measured time", status: pass}
-DEL-05: {path: "README.md", artifact: "scan2scope run CAPTURE", status: pass}
-DEL-06: {path: "README.md", artifact: "fetch-weights, benchmark_data.py fetch, synth, bench", status: pass}
-DEL-07: {path: "src/scan2scope/cache.py", artifact: "content-keyed cache with replay", status: pass}
-DEL-08: {path: "src/scan2scope/cache.py", artifact: "live path is the default", status: pass}
-DEL-09: {path: "docs/benchmark_report.md", artifact: "gate tables for photo, video, lidar", status: pass}
-DEL-10: {path: "docs/benchmark_report.md", artifact: "repeatability table", status: pass}
-DEL-11: {path: "docs/benchmark_report.md", artifact: "head-to-head table", status: fail, note: "no app export with geometry"}
-DEL-12: {path: "docs/benchmark_report.md", artifact: "timing table", status: pass}
-DEL-13: {path: "docs/fixloop", artifact: "fix loop bundle", status: pass}
-DEL-14: {path: "docs/technical_report.md", artifact: "six-page limit", status: pass}
-DEL-15: {path: "docs/technical_report.md", artifact: "section 2", status: pass}
-DEL-16: {path: "docs/technical_report.md", artifact: "section 3", status: pass}
-DEL-17: {path: "docs/technical_report.md", artifact: "section 4", status: pass}
-DEL-18: {path: "docs/technical_report.md", artifact: "error budget", status: pass}
-DEL-19: {path: "docs/technical_report.md", artifact: "calibration analysis", status: pass}
-DEL-20: {path: "docs/technical_report.md", artifact: "fix loop", status: pass}
-DEL-21: {path: "docs/technical_report.md", artifact: "known failure modes", status: pass}
-DEL-22: {path: "bench/data/home/raw_manifest.json", artifact: "raw photos and videos; synthetic LiDAR regenerated by seed", status: pass}
-DEL-23: {path: "bench/data/home/ground_truth.yaml", artifact: "ground truth", status: pass}
-DEL-24: {path: "bench/data/home/magicplan/room.ifc", artifact: "the only app export", status: partial}
+DEL-01: {path: "docs/compliance_matrix.md", artifact: "this matrix, 191 rows, one per atomic requirement", status: "pass"}
+DEL-02: {path: "docs/capture_protocol.md", artifact: "one-page protocol", status: "pass"}
+DEL-03: {path: "docs/device_matrix.md", artifact: "device matrix", status: "pass"}
+DEL-04: {path: "README.md", artifact: "clean-machine steps with measured time", status: "pass", note: "measured 2026-10-03 from a fresh clone with empty caches at about 11 MB/s: clone 6 s, uv sync 75 s, fetch-weights 579 s, doctor 19 s, first photo run about 50 s (65 s at 7d26d19), 12 to 12.5 minutes in all"}
+DEL-05: {path: "README.md", artifact: "uv run scan2scope run CAPTURE", status: "pass"}
+DEL-06: {path: "README.md", artifact: "Reproduce the reported numbers section, and technical report section 8", status: "partial", note: "covers the real room, the synthetic set, the fix loop, the office recording with and without --no-drift and the synthetic conformal fit; the per-stage drift rows and the ARKitScenes figures are reported but not scripted, and the pre-fix WhatsApp figure (a94ee18) comes from an unpublished copy"}
+DEL-07: {path: "src/scan2scope/cache.py", artifact: "content-keyed cache with replay", status: "pass", note: "unit tests show stored outputs replay exactly and a replay miss raises; replay works only on the machine that stored the outputs"}
+DEL-08: {path: "src/scan2scope/cli.py", artifact: "--cache live is the default for run and bench", status: "pass"}
+DEL-09: {path: "docs/benchmark_report.md", artifact: "gate tables for photo, video and LiDAR", status: "pass", note: "photo and video on the real room, LiDAR on synthetic captures"}
+DEL-10: {path: "docs/benchmark_report.md", artifact: "repeatability tables", status: "pass", note: "video (real) 8 wall pairs, LiDAR (synthetic) 232; no repeat photo capture"}
+DEL-11: {path: "docs/benchmark_report.md", artifact: "head-to-head section", status: "fail", note: "no comparison: the one app export has no room geometry"}
+DEL-12: {path: "docs/benchmark_report.md", artifact: "timing table, seconds per stage for every run", status: "pass"}
+DEL-13: {path: "docs/fixloop", artifact: "declaration, before and after runs, diff, post-mortem", status: "pass"}
+DEL-14: {path: "docs/technical_report.md", artifact: "six-page limit", status: "pass", note: "2,207 words of prose and 8 tables (47 rows, 782 words): 6 A4 pages at 11 pt with 9.5 pt tables and 2 cm margins, rendered with pandoc and Chrome"}
+DEL-15: {path: "docs/technical_report.md", artifact: "section 2, architecture", status: "pass"}
+DEL-16: {path: "docs/technical_report.md", artifact: "section 3, tiers and devices", status: "pass"}
+DEL-17: {path: "docs/technical_report.md", artifact: "section 4, drift handling with the on and off and per-stage ablations", status: "pass"}
+DEL-18: {path: "docs/technical_report.md", artifact: "section 5, error budget: measured magnitude per source and tier", status: "pass"}
+DEL-19: {path: "docs/technical_report.md", artifact: "section 5, calibration: coverage per tier and why q stays at 1.0", status: "pass"}
+DEL-20: {path: "docs/technical_report.md", artifact: "section 7, fix loop: before, after and predicted, and why it fell short", status: "pass"}
+DEL-21: {path: "docs/technical_report.md", artifact: "section 9, known failure modes", status: "pass"}
+DEL-22: {path: "bench/data/bedroom/raw_manifest.json", artifact: "photo and video files of the real room as release assets; synthetic LiDAR regenerated from seed 0", status: "pass", note: "laptop screens blurred; no real LiDAR log exists"}
+DEL-23: {path: "bench/data/bedroom/ground_truth.yaml", artifact: "ground truth", status: "pass"}
+DEL-24: {path: "bench/data/bedroom/magicplan/room.ifc", artifact: "the one app export", status: "partial", note: "committed, but it has no room geometry"}
 
-WALK-*: {path: "docs/walkin_runbook.md", artifact: "cold-run procedure", status: pass}
-WALK-02: {path: "docs/device_matrix.md", artifact: "any iPhone 15 or newer; LiDAR on Pro models", status: pass}
-WALK-07: {path: "docs/walkin_runbook.md", artifact: "measured run times", status: pass}
+WALK-01: {path: "docs/walkin_runbook.md", artifact: "cold-run procedure", status: "n/a", note: "condition of the defense; there are no per-space settings to tune (WALK-05)"}
+WALK-02: {path: "docs/device_matrix.md", artifact: "photo and video on any iPhone 15 or newer, LiDAR on Pro models", status: "partial", note: "tested on one phone, an iPhone 17; the protocol has the evaluator check for a Pro model first"}
+WALK-03: {path: "docs/capture_protocol.md", artifact: "one section per tier; the tier is detected from the files", status: "pass"}
+WALK-04: {path: "docs/capture_protocol.md", artifact: "numbered literal steps", status: "partial", note: "not yet followed by a third person (CAP-15)"}
+WALK-05: {path: "README.md", artifact: "one command per capture with no per-space settings", status: "pass"}
+WALK-06: {path: "src/scan2scope/cli.py", artifact: "--cache live is the default; the models run on any input not seen before", status: "pass"}
+WALK-07: {path: "docs/benchmark_report.md", artifact: "timing tables", status: "pass", note: "real room, live at 226bcff: photo 18.8 and 55.6 s (5 photos), video 162 to 179 s for 49 to 57 s clips; the slower damage detection merged at 8df5f97 raises the estimate to 29 to 64 s and 207 to 230 s, and live runs at 7d26d19 with other jobs running took 65 s (bedroom/photo_1) and 264 s (bedroom/video_1); synthetic LiDAR 14.5 to 22.3 s without damage detection"}
+WALK-08: {path: "docs/walkin_runbook.md", artifact: "console table whose ids match the plan labels", status: "pass"}
+WALK-09: {path: "docs/walkin_runbook.md", artifact: "commands for all three tiers", status: "pass", note: "the LiDAR tier has run on synthetic captures and the public Stray Scanner office recording, never on a capture made with this protocol"}
 
-CON-01: {path: "docs/capture_protocol.md", artifact: "phone only, no props", status: pass}
-CON-02: {path: "README.md", artifact: "models table", status: pass}
-CON-03: {path: "README.md", artifact: "datasets used for development disclosed in the technical report", status: pass}
-CON-04: {path: "README.md", artifact: "no external APIs", status: n/a}
-CON-05: {path: "README.md", artifact: "runs locally after fetch-weights", status: pass}
-CON-06: {path: "bench/gates.yaml", artifact: "Round 1 constraints not provided", status: deviation}
-CON-07: {path: "src/scan2scope/weights.py", artifact: "fetch-weights with SHA-256", status: pass}
-CON-08: {path: "scripts/benchmark_data.py", artifact: "release assets with SHA-256 manifest", status: pass}
-CON-09: {path: "src/scan2scope/pipeline.py", artifact: "mirror detections reject phantom windows; real room has a mirror", status: partial}
-CON-10: {path: "src/scan2scope/layout/openings.py", artifact: "windows from see-through evidence; night window in the real room", status: partial}
-CON-11: {path: "docs/technical_report.md", artifact: "failure mode described", status: partial, note: "no wet-look capture"}
-CON-12: {path: "src/scan2scope/uncertainty", artifact: "low-light flag widens intervals", status: partial, note: "no low-light capture"}
+CON-01: {path: "docs/capture_protocol.md", artifact: "handheld phone only, no props", status: "pass"}
+CON-02: {path: "README.md", artifact: "models table with versions and licences", status: "pass"}
+CON-03: {path: "README.md", artifact: "Models, data and tools table: ARKitScenes (3 validation scans) and the vslamlab/strayscanner office recording, both kept local", status: "pass", note: "also named in technical report section 1"}
+CON-04: {path: "README.md", artifact: "no external APIs", status: "n/a", note: "weights and benchmark data are plain downloads"}
+CON-05: {path: "README.md", artifact: "runs locally; only fetch-weights and benchmark_data.py fetch use the network", status: "pass"}
+CON-06: {path: "bench/gates.yaml", artifact: "Round 1 constraints not provided", status: "deviation"}
+CON-07: {path: "src/scan2scope/weights.py", artifact: "fetch-weights at pinned Hugging Face revisions, checked by SHA-256 or git blob id", status: "pass", note: "the DINOv2 hub code comes from its main branch, not a pinned commit (README.md says so)"}
+CON-08: {path: "scripts/benchmark_data.py", artifact: "6 release zips (331 MB) checked against the SHA-256 in each raw_manifest.json", status: "pass"}
+CON-09: {path: "src/scan2scope/pipeline.py", artifact: "openings at a detected mirror are dropped; the real room has a wall mirror", status: "partial", note: "at 7d26d19 no real capture loses an opening to a mirror detection (at 226bcff one did, in bedroom_whatsapp/video_1); openings were not measured, so neither case is scored"}
+CON-10: {path: "src/scan2scope/layout/openings.py", artifact: "windows from see-through evidence; the real room has a window at night", status: "partial", note: "the LiDAR tier found none of the 84 synthetic windows, which have nothing behind them in depth range; only the two real video_2 copies reported a window, size not measured"}
+CON-11: {path: "docs/technical_report.md", artifact: "section 9, wet-look surfaces", status: "partial", note: "no wet floor was captured. The room's glossy tile floor made joints score up to 0.56 as cracks, so floor cracks now need 3 views and a 0.75 score, a bar set on this room; on ARKitScenes a glossy-tile highlight was taken for a water stain"}
+CON-12: {path: "src/scan2scope/uncertainty/model.py", artifact: "low light read from photo EXIF (ISO, exposure) multiplies the additive error term by 1.3", status: "partial", note: "video and LiDAR have no low-light check; no low-light capture"}
 
-SCORE-*: {path: "docs/compliance_matrix.md", artifact: "scoring rule", status: n/a}
+SCORE-*: {path: "docs/requirements.yaml", artifact: "scoring rule", status: "n/a"}
+SCORE-08: {path: "docs/benchmark_report.md", artifact: "confident_garbage gate", status: "n/a", note: "misses larger than 2 half-widths: 0 of 14 photo and 0 of 28 video values (real); 38 of 560 LiDAR values (synthetic)"}
+SCORE-10: {path: "docs/fixloop/postmortem.md", artifact: "fix loop result", status: "n/a", note: "LiDAR repeatability moved from 34.7% to 66.8% without passing; the post-mortem says why"}
