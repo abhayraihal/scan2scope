@@ -1,3 +1,5 @@
+import json
+import stat
 import zipfile
 from pathlib import Path
 
@@ -99,6 +101,7 @@ def test_photo_property(property_scan, tmp_path):
     assert "photo_count_low:02 kitchen" in info.flags and "photo_count_high:10 bath" in info.flags
     assert "exif_focal_missing" in info.flags and "unsupported_files_skipped:1" in info.flags
     assert info.input_stats["photos_without_focal"] == 1
+    json.dumps({"device": info.device, "input_stats": info.input_stats, "flags": info.flags})  # goes into result.json
 
 
 def test_single_room_folder_and_wrapper_folder(property_scan, tmp_path):
@@ -134,6 +137,7 @@ def test_video_file_and_folder_with_one_video(tmp_path):
     assert (s["width"], s["height"], s["n_frames"]) == (64, 48, 60)
     assert info.device["model"] == "iPhone 17" and info.device["focal_35mm"] == 26.0
     assert "video_focal_missing" not in info.flags
+    json.dumps({"device": info.device, "input_stats": info.input_stats})
     (tmp_path / "walk" / "readme.txt").write_text("x")
     tier, root, info = detect_capture(tmp_path / "walk", work_dir=tmp_path / "w")
     assert (tier, root) == ("video", v) and "unsupported_files_skipped:1" in info.flags
@@ -201,11 +205,16 @@ def test_zip_path_traversal_is_blocked(tmp_path):
     photo(src / "01 hallway" / "a.jpg")
     photo(src / "01 hallway" / "b.jpg")
     z = zip_dir(src, tmp_path / "scan.zip", extra={"../evil.txt": b"x", "/abs.txt": b"x", "a/../../evil2.txt": b"x"})
+    with zipfile.ZipFile(z, "a") as zf:
+        link = zipfile.ZipInfo("01 hallway/link.jpg")
+        link.external_attr = (stat.S_IFLNK | 0o777) << 16
+        zf.writestr(link, "../../../../etc/hosts")
     work = tmp_path / "deep" / "work"
     tier, _, info = detect_capture(z, work_dir=work)
-    assert tier == "photo" and "zip_unsafe_entries_skipped:3" in info.flags
+    assert tier == "photo" and "zip_unsafe_entries_skipped:4" in info.flags
     assert not (tmp_path / "deep" / "evil.txt").exists() and not (work / "evil.txt").exists()
     assert not list(tmp_path.rglob("evil*.txt")) and not list(tmp_path.rglob("abs.txt"))
+    assert not list(work.rglob("link.jpg"))
 
 
 def test_zip_of_room_folders_and_zip_of_one_room(tmp_path):

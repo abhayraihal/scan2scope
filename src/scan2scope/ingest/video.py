@@ -120,13 +120,15 @@ def probe(path: str | Path) -> VideoInfo:
 
     try:
         container = av.open(str(path))
-    except Exception as exc:
+    except (av.error.FFmpegError, OSError) as exc:
         raise ValueError(f"cannot read {path} as a video: {exc}") from exc
     with container:
         if not container.streams.video:
             raise ValueError(f"{path} has no video stream")
         stream = container.streams.video[0]
         cc = stream.codec_context
+        if cc is None:
+            raise ValueError(f"{path}: no decoder for its video codec")
         fps = _fps(stream)
         n_frames = int(stream.frames or 0)
         duration = 0.0
