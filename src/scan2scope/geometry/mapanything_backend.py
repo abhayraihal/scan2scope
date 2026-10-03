@@ -275,17 +275,27 @@ class MapAnythingRunner:
             return self._run(imgs, Km, target)
 
         arrays = cache.compute(full_key, run) if cache is not None else run()
+        bad = [i for i in range(n) if not (np.isfinite(arrays["T_wc"][i]).all() and np.isfinite(arrays["K"][i]).all())]
+        if bad:  # fp16 overflow can leave a view without a usable pose; keep it, empty
+            flags.append("invalid_view:" + ",".join(map(str, bad)))
+            log.warning("MapAnything returned a non-finite pose or intrinsics for views %s", bad)
+        ms = np.asarray(arrays["metric_scale"], float)
         preds = []
         for i in range(n):
             (w2, h2), crop = geoms[i]
             pts = np.asarray(arrays["pts3d"][i], np.float32)
-            mask = np.asarray(arrays["mask"][i], bool) & np.isfinite(pts).all(-1)
+            mask = np.asarray(arrays["mask"][i], bool) & np.isfinite(pts).all(-1) & (i not in bad)
+            T_wc, K = np.asarray(arrays["T_wc"][i], float), np.asarray(arrays["K"][i], float)
+            if i in bad:
+                T_wc = np.eye(4)
+                K = np.array([[0.8 * target[0], 0.0, (target[0] - 1) / 2], [0.0, 0.8 * target[0], (target[1] - 1) / 2],
+                              [0.0, 0.0, 1.0]])
             preds.append(ViewPrediction(
                 pts3d=np.where(mask[..., None], pts, 0.0).astype(np.float32),
-                conf=np.nan_to_num(np.asarray(arrays["conf"][i], np.float32), nan=1.0),
-                mask=mask, T_wc=np.asarray(arrays["T_wc"][i], float), K=np.asarray(arrays["K"][i], float),
-                metric_scale=float(arrays["metric_scale"][i]), image_size=sizes[i], resized_size=(w2, h2),
-                crop=crop, intrinsics_given=Km[i] is not None,
+                conf=np.nan_to_num(np.asarray(arrays["conf"][i], np.float32), nan=1.0, posinf=1.0, neginf=1.0),
+                mask=mask, T_wc=T_wc, K=K,
+                metric_scale=float(ms[i]) if np.isfinite(ms[i]) else 1.0, image_size=sizes[i],
+                resized_size=(w2, h2), crop=crop, intrinsics_given=Km[i] is not None,
                 meta={"flags": list(flags), "crop_fraction": round(cropped[i], 4)},
             ))
         return preds

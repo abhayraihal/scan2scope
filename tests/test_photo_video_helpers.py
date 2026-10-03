@@ -186,6 +186,24 @@ def test_runner_infer_caches_and_builds_predictions(monkeypatch):
         runner.infer([])
 
 
+def test_runner_neutralises_non_finite_views(monkeypatch):
+    runner = mb.MapAnythingRunner()
+
+    def fake_run(imgs, Km, target):
+        n, (w, h) = len(imgs), target
+        T = np.tile(np.eye(4), (n, 1, 1))
+        T[1, 0, 3] = np.nan
+        return {"pts3d": np.ones((n, h, w, 3), np.float32), "conf": np.full((n, h, w), np.inf, np.float32),
+                "mask": np.ones((n, h, w), bool), "T_wc": T, "K": np.tile(np.eye(3), (n, 1, 1)),
+                "metric_scale": np.array([2.0, np.nan])}
+
+    monkeypatch.setattr(runner, "_run", fake_run)
+    preds = runner.infer([np.zeros((30, 40, 3), np.uint8)] * 2)
+    assert "invalid_view:1" in preds[0].meta["flags"]
+    assert np.isfinite(preds[1].T_wc).all() and not preds[1].mask.any() and preds[1].metric_scale == 1.0
+    assert preds[0].mask.all() and np.isfinite(preds[0].conf).all() and preds[0].metric_scale == 2.0
+
+
 # ------------------------------------------------------------------------------------------- photo helpers
 
 
