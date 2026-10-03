@@ -311,6 +311,57 @@ def find_doorway_photos(room: StitchRoom, *, min_score: float = 0.3, per_door: i
     return out
 
 
+def _ray_exit(P: np.ndarray, c: np.ndarray, f: np.ndarray) -> tuple[np.ndarray, np.ndarray] | None:
+    """Where the ray c + t f (t > 0) first crosses the CCW polygon P, and that edge's inward normal."""
+    best = None
+    for k in range(len(P)):
+        a, d = P[k], P[(k + 1) % len(P)] - P[k]
+        det = d[0] * f[1] - f[0] * d[1]
+        if abs(det) < 1e-12:
+            continue
+        r = a - c
+        t = (d[0] * r[1] - r[0] * d[1]) / det
+        s = (f[0] * r[1] - r[0] * f[1]) / det
+        if t > 1e-6 and -1e-9 <= s <= 1 + 1e-9 and (best is None or t < best[0]):
+            best = (t, k)
+    if best is None:
+        return None
+    t, k = best
+    d = (P[(k + 1) % len(P)] - P[k]) / np.linalg.norm(P[(k + 1) % len(P)] - P[k])
+    return c + t * f, np.array([-d[1], d[0]])
+
+
+def find_open_views(room: StitchRoom, *, max_photos: int = 2, min_beyond: float = 0.25) -> list[DoorwayPhoto]:
+    """Doorway photos for a room whose layout found no door at all: views whose point map lies mostly beyond
+    the room polygon. The point where the optical axis leaves the room stands in for the door."""
+    if room.doors or room.scene is None:
+        return []
+    P = room_polygon(room.room)
+    if P is None:
+        return []
+    outside = Polygon(P).buffer(0.3)
+    cands = []
+    for k, v in enumerate(room.scene.views):
+        if not _pose_ok(v) or v.pointmap is None or np.ndim(v.pointmap) != 3:
+            continue
+        T = np.asarray(v.T_wc, float)
+        nf = float(np.linalg.norm(T[:2, 2]))
+        hit = _ray_exit(P, T[:2, 3], T[:2, 2] / nf) if nf >= 0.3 else None
+        if hit is None:
+            continue
+        pts = np.asarray(v.pointmap, float).reshape(-1, 3)
+        ok = np.isfinite(pts).all(1)
+        if v.valid is not None and np.size(v.valid) == len(pts):
+            ok &= np.asarray(v.valid).reshape(-1).astype(bool)
+        if ok.sum() < 20:
+            continue
+        beyond = 1.0 - float(shapely.contains_xy(outside, pts[ok, 0], pts[ok, 1]).mean())
+        if beyond >= min_beyond:
+            cands.append((beyond, k, Door(None, "opening", hit[0], hit[1], 0.8, None, 0.0, virtual=True)))
+    cands.sort(key=lambda c: (-c[0], c[1]))
+    return [DoorwayPhoto(room.index, room.scene.views[k], door, b) for b, k, door in cands[:max_photos]]
+
+
 def _posed_views(room: StitchRoom) -> list[CameraView]:
     return [v for v in room.scene.views if _pose_ok(v)] if room.scene is not None else []
 
@@ -473,7 +524,9 @@ def match_door(room_b: StitchRoom, door_a: Door, oa_b: np.ndarray, na_b: np.ndar
         along = float(rel @ db.tangent)
         ang = float(np.degrees(np.arccos(np.clip(-(na_b @ db.normal), -1.0, 1.0))))
         dev = max(lo - 0.03 - across, across - hi - 0.05, 0.0)
-        f = np.exp(-0.5 * ((along / 0.2) ** 2 + (dev / 0.15) ** 2 + (ang / 20.0) ** 2))
+        # a virtual door's centre is only where the optical axis left the room
+        s_along = 0.5 if door_a.virtual else 0.2
+        f = np.exp(-0.5 * ((along / s_along) ** 2 + (dev / 0.15) ** 2 + (ang / 20.0) ** 2))
         f *= np.exp(-0.5 * ((1.0 - ratio) / 0.12) ** 2)
         if best is None or f > best.factor:
             best = DoorHit(db, float(f), along, across, ang)
@@ -512,7 +565,7 @@ def register_photo(room_a: StitchRoom, photo: DoorwayPhoto, room_b: StitchRoom, 
     oa_b = c_bd[:2] + s_ba * Rz @ (door_a.center - c_ad[:2])
     na_b = Rz @ door_a.normal
     hit = match_door(room_b, door_a, oa_b, na_b)
-    if hit.door is not None:
+    if hit.door is not None and not door_a.virtual:
         # the door pair fixes the yaw and the along-wall position; the wall thickness is the registration's
         # estimate shrunk towards the prior by how well the run's cameras aligned
         theta, delta, snapped = snap_yaw(facing_yaw(door_a, hit.door), room_a.manhattan, room_b.manhattan)
@@ -591,7 +644,7 @@ def register_doorways(rooms: list[StitchRoom], runner: RunnerFn, cache: Any, *, 
     Candidates are tried best first across all photos; a photo stops once it lands on a candidate's door with
     at least settle_score.
     """
-    photos = [p for r in rooms for p in find_doorway_photos(r)]
+    photos = [p for r in rooms for p in find_doorway_photos(r) + find_open_views(r)]
     queue = sorted((rank, -p.score, pi, b) for pi, p in enumerate(photos)
                    for rank, b in enumerate(rank_candidates(rooms, p, hints)[:per_photo]))
     runs: dict[tuple, Any] = {}

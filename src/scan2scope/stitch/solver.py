@@ -69,13 +69,14 @@ def snap_yaw(theta: float, m_a: float, m_b: float, tol: float = np.radians(5.0))
 class Door:
     """A door or open passage of one room, in that room's plan frame."""
 
-    id: str
+    id: str | None
     type: str
     center: np.ndarray
     normal: np.ndarray  # unit, pointing into the room
     width: float
     height: float | None
     confidence: float
+    virtual: bool = False  # stands in for a door the layout did not find; no opening id
 
     @property
     def tangent(self) -> np.ndarray:
