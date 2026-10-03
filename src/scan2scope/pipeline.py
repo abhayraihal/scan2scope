@@ -171,6 +171,7 @@ def run_capture(
 
     with timer.stage("uncertainty"):
         quality = {"tier": tier, "scale_log_sigma": max((s.scale_log_sigma for s in scenes), default=0.0),
+                   "flags": list(info.flags) + list(stage_errors),
                    "scenes": [{"room_hint": s.room_hint, **s.meta.get("quality", {})} for s in scenes]}
         annotate(plan, damage, tier=tier, quality=quality)
 

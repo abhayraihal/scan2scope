@@ -122,6 +122,26 @@ def _level(z: np.ndarray, w_fit: np.ndarray, peaks: list[Peak], pick: str, sigma
     return Level(z=c, rms=rms, sigma=s, n=int(m.sum()), window=win)
 
 
+def _spans(xy: np.ndarray) -> tuple[float, float]:
+    """5-95 percentile extent of points along their two principal axes (larger first)."""
+    if len(xy) < 20:
+        return 0.0, 0.0
+    c = xy - xy.mean(0)
+    _, _, vt = np.linalg.svd(c[:: max(1, len(c) // 5000)], full_matrices=False)
+    proj = c @ vt.T
+    span = np.percentile(proj, 95, axis=0) - np.percentile(proj, 5, axis=0)
+    return float(span[0]), float(span[1])
+
+
+def _covers(xy: np.ndarray, room_span: tuple[float, float]) -> bool:
+    """A ceiling candidate must spread over the room, not be a door or window head a wall thick."""
+    a, b = _spans(xy)
+    if min(a, b) >= 1.2:
+        return True
+    ra, rb = room_span
+    return ra > 0 and rb > 0 and a >= 0.35 * ra and b >= 0.35 * rb
+
+
 def estimate(z: np.ndarray, nz: np.ndarray, w_peak: np.ndarray, w_fit: np.ndarray, xy: np.ndarray,
              cam_z: np.ndarray | None = None) -> FloorCeiling:
     """Global floor (lowest strong up-facing peak) and ceiling (highest strong down-facing peak, 1.8 m up)."""
@@ -164,7 +184,11 @@ def estimate(z: np.ndarray, nz: np.ndarray, w_peak: np.ndarray, w_fit: np.ndarra
             if MIN_CEILING_HEIGHT <= p.center - floor.z <= MAX_CEILING_HEIGHT]
     if cam_z is not None and len(cam_z):
         cand = [p for p in cand if p.center > float(np.median(cam_z)) + 0.05] or cand
-    ceiling = _level(z[down], w_fit[down], cand, "high", sigma)
+    room_span = _spans(xy[up & (np.abs(z - floor.z) < 0.05)] if floor.observed else xy[horiz])
+    covering = [p for p in cand if _covers(xy[down & (np.abs(z - p.center) < 0.05)], room_span)]
+    if len(covering) < len(cand):
+        flags.append(f"ceiling_candidates_rejected:{len(cand) - len(covering)}")
+    ceiling = _level(z[down], w_fit[down], covering, "high", sigma) if covering else None
     if ceiling is None:
         flags.append("ceiling_not_observed")
         vert = np.abs(nz) < 0.3  # walls stop at the ceiling; all points would include outdoor geometry
