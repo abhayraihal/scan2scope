@@ -1,0 +1,27 @@
+# Ground truth for the real benchmark room (iPhone 17, transferred over WhatsApp).
+# Readings were taken with a tape in inches and converted here: 162 in, 142 in (wall to wall), 130 in (floor to ceiling).
+# Which pair of walls is the longer one was not recorded; the matcher aligns walls by length.
+property: home
+measured_by: "owner (tape, inches)"
+instrument: "tape measure, inch scale"
+date: "2026-10-03"
+notes: >-
+  One bedroom only. Contents: bed, desk and chair, wardrobe, two open doors, one closed door, one window
+  (night outside), a small wall mirror, a ceiling fan. A paper sheet with a drawn line is taped to one wall as staged
+  crack damage; its size was not measured, and neither were the openings, so openings and damage are not scored.
+rooms:
+  - id: "01 bedroom"
+    walls:
+      - {id: W1, length: 4.115}
+      - {id: W2, length: 3.607}
+      - {id: W3, length: 4.115}
+      - {id: W4, length: 3.607}
+    ceiling_height: [3.302]
+    openings: []
+    openings_measured: false
+    damage: []
+    damage_measured: false
+captures:
+  - {id: photo_1, tier: photo, path: raw/photo_1}
+  - {id: video_1, tier: video, path: raw/video_1.mp4}
+  - {id: video_2, tier: video, path: raw/video_2.mp4}

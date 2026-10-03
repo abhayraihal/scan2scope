@@ -127,6 +127,8 @@ class GTRoom:
     closure_error: float | None = None
     shape: np.ndarray | None = None  # polygon used for the aspect ratio (given or reconstructed)
     flags: list[str] = field(default_factory=list)
+    openings_measured: bool = True  # false: openings were not measured, so predicted ones are not scored
+    damage_measured: bool = True
 
     def wall(self, wall_id: str) -> GTWall | None:
         return next((w for w in self.walls if w.id == wall_id), None)
@@ -418,6 +420,8 @@ def _parse_room(raw: dict[str, Any], index: int, flags: list[str]) -> GTRoom | N
         rflags.append("floor_area_unavailable")
     room = GTRoom(rid, room_label(rid), walls, readings, ceiling, openings, damage, polygon, diagonal, area,
                   method, closure, shape, rflags)
+    room.openings_measured = raw.get("openings_measured", True) is not False
+    room.damage_measured = raw.get("damage_measured", True) is not False
     flags.extend(f"{rid}:{f}" for f in rflags)
     return room
 

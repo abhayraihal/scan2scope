@@ -261,6 +261,10 @@ def _score(out: dict[str, Any], gt: GroundTruth, capture: GTCapture, result: dic
                                         reason="opening_missed"))
                 continue
             if om.status == "phantom":
+                if not g.openings_measured:
+                    item["status"] = "phantom_unscored"
+                    out["openings"]["phantom_unscored"] += 1
+                    continue
                 out["openings"]["phantom"] += 1
                 continue
             out["openings"]["matched"] += 1
@@ -320,6 +324,10 @@ def _score_damage(out: dict[str, Any], g: GTRoom, rm: Any, result: dict[str, Any
                                        "gt_class": dm.gt_class, "pred_class": dm.pred_class,
                                        "surface": dm.gt_surface, "pred_surface": dm.pred_surface})
         if dm.status != "matched":
+            if dm.status == "phantom" and not g.damage_measured:
+                out["damage"]["items"][-1]["status"] = "phantom_unscored"
+                out["damage"]["phantom_unscored"] += 1
+                continue
             out["damage"][dm.status] += 1
             continue
         out["damage"]["matched"] += 1
