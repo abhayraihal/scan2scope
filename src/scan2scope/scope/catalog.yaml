@@ -1,0 +1,168 @@
+# Repair scope catalog. Each entry turns damage regions (by class and surface kind) or concealed-damage flags
+# (by rule id) into one line item per surface. Category, selector and activity codes follow the Xactimate
+# style so an estimator can read them; they are not taken from an official price list.
+#
+# Activities: "&" remove and replace, "-" remove, "+" replace or apply, "R" detach and reset, "I" install.
+# Quantity formulas (lengths in m, areas in m2, converted to the item unit at the end):
+#   damage_area_margin  union of the damage uv boxes, each grown by margin_m on every side, clipped to the surface
+#   surface_area        the whole surface: wall length x height minus its openings, or the room floor area
+#   crack_length        sum over cracks of length plus margin_m
+#   flood_cut_length    union along the wall of the damage u ranges grown by margin_m, clipped to the wall
+#   flood_cut_area      flood_cut_length times cut_height_m
+#   each                a count: count: region (default for damage), surface, or flag
+# Margins and the 0.6 m flood-cut height are estimating assumptions, not values from a standard.
+
+version: 1
+conversions: {m2_to_sf: 10.7639, m_to_lf: 3.28084}
+
+damage:
+  - id: STAIN-SEAL
+    classes: [water_stain]
+    surfaces: [wall, ceiling]
+    category: PNT
+    selector: SEAL
+    activity: "+"
+    description: Seal stain with stain-blocking primer
+    quantity: {formula: damage_area_margin, margin_m: 0.15}
+    unit: SF
+  - id: STAIN-FLOOR-CLEAN
+    classes: [water_stain]
+    surfaces: [floor]
+    category: CLN
+    selector: FLR
+    activity: "+"
+    description: Clean stained flooring
+    quantity: {formula: damage_area_margin, margin_m: 0.15}
+    unit: SF
+  - id: MOLD-HEPA
+    classes: [mold]
+    surfaces: [wall, ceiling, floor]
+    category: HMR
+    selector: HEPAV
+    activity: "+"
+    description: HEPA vacuum the mold-affected area
+    quantity: {formula: damage_area_margin, margin_m: 0.3}
+    unit: SF
+  - id: MOLD-ANTIMICROBIAL
+    classes: [mold]
+    surfaces: [wall, ceiling, floor]
+    category: HMR
+    selector: AMA
+    activity: "+"
+    description: Apply anti-microbial agent to the mold-affected area
+    quantity: {formula: damage_area_margin, margin_m: 0.3}
+    unit: SF
+  - id: MOLD-DRYWALL
+    classes: [mold]
+    surfaces: [wall, ceiling]
+    category: DRY
+    selector: "1/2"
+    activity: "&"
+    description: Remove and replace mold-affected 1/2 in. drywall, hung, taped, floated, ready for paint
+    quantity: {formula: damage_area_margin, margin_m: 0.3}
+    unit: SF
+  - id: CRACK-TAPE
+    classes: [crack]
+    surfaces: [wall, ceiling]
+    category: DRY
+    selector: TAPE
+    activity: "+"
+    description: Tape, float and texture drywall crack
+    quantity: {formula: crack_length, margin_m: 0.15}
+    unit: LF
+  - id: HOLE-PATCH
+    classes: [hole]
+    surfaces: [wall, ceiling]
+    max_area_m2: 0.09
+    category: DRY
+    selector: PATCH
+    activity: "+"
+    description: Drywall patch for a small hole, ready for paint
+    quantity: {formula: each}
+    unit: EA
+  - id: HOLE-REPLACE
+    classes: [hole]
+    surfaces: [wall, ceiling]
+    min_area_m2: 0.09
+    category: DRY
+    selector: "1/2"
+    activity: "&"
+    description: Remove and replace 1/2 in. drywall around the hole, ready for paint
+    quantity: {formula: damage_area_margin, margin_m: 0.15}
+    unit: SF
+  - id: PEEL-PREP
+    classes: [peeling_paint]
+    surfaces: [wall, ceiling]
+    category: PNT
+    selector: PREP
+    activity: "+"
+    description: Scrape, prep and spot-prime peeling paint
+    quantity: {formula: damage_area_margin, margin_m: 0.1}
+    unit: SF
+  - id: REPAINT
+    classes: [water_stain, mold, crack, hole, peeling_paint]
+    surfaces: [wall, ceiling]
+    category: PNT
+    selector: P
+    activity: "+"
+    description: Paint the whole surface, two coats
+    quantity: {formula: surface_area}
+    unit: SF
+
+flags:
+  - id: MOISTURE-MAP
+    rules: [R-CEIL-STAIN, R-FIXTURE-LEAK, R-PEEL-MOISTURE, R-WINDOW-LEAK]
+    category: WTR
+    selector: MOIST
+    activity: "+"
+    description: Moisture mapping and readings of the surface and the cavity behind it
+    quantity: {formula: each, count: surface}
+    unit: EA
+  - id: WICK-FLOOD-CUT
+    rules: [R-WALL-WICK]
+    category: WTR
+    selector: FCC
+    activity: "-"
+    description: Flood cut drywall 0.6 m (2 ft) above the floor, bag and dispose
+    quantity: {formula: flood_cut_length, margin_m: 0.6}
+    unit: LF
+  - id: WICK-INSULATION
+    rules: [R-WALL-WICK]
+    category: INS
+    selector: BATT
+    activity: "&"
+    description: Remove and replace wet batt insulation behind the flood cut
+    quantity: {formula: flood_cut_area, margin_m: 0.6, cut_height_m: 0.6}
+    unit: SF
+  - id: WICK-DRYWALL
+    rules: [R-WALL-WICK]
+    category: DRY
+    selector: "1/2"
+    activity: "+"
+    description: Replace 1/2 in. drywall below the flood cut, ready for paint
+    quantity: {formula: flood_cut_area, margin_m: 0.6, cut_height_m: 0.6}
+    unit: SF
+  - id: MOLD-CONTAIN-LIMITED
+    rules: [R-MOLD-LIMITED]
+    category: HMR
+    selector: CONT
+    activity: "+"
+    description: Limited containment, polyethylene barrier with slit entry and HEPA negative air
+    quantity: {formula: each, count: flag}
+    unit: EA
+  - id: MOLD-CONTAIN-FULL
+    rules: [R-MOLD-FULL]
+    category: HMR
+    selector: CONTF
+    activity: "+"
+    description: Full containment, double polyethylene barrier with airlock and HEPA negative air
+    quantity: {formula: each, count: flag}
+    unit: EA
+  - id: MOLD-INSPECT
+    rules: [R-MOLD-HIDDEN]
+    category: DMO
+    selector: INSP
+    activity: "-"
+    description: Cut an inspection opening to check the cavity behind the mold
+    quantity: {formula: each, count: surface}
+    unit: EA

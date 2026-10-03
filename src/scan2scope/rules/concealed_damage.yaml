@@ -1,0 +1,166 @@
+# Concealed-damage rules. Conditions are evaluated in Python by rules/engine.py, and every flag records the
+# measured inputs that fired it. Each basis paraphrases its source and names it; none is a quotation.
+# Rules marked "Project heuristic" have no standard behind their threshold.
+#
+# Condition keys (all must hold):
+#   classes                 damage classes the rule looks at
+#   surfaces                surface kinds: wall, floor, ceiling
+#   bottom_within_m         wall damage whose lowest point is at most this far above the floor
+#   near_fixture            {classes, within_m}: 3-D distance to a detected fixture
+#   near_window             {within_m}: distance to a window opening of the plan or a detected window
+#   near_opening_corner     {types, within_m}: a crack end this close to a corner of an opening in the same wall
+#   min_length_m            crack length above this
+#   total_area_sqft         {gt, lte}: total area of the matching damage in the room (per: room only)
+# per: region (one flag per damage region), surface (per surface) or room (per room).
+
+version: 1
+sources:
+  EPA-HOME: US EPA, "A Brief Guide to Mold, Moisture, and Your Home" (EPA 402-K-02-003)
+  EPA-SCHOOLS: US EPA, "Mold Remediation in Schools and Commercial Buildings" (EPA 402-K-01-001)
+  S500: ANSI/IICRC S500 Standard for Professional Water Damage Restoration, 5th edition (2021)
+  S520: ANSI/IICRC S520 Standard for Professional Mold Remediation
+
+rules:
+  - id: R-CEIL-STAIN
+    title: Ceiling water stain, possible moisture above the ceiling
+    when: {classes: [water_stain], surfaces: [ceiling]}
+    per: region
+    severity: medium
+    basis: >-
+      EPA-HOME: moisture control is the key to mold control, and the guide lists roof materials above ceilings
+      and the top side of ceiling tiles among places where hidden mold grows after leaks. S500 (2021): the
+      source is found and the wet materials are mapped with moisture readings, not judged by the visible stain.
+    recommendation: >-
+      Take moisture readings on the ceiling around the stain and inspect the space above it (attic, roof
+      covering, or the plumbing and HVAC of the floor above) for an active leak before repairing the finish.
+
+  - id: R-WALL-WICK
+    title: Wall stain at the floor line, possible wicking into the wall cavity
+    when: {classes: [water_stain], surfaces: [wall], bottom_within_m: 0.15}
+    per: region
+    severity: high
+    basis: >-
+      S500 (2021): water migrates into porous materials such as drywall and wicks upward, so wet material
+      usually extends beyond the visible stain and into the cavity (bottom plate, insulation); its extent is
+      found by moisture mapping. EPA-HOME: wet materials should be dried within 24 to 48 hours to prevent
+      mold growth.
+    recommendation: >-
+      Moisture-map the wall base and probe the cavity. If the drywall or insulation is wet, flood cut above
+      the wet line and dry the cavity before closing it.
+
+  - id: R-FIXTURE-LEAK
+    title: Stain near a wet fixture, possible supply or drain leak
+    when: {classes: [water_stain], near_fixture: {classes: [sink, toilet, bathtub, shower, washing_machine], within_m: 1.0}}
+    per: region
+    severity: high
+    basis: >-
+      EPA-HOME: plumbing leaks are to be fixed as soon as possible, because mold keeps growing while the
+      moisture source remains. S500 (2021) sets the water category by contamination: washing-machine
+      discharge and toilet overflows count as contaminated water (Category 2, or Category 3 when sewage is
+      involved), which changes how wet materials are handled.
+    recommendation: >-
+      Check the fixture's supply lines, drain and seals and the wall or floor cavity behind it. Treat the
+      water as contaminated until the source is known if the fixture is a toilet or washing machine.
+
+  - id: R-MOLD-LIMITED
+    title: Mold over 10 sq ft in the room, containment needed
+    when: {classes: [mold], total_area_sqft: {gt: 10, lte: 100}}
+    per: room
+    severity: high
+    basis: >-
+      EPA-HOME: when the moldy area is more than about 10 square feet, follow EPA 402-K-01-001.
+      EPA-SCHOOLS (Table 2): 10 to 100 square feet of affected surface is a medium job that calls for limited
+      containment (polyethylene sheeting around the work area, HEPA-filtered negative air) and protective
+      equipment.
+    recommendation: >-
+      Plan the remediation with limited containment and protective equipment, and fix the moisture source
+      first. Confirm the affected area on site, since the measured area has an interval.
+
+  - id: R-MOLD-FULL
+    title: Mold over 100 sq ft in the room, full containment needed
+    when: {classes: [mold], total_area_sqft: {gt: 100}}
+    per: room
+    severity: high
+    basis: >-
+      EPA-SCHOOLS (Table 2): more than 100 square feet of affected surface is a large job that calls for full
+      containment (two layers of polyethylene sheeting with an airlock, HEPA-filtered negative air) and full
+      protective equipment.
+    recommendation: >-
+      Engage a mold remediation contractor for a full-containment job. Fix the moisture source first.
+
+  - id: R-MOLD-HIDDEN
+    title: Visible mold, check for hidden growth behind the surface
+    when: {classes: [mold]}
+    per: surface
+    severity: medium
+    basis: >-
+      EPA-HOME: mold often grows out of sight, on the back of drywall, wallpaper or paneling, the top of
+      ceiling tiles, under carpet pads and inside walls around leaking pipes. S520 separates normal fungal
+      ecology (Condition 1), settled spores (Condition 2) and actual growth (Condition 3); materials next to
+      visible growth have to be assessed, not assumed clean.
+    recommendation: >-
+      Inspect the cavity behind the affected surface (inspection opening or borescope, moisture meter) and the
+      adjacent areas. Find and fix the moisture source before remediation.
+
+  - id: R-CRACK-OPENING
+    title: Crack from an opening corner, possible movement at the header
+    when: {classes: [crack], surfaces: [wall], near_opening_corner: {types: [door, window, opening], within_m: 0.3}}
+    per: region
+    severity: medium
+    basis: >-
+      Project heuristic, no standard cited: stress concentrates at the corners of door and window openings,
+      so cracks that start there are a common sign of settlement or deflection of the header or lintel.
+    recommendation: >-
+      Check whether the door or window sticks or racks and whether the crack is growing (mark its ends and
+      date them). Have the framing over the opening inspected if it is.
+
+  - id: R-CRACK-LONG
+    title: Crack longer than 1 m, structural check
+    when: {classes: [crack], min_length_m: 1.0}
+    per: region
+    severity: high
+    basis: >-
+      Project heuristic, no standard cited: a crack over 1 m is long enough that foundation or framing
+      movement is a plausible cause. Crack width, which matters more for structure, cannot be measured from
+      the capture.
+    recommendation: >-
+      Measure the crack width on site and have a structural engineer look at it if it is wider than a
+      hairline, stepped, or tapered.
+
+  - id: R-PEEL-MOISTURE
+    title: Peeling paint, possible moisture behind the paint film
+    when: {classes: [peeling_paint]}
+    per: region
+    severity: low
+    basis: >-
+      EPA-HOME: moldy surfaces are to be cleaned and dried before painting, because paint applied over mold is
+      likely to peel. Peeling paint is therefore a reason to check the substrate for moisture or growth before
+      repainting.
+    recommendation: >-
+      Take moisture readings behind the peeling area and look for a water source (leak, condensation) before
+      scraping and repainting.
+
+  - id: R-HOLE-CAVITY
+    title: Hole in a surface, check the cavity before repair
+    when: {classes: [hole]}
+    per: region
+    severity: low
+    basis: >-
+      Project heuristic, no standard cited: a hole opens the wall, floor or ceiling cavity, which can hide
+      damaged wiring, pipes or wet material.
+    recommendation: >-
+      Look into the cavity through the hole (light and borescope) for wiring, pipes, moisture or pests before
+      patching.
+
+  - id: R-WINDOW-LEAK
+    title: Stain or mold near a window, possible window leak or condensation
+    when: {classes: [water_stain, mold], near_window: {within_m: 0.5}}
+    per: region
+    severity: medium
+    basis: >-
+      EPA-HOME: condensation on windows, walls or pipes should be dried quickly and its moisture source
+      reduced; condensation can be a sign of high indoor humidity. Water can also enter at a failed window
+      seal or flashing.
+    recommendation: >-
+      Inspect the window frame, sill and seals and the wall below for leaks. Check indoor humidity and
+      condensation on the glass.

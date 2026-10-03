@@ -113,6 +113,7 @@ def run_capture(
 
                 sem = analyze(scenes, plan, work_dir, cache=cache)
                 damage, objects = sem.damage, sem.objects
+                stage_errors.extend(getattr(sem, "flags", []))
             except Exception as exc:  # semantics must never block the geometric result
                 log.warning("semantics failed: %s", exc)
                 log.debug(traceback.format_exc())
