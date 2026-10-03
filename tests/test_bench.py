@@ -78,31 +78,35 @@ def room(rid, poly, *, hint=None, openings=(), lengths=None, ceiling=2.5, rel=0.
     for k in range(n):
         a, b = P[k], P[(k + 1) % n]
         L = float(np.linalg.norm(b - a)) if lengths is None or lengths[k] is None else lengths[k]
-        walls.append({"id": f"{rid}-W{k + 1}", "start": a.tolist(), "end": b.tolist(), "length": M(L, rel * L),
-                      "height": M(ceiling, 0.05), "observed_fraction": 0.8, "flags": []})
+        walls.append({"id": f"{rid}-W{k + 1}", "start": a.tolist(), "end": b.tolist(),
+                      "length": M(L, rel * L), "height": M(ceiling, 0.05), "observed_fraction": 0.8,
+                      "flags": []})
     ops = []
     for j, (k, off, w, kind) in enumerate(openings):
-        ops.append({"id": f"{rid}-O{j + 1}", "type": kind, "wall_id": f"{rid}-W{k + 1}", "offset": M(off, 0.05),
-                    "width": M(w, 0.03), "height": M(2.0 if kind != "window" else 1.2, 0.05),
+        ops.append({"id": f"{rid}-O{j + 1}", "type": kind, "wall_id": f"{rid}-W{k + 1}",
+                    "offset": M(off, 0.05), "width": M(w, 0.03),
+                    "height": M(2.0 if kind != "window" else 1.2, 0.05),
                     "sill": None if kind != "window" else M(0.9, 0.05), "center": None, "connects_to": None,
                     "confidence": 0.9, "flags": []})
     a = abs(shoelace(P)) if area is None else area
     perim = sum(w["length"]["value"] for w in walls)
-    return {"id": rid, "label": rid, "source_hint": hint, "polygon": P.tolist(), "floor_area": M(a, 0.06 * a, "m2"),
-            "perimeter": M(perim, 0.03 * perim), "ceiling_height": M(ceiling, 0.05), "walls": walls,
-            "openings": ops, "surfaces": [], "flags": []}
+    return {"id": rid, "label": rid, "source_hint": hint, "polygon": P.tolist(),
+            "floor_area": M(a, 0.06 * a, "m2"), "perimeter": M(perim, 0.03 * perim),
+            "ceiling_height": M(ceiling, 0.05), "walls": walls, "openings": ops, "surfaces": [], "flags": []}
 
 
-def result(rooms, *, tier="photo", adjacency=(("R1", "R2"),), footprint=None, damage=(), drift=None, cid="cap"):
+def result(rooms, *, tier="photo", adjacency=(("R1", "R2"),), footprint=None, damage=(), drift=None,
+           cid="cap"):
     fp = sum(r["floor_area"]["value"] for r in rooms) if footprint is None else footprint
     return {
         "schema_version": "1.0.0",
         "capture": {"id": cid, "tier": tier, "path": "x", "device": {}, "input_stats": {}, "flags": []},
-        "conventions": {"units": {}, "interval": {"level": 0.9, "method": "test", "q": 1.0, "calibration": "prior"},
-                        "definitions": {}},
-        "property": {"footprint_area": M(fp, 0.06 * fp, "m2"), "extent_x": M(4.3, 0.1), "extent_y": M(4.0, 0.1),
-                     "adjacency": [{"room_a": a, "room_b": b, "opening_a": None, "opening_b": None, "confidence": 0.9,
-                                    "source": "door_match"} for a, b in adjacency],
+        "conventions": {"units": {}, "definitions": {},
+                        "interval": {"level": 0.9, "method": "test", "q": 1.0, "calibration": "prior"}},
+        "property": {"footprint_area": M(fp, 0.06 * fp, "m2"), "extent_x": M(4.3, 0.1),
+                     "extent_y": M(4.0, 0.1),
+                     "adjacency": [{"room_a": a, "room_b": b, "opening_a": None, "opening_b": None,
+                                    "confidence": 0.9, "source": "door_match"} for a, b in adjacency],
                      "drift_correction": drift, "stitch": None, "flags": []},
         "rooms": rooms, "damage": list(damage), "concealed_damage_flags": [], "scope": [],
         "timing": {"total_s": 12.5, "stages": {"ingest": 0.5, "geometry": 9.0, "layout": 3.0}},
@@ -122,9 +126,9 @@ def good_rooms(tier="photo", ids=("R1", "R2")):
 
 def stain(rid="R2", wall="R2-W1", u=(1.9, 2.3), v=(1.2, 1.5), cls="water_stain"):
     w, h = u[1] - u[0], v[1] - v[0]
-    return {"id": "D1", "room_id": rid, "surface_id": wall, "class": cls, "score": 0.6, "area": M(w * h * 0.7, 0.02, "m2"),
-            "width": M(w, 0.05), "height": M(h, 0.05), "length": None, "u_range": list(u), "v_range": list(v),
-            "view_ids": []}
+    return {"id": "D1", "room_id": rid, "surface_id": wall, "class": cls, "score": 0.6,
+            "area": M(w * h * 0.7, 0.02, "m2"), "width": M(w, 0.05), "height": M(h, 0.05), "length": None,
+            "u_range": list(u), "v_range": list(v), "view_ids": []}
 
 
 @pytest.fixture
@@ -157,7 +161,8 @@ def test_ground_truth_loader(gt, gt_path):
 def test_template_placeholders_load_as_missing():
     gt = load_ground_truth(ROOT / "bench/templates/ground_truth.yaml")
     hall = gt.room("01 hallway")
-    assert all(w.length is None for w in hall.walls) and hall.floor_area is None and hall.ceiling_height is None
+    assert all(w.length is None for w in hall.walls)
+    assert hall.floor_area is None and hall.ceiling_height is None
     assert any("missing:W1.length" in f for f in gt.flags)
     assert len(gt.captures) == 4
 
@@ -197,7 +202,8 @@ rooms:
     walls: [3.0, 1.0, 1.0, 1.0, 3.0]
     ceiling_height: ["2,40", 0]
     openings: [junk]
-    damage: [{id: X1, class: Mold, surface: Ceiling, width: 0.2, height: 0.1}, {id: X1, class: crack, surface: W2}]
+    damage: [{id: X1, class: Mold, surface: Ceiling, width: 0.2, height: 0.1},
+             {id: X1, class: crack, surface: W2}]
   - {walls: [1, 1, 1, 1]}
 captures:
   - {id: a, tier: photo, path: raw/a, rooms: ["02 bay", "nope"]}
@@ -270,7 +276,7 @@ def test_wall_matching_on_random_rectilinear_rooms():
         g = GTRoom("X", "X", gt_walls, [2.5], 2.5, [GTOpening("D1", "door", "W1", off, w, 2.0)], [])
         Q = np.roll(P, -int(rng.integers(n)), axis=0)  # ours: counter-clockwise from a random corner
         lengths = [float(np.linalg.norm(Q[(k + 1) % n] - Q[k])) * (1 + rng.normal(0, 0.02)) for k in range(n)]
-        k_door = next(k for k in range(n) if np.allclose(Q[k], cw[1]))  # our W1 starts at the GT W1's right end
+        k_door = next(k for k in range(n) if np.allclose(Q[k], cw[1]))  # starts at the GT W1's right end
         pred = pred_rooms(result([room("R1", Q.tolist(), lengths=lengths,
                                        openings=[(k_door, L1 - off - w, w, "door")])], adjacency=()))[0]
         walls, ops = align_walls(g, pred)
@@ -404,7 +410,8 @@ property: synth_1
 measured_by: synthetic
 rooms:
   - id: "01 hallway"
-    walls: [{id: W1, length: 1.064}, {id: W2, length: 6.446}, {id: W3, length: 1.064}, {id: W4, length: 6.446}]
+    walls: [{id: W1, length: 1.064}, {id: W2, length: 6.446}, {id: W3, length: 1.064},
+            {id: W4, length: 6.446}]
     diagonal: null
     ceiling_height: [2.501, 2.501, 2.501]
     openings:
@@ -414,8 +421,8 @@ rooms:
     damage: []
     polygon: [[0.000, 0.000], [0.000, 1.064], [6.446, 1.064], [6.446, 0.000]]
   - id: "02 bedroom"
-    walls: [{id: W1, length: 3.054}, {id: W2, length: 4.272}, {id: W3, length: 6.446}, {id: W4, length: 1.263},
-            {id: W5, length: 3.392}, {id: W6, length: 3.009}]
+    walls: [{id: W1, length: 3.054}, {id: W2, length: 4.272}, {id: W3, length: 6.446},
+            {id: W4, length: 1.263}, {id: W5, length: 3.392}, {id: W6, length: 3.009}]
     diagonal: 5.455
     ceiling_height: [2.501, 2.501, 2.501]
     openings:
@@ -424,7 +431,8 @@ rooms:
     damage: []
     polygon: [[3.054, 1.189], [0.000, 1.189], [0.000, 5.461], [6.446, 5.461], [6.446, 4.198], [3.054, 4.198]]
   - id: "03 bathroom"
-    walls: [{id: W1, length: 3.274}, {id: W2, length: 2.892}, {id: W3, length: 3.274}, {id: W4, length: 2.892}]
+    walls: [{id: W1, length: 3.274}, {id: W2, length: 2.892}, {id: W3, length: 3.274},
+            {id: W4, length: 2.892}]
     diagonal: null
     ceiling_height: [2.501, 2.501, 2.501]
     openings:
@@ -432,7 +440,8 @@ rooms:
     damage: []
     polygon: [[6.446, 1.189], [3.172, 1.189], [3.172, 4.081], [6.446, 4.081]]
   - id: "04 living"
-    walls: [{id: W1, length: 5.461}, {id: W2, length: 5.231}, {id: W3, length: 5.461}, {id: W4, length: 5.231}]
+    walls: [{id: W1, length: 5.461}, {id: W2, length: 5.231}, {id: W3, length: 5.461},
+            {id: W4, length: 5.231}]
     diagonal: null
     ceiling_height: [2.501, 2.501, 2.501]
     openings:
@@ -484,7 +493,8 @@ def test_synthetic_ground_truth_and_a_perfect_lidar_result(tmp_path):
     adj = [(ids[0], ids[1]), (ids[0], ids[2]), (ids[0], ids[3])]
     res = result(rooms[::-1], tier="lidar", adjacency=adj, drift={"enabled": True})
     m = capture_metrics(gt, gt.capture("lidar_1"), res)
-    assert {r["pred_room"]: r["gt_room"] for r in m["match"]["rooms"]} == dict(zip(ids, [r.id for r in gt.rooms]))
+    got = {r["pred_room"]: r["gt_room"] for r in m["match"]["rooms"]}
+    assert got == dict(zip(ids, [r.id for r in gt.rooms], strict=True))
     assert not m["missing"] and m["openings"]["matched"] == 11 and m["openings"]["phantom"] == 0
     assert max(abs(r["err"]) for r in m["records"]) == pytest.approx(0.0, abs=1e-9)
     assert m["adjacency"]["exact"]
@@ -522,7 +532,8 @@ def test_odd_results_still_score(gt):
     hall, kitchen = good_rooms()
     del kitchen["walls"][2]["length"]  # matched by its start and end, but scored as missing
     kitchen["openings"].append({"id": "R2-O7", "type": "skylight", "wall_id": "R9-W1"})
-    kitchen["openings"].append({"id": "R2-O8", "type": "door", "wall_id": "R2-W1", "offset": None, "width": "wide"})
+    kitchen["openings"].append({"id": "R2-O8", "type": "door", "wall_id": "R2-W1", "offset": None,
+                                "width": "wide"})
     empty = {"id": "R3", "polygon": [], "walls": [], "openings": None, "floor_area": None}
     odd_damage = {"id": "D9", "room_id": "R2", "surface_id": "R2-W9", "u_range": None}
     res = result([hall, kitchen, empty, "junk"], damage=[odd_damage, stain()], footprint=16.8)
@@ -544,9 +555,11 @@ def test_failed_capture_counts_every_item_as_missing(gt):
     m = capture_metrics(gt, gt.capture("photo_1"), None, status="failed", error="RuntimeError: boom")
     assert m["status"] == "failed" and not m["records"]
     assert sum(x["kind"] == "wall_length" for x in m["missing"]) == 8
-    rows = {(r["tier"], r["gate"]): r for r in gates_mod.evaluate([m], None, None, None, gates_mod.load_gates())["rows"]}
+    out = gates_mod.evaluate([m], None, None, None, gates_mod.load_gates())
+    rows = {(r["tier"], r["gate"]): r for r in out["rows"]}
     assert rows["photo", "result_produced"]["status"] == "fail"
-    assert rows["photo", "wall_length"]["status"] == "fail" and rows["photo", "wall_length"]["pass_share"] == 0
+    assert rows["photo", "wall_length"]["status"] == "fail"
+    assert rows["photo", "wall_length"]["pass_share"] == 0
     assert rows["photo", "opening_width"]["measured"] == 0.0
     assert rows["photo", "calibration"]["status"] == "n.a."
 
@@ -558,8 +571,8 @@ def test_clopper_pearson_and_calibration_gate():
         ref = binomtest(k, n).proportion_ci(confidence_level=0.95, method="exact")
         assert gates_mod.clopper_pearson(k, n) == pytest.approx((ref.low, ref.high), abs=1e-9)
     recs = [{"tier": "video", "kind": "wall_length", "room": f"p/r{i % 4}", "item": f"w{i}", "capture": "c",
-             "property": "p", "gt": 3.0, "pred": 3.0 + e, "lo": 3.0 + e - 0.05, "hi": 3.0 + e + 0.05, "err": e,
-             "covered": abs(e) <= 0.05, "half_width": 0.05}
+             "property": "p", "gt": 3.0, "pred": 3.0 + e, "lo": 3.0 + e - 0.05, "hi": 3.0 + e + 0.05,
+             "err": e, "covered": abs(e) <= 0.05, "half_width": 0.05}
             for i, e in enumerate([0.01] * 12 + [0.08] * 7 + [0.2])]
     cal = gates_mod.calibration(recs)["video"]
     assert cal["coverage"] == pytest.approx(12 / 20) and not cal["contains_nominal"]
@@ -599,7 +612,8 @@ def test_repeatability_walls_and_ceiling_spread(gt):
 
 def test_drift_ablation_and_gate(gt):
     cfg = gates_mod.load_gates()
-    on = capture_metrics(gt, gt.capture("video_1"), result(good_rooms("video"), tier="video", drift={"enabled": True}))
+    on = capture_metrics(gt, gt.capture("video_1"),
+                         result(good_rooms("video"), tier="video", drift={"enabled": True}))
     hall, kitchen = good_rooms("video")
     kitchen["walls"][0]["length"] = M(3.3, 0.1)
     off = capture_metrics(gt, gt.capture("video_1"),
@@ -630,7 +644,8 @@ def test_head_to_head_with_fake_magicplan_export(gt):
     (folder / "statistics.csv").write_text(STATS_CSV)
     (folder / "dimensions.yaml").write_text(yaml.safe_dump({
         "app": "magicplan", "version": "9.4.1", "mode": "AR camera, no LiDAR",
-        "rooms": {"02 kitchen": {"name": "Kitchen", "walls": {"W1": 4.05, "W2": 2.99, "W3": "4.00 m", "W4": 3.10},
+        "rooms": {"02 kitchen": {"name": "Kitchen",
+                                 "walls": {"W1": 4.05, "W2": 2.99, "W3": "4.00 m", "W4": 3.10},
                                  "openings": {"D1": 0.85, "N1": "120 cm"}},
                   "01 hallway": {"name": "Hall way", "walls": {"W2": 4.002}}}}))
     stats = parse_statistics(folder / "statistics.csv")
@@ -660,7 +675,8 @@ def test_head_to_head_with_fake_magicplan_export(gt):
     row = gates_mod.h2h_gate("photo", {"comparisons": h["comparisons"]}, {})
     assert row["measured"] == pytest.approx(comp["share"])
     kitchen["openings"] = kitchen["openings"][:1]  # our window is missing: a loss, not a skipped dimension
-    comp2 = head_to_head(gt, [capture_metrics(gt, gt.capture("photo_1"), result([hall, kitchen]))])["comparisons"][0]
+    m2 = capture_metrics(gt, gt.capture("photo_1"), result([hall, kitchen]))
+    comp2 = head_to_head(gt, [m2])["comparisons"][0]
     n1 = next(d for d in comp2["dimensions"] if d["dimension"] == "N1 width")
     assert n1["ours"] is None and not n1["beat_or_tie"] and comp2["n"] == comp["n"]
 
@@ -706,7 +722,8 @@ def test_report_generation(gt, tmp_path):
     metrics = json.loads(paths["metrics"].read_text())
     gates = json.loads(paths["gates"].read_text())
     assert len(metrics["metrics"]) == 3 and gates["rows"]
-    assert any(r["gate"] == "result_produced" and r["tier"] == "video" and r["status"] == "fail" for r in gates["rows"])
+    assert any(r["gate"] == "result_produced" and r["tier"] == "video" and r["status"] == "fail"
+               for r in gates["rows"])
 
 
 def test_run_benchmark_with_fake_pipeline(gt, tmp_path):
