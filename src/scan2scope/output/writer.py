@@ -444,8 +444,14 @@ def build_result(info: CaptureInfo, plan: Plan, damage: list[DamageRegion], flag
     opening_seen: set[str] = set()
     unc = plan.meta.get("uncertainty") if isinstance(plan.meta, dict) else None
     factors = unc.get("room_factors") if isinstance(unc, dict) and isinstance(unc.get("room_factors"), dict) else {}
-    rooms = [w.room(r, rid, room_seen, wall_seen, opening_seen, _strs((factors.get(r.id) or {}).get("reasons")))
-             for r, rid in zip(plan_rooms, room_ids)]
+
+    def why(r: Room) -> list[str]:
+        f = factors.get(r.id) or {}
+        return _strs(f.get("reasons")) + _strs(f.get("structure"))
+
+    rooms = [w.room(r, rid, room_seen, wall_seen, opening_seen, why(r)) for r, rid in zip(plan_rooms, room_ids)]
+    capture_why = _strs(unc.get("capture_reasons")) if isinstance(unc, dict) else []
+    widened = [f"intervals_widened:{x}" for x in capture_why]
     surfaces = {s["id"]: room["id"] for room in rooms for s in room["surfaces"]}
     opening_ids = {o["id"] for room in rooms for o in room["openings"]}
 
@@ -474,7 +480,7 @@ def build_result(info: CaptureInfo, plan: Plan, damage: list[DamageRegion], flag
         "property": {
             "footprint_area": footprint, "extent_x": extent_x, "extent_y": extent_y, "adjacency": adjacency,
             "drift_correction": _meta_obj(meta.get("drift")), "stitch": _meta_obj(meta.get("stitch")),
-            "flags": _strs(plan.flags) + w.repairs,
+            "flags": _strs(plan.flags) + widened + w.repairs,
         },
         "rooms": rooms,
         "damage": damage_out,

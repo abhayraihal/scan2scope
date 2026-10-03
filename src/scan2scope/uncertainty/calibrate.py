@@ -1,8 +1,10 @@
 """Split-conformal fit of the per-tier interval multiplier q, with the room as the exchangeable unit.
 
 A record is one measurement scored against ground truth: tier, kind, room (a unit id shared by repeat captures
-of the same physical room), err (prediction minus truth) and half_width (the reported half-width, (hi - lo) / 2).
-The score is |err| / half_width. Scores are pooled with equal weight per room and the quantile is taken at
+of the same physical room), err (prediction minus truth) and half_width (the reported half-width, (hi - lo) / 2),
+plus pred, lo and hi when known. The score is |err| over the reported width on the side the truth fell, so
+an interval the model widened on one side only is scored on that side (q scales both sides); without pred, lo
+and hi it is |err| / half_width. Scores are pooled with equal weight per room and the quantile is taken at
 ceil((n + 1) * level) / n for n rooms, which is above 1 (no finite quantile) for fewer than 9 rooms at level 0.9.
 Below min_rooms, q keeps its current value with status prior and the plain quantile is kept as a diagnostic.
 """
@@ -43,17 +45,22 @@ class CalRecord:
     err: float
     half_width: float
     q: float | None = None  # q in force when the interval was reported, when known
+    below: float | None = None  # pred - lo, the reported width under the value, when known
+    above: float | None = None  # hi - pred
 
     @property
     def score(self) -> float:
         e = abs(self.err)
-        if self.half_width > 0:
-            return e / self.half_width
+        side = self.above if self.err < 0 else self.below  # err = pred - truth < 0: the truth is above
+        width = side if side is not None else self.half_width
+        if width > 0:
+            return e / width
         return 0.0 if e == 0 else math.inf
 
 
 def as_record(r: Any) -> CalRecord | None:
-    """CalRecord from a dict or object with tier, kind, room (or room_id, unit), err, half_width and optional q."""
+    """CalRecord from a dict or object with tier, kind, room (or room_id, unit), err, half_width and
+    optional q, pred, lo and hi."""
     if isinstance(r, CalRecord):
         return r
 
@@ -64,7 +71,11 @@ def as_record(r: Any) -> CalRecord | None:
     err, hw, tier = _num(get("err")), _num(get("half_width")), get("tier")
     if tier is None or room is None or err is None or hw is None:
         return None
-    return CalRecord(str(tier), str(get("kind") or ""), str(room), err, hw, _num(get("q")))
+    pred, lo, hi = _num(get("pred")), _num(get("lo")), _num(get("hi"))
+    below = above = None
+    if pred is not None and lo is not None and hi is not None and lo <= pred <= hi:
+        below, above = pred - lo, hi - pred
+    return CalRecord(str(tier), str(get("kind") or ""), str(room), err, hw, _num(get("q")), below, above)
 
 
 def conformal_level(n_units: int, level: float = LEVEL) -> float:
@@ -173,7 +184,8 @@ def loro_coverage(records: Iterable[Any], *, level: float = LEVEL, min_rooms: in
 
     Each room is scored with q refitted on the other rooms. When the other rooms are fewer than min_rooms the
     fit would keep the prior q, so rooms are scored with their intervals as reported (mode as_reported).
-    A miss by more than garbage_ratio times the half-width counts as confident garbage.
+    A miss by more than garbage_ratio times the half-width, (hi - lo) / 2 as in the benchmark gate, counts as
+    confident garbage.
     """
     out: dict[str, dict[str, Any]] = {}
     for tier, rs in _group(records).items():
@@ -190,7 +202,8 @@ def loro_coverage(records: Iterable[Any], *, level: float = LEVEL, min_rooms: in
             for r in (r for r in rs if r.room == room):
                 ok = r.score <= factor
                 covered += ok
-                garbage += r.score > garbage_ratio * factor
+                half = abs(r.err) / r.half_width if r.half_width > 0 else (math.inf if r.err else 0.0)
+                garbage += (not ok) and half > garbage_ratio * factor
                 by_kind[r.kind][0] += ok
                 by_kind[r.kind][1] += 1
         lo, hi = clopper_pearson(covered, len(rs), ci)

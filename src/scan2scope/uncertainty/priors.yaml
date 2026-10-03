@@ -8,12 +8,20 @@ tiers:
   lidar:
     scale_floor: 0.003        # s, log-scale sigma shared by every measurement; s = max(floor, capture estimate)
     additive: {length: 0.008, height: 0.006, opening: 0.012}   # metres
+    vertical: 0.0             # log sigma of heights on top of s; LiDAR depth is metric in every direction
   video:
-    scale_floor: 0.03
+    # One MapAnything metric estimate is good to about 0.08 in log scale (photo.SCALE_LOG_SIGMA). The chunks
+    # of a walkthrough are runs of the same model on the same camera and room, so they share that error and
+    # averaging them does not take the floor below it.
+    scale_floor: 0.08
     additive: {length: 0.025, height: 0.02, opening: 0.03}
+    # Heights are seen across the image and lengths partly in depth, so a field-of-view error scales them
+    # differently: ceilings on 11 photo and video captures of 4 real rooms missed by 0.13 in log RMS.
+    vertical: 0.1
   photo:
-    scale_floor: 0.05
+    scale_floor: 0.08         # one MapAnything run per room; the geometry stage reports the same 0.08
     additive: {length: 0.04, height: 0.035, opening: 0.04}
+    vertical: 0.1
 
 # Damage width, height and length: sqrt((v s)^2 + a^2); area uses the bounding-box perimeter times a.
 damage_additive: 0.02
@@ -28,5 +36,28 @@ inflation:
     - {below: 100, factor: 1.25}
   placement_uncertain: 1.5    # footprint and extents, when any room could not be placed
   low_light: 1.3
-  few_photos: {below: 4, factor: 1.5}
+  few_photos: {below: 4, factor: 1.5}   # photos of a photo room, camera views inside a video or LiDAR room
   missing_exif_focal: 1.2
+
+# Plan structure: what the layout could not observe.
+structure:
+  min_face_points: 30         # an end wall with fewer face points (the layout's own bar) is unobserved
+  sparse_observed: 0.1        # ... one observed over less than this share of its face is sparse
+  unobserved_end: 0.15        # 1-sigma position of an unobserved end wall, as a share of the room extent
+  span_max: 3.0               # ... taking the extent as at most this many times the wall's own length
+  short_wall_m: 0.5           # walls shorter than this may be steps from furniture or misregistration
+  step_wall_m: 1.0            # ... and so may walls shorter than this whose face covers less than
+  step_observed: 0.6          #     step_observed of the floor-to-ceiling plane (a counter stops low)
+  level_unobserved_m: 0.5     # 1-sigma of how far an unobserved floor or ceiling lies beyond what was seen
+  ceiling_max_m: 4.0          # an unobserved ceiling may lie as high as this above the floor
+  level_from_global_m: 0.05   # a room level taken from the property-wide level
+  ceiling_min_coverage: 0.05  # with ceiling_not_observed, a room ceiling seen over less than this share
+  ceiling_min_points: 200     #     of its area or with fewer points is unobserved too
+  door_head_min_m: 1.9        # a door or passage with no head edge found may be as low as a common door head
+
+# Capture consistency.
+capture:
+  loop_min_overlap: 0.2       # a rejected loop closure counts as a drift measurement only if it registered
+  loop_min_inliers: 0.3       # this well
+  loop_max_rot_deg: 20.0
+  report_ratio: 1.1           # list a capture reason when it raises s by more than this factor

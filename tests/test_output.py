@@ -81,7 +81,7 @@ def test_result_content():
     assert res["scope"][1]["quantity"] == {"value": 3.0, "lo": 2.4, "hi": 3.7, "unit": "SF"}
     interval = res["conventions"]["interval"]
     assert interval["level"] == 0.9 and interval["calibration"] == "prior" and interval["q"] == 1.0
-    assert "q = 1.00, prior value" in interval["method"] and "s = 0.030" in interval["method"]
+    assert "q = 1.00, prior value" in interval["method"] and "s = 0.080" in interval["method"]
     defs = res["conventions"]["definitions"]
     assert "face to face at 1 m height" in defs["wall_length"]
     assert defs["footprint"].startswith("sum of the room floor areas")
@@ -208,9 +208,9 @@ def test_render_writes_plan_and_room_sheets(tmp_path):
     for name in ("plan.svg", "plan.png", "rooms/R1.svg", "rooms/R2.svg"):
         assert (tmp_path / name).stat().st_size > 1000, name
     svg = (tmp_path / "plan.svg").read_text()
-    for text in ("W1 4.00 m ±0.20", "R1 living", "R2 kitchen", "12.00 m² [10.60, 13.40]", "ceiling 2.50 m ±0.13",
+    for text in ("W1 4.00 m ±0.53", "R1 living", "R2 kitchen", "12.00 m² [8.75, 15.25]", "ceiling 2.50 m ±0.53",
                  "D1 water stain", "D2 water stain (ceiling)", "O1 0.80", "1 m", "tier video",
-                 "footprint 21.00 [18.74, 23.26] m²", "drift correction: on"):
+                 "footprint 21.00 [15.40, 26.60] m²", "drift correction: on"):
         assert text in svg, text
     with Image.open(tmp_path / "plan.png") as im:
         assert im.format == "PNG" and im.info["dpi"][0] == pytest.approx(150, abs=1)
@@ -262,7 +262,7 @@ def test_console_summary_sections():
     buf = io.StringIO()
     console.print_summary(res, file=buf)
     out = buf.getvalue()
-    for needle in ("footprint 21.00 [18.74, 23.26] m2", "ceiling height 2.500 [2.372, 2.628] m", "R1-O2    window",
+    for needle in ("footprint 21.00 [15.40, 26.60] m2", "ceiling height 2.500 [1.972, 3.028] m", "R1-O2    window",
                    "F1  ceiling_stain_moisture_above  medium", "  DRY", "  PNT", "L2  R2    R2-CEIL  +", "total        12.50",
                    "drift correction: on (loop closure, plane anchoring", "R1 - R2  R1-O1 / R2-O1  shared_frame"):
         assert needle in out, needle
