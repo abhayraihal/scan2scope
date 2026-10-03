@@ -261,8 +261,8 @@ def test_shipped_files_match_the_spec():
     assert [pri["tiers"][t]["scale_floor"] for t in ("lidar", "video", "photo")] == [0.003, 0.08, 0.08]
     assert [pri["tiers"][t]["vertical"] for t in ("lidar", "video", "photo")] == [0.0, 0.1, 0.1]
     st = pri["structure"]
-    keys = ("min_face_points", "unobserved_end", "short_wall_m", "step_wall_m", "step_observed")
-    assert [st[k] for k in keys] == [30, 0.15, 0.5, 1.0, 0.6]
+    keys = ("min_face_points", "unobserved_end", "short_wall_m", "ceiling_max_m", "door_head_min_m")
+    assert [st[k] for k in keys] == [30, 0.15, 0.5, 4.0, 1.9]
 
 
 # evidence ---------------------------------------------------------------------------------------------------
@@ -419,6 +419,54 @@ def test_lidar_drift_record_leaves_the_scale_alone():
     assert rec["scale_sigma"] == pytest.approx(0.003) and rec["capture_reasons"] == []
 
 
+def test_unobserved_ceiling_may_be_as_high_as_a_tall_room():
+    plan = make_plan()
+    plan.flags.append("ceiling_not_observed")
+    r1, r2 = plan.rooms
+    r1.ceiling_height.evidence.update(observed_fraction=0.02, ceiling_n=50)  # a few points near the wall tops
+    r2.ceiling_height.evidence.update(observed_fraction=0.5, ceiling_n=5000)  # seen well enough on its own
+    annotate(plan, [], tier="video", quality={}, calibration=NO_CAL)
+    c1 = r1.ceiling_height
+    assert c1.hi > 4.0 and c1.value - c1.lo == pytest.approx(Z * c1.evidence["sigma"])
+    assert "ceiling_not_observed" in c1.evidence["widened"] and r1.walls[0].height.hi > 4.0
+    assert symmetric(r2.ceiling_height)
+
+
+def test_floor_and_ceiling_level_evidence():
+    plan = make_plan()
+    plan.rooms[0].flags.append("floor_not_observed")
+    plan.rooms[1].flags.append("ceiling_from_global")
+    annotate(plan, [], tier="video", quality={}, calibration=NO_CAL)
+    c1, c2 = plan.rooms[0].ceiling_height, plan.rooms[1].ceiling_height
+    assert c1.evidence["sigma_parts"]["upper"] == pytest.approx(Z * 0.5)  # the floor lies below what was seen
+    assert c2.evidence["sigma_parts"]["level"] == pytest.approx(0.05) and symmetric(c2)
+    plan = make_plan()
+    plan.rooms[0].flags.append("ceiling_assumed")
+    annotate(plan, [], tier="lidar", quality={}, calibration=NO_CAL)
+    assert plan.rooms[0].ceiling_height.evidence["sigma_parts"]["upper"] == pytest.approx(4.0 - 2.5)
+
+
+def test_door_with_no_head_edge_may_be_door_height():
+    plan = make_plan()
+    door, window = plan.rooms[0].openings
+    door.height = M(2.5, "height")  # the gap was taken up to the ceiling
+    door.evidence["header"] = False
+    annotate(plan, [], tier="lidar", quality={}, calibration=NO_CAL)
+    h = door.height
+    assert h.lo < 1.9 and h.hi - h.value == pytest.approx(Z * h.evidence["sigma"])
+    assert h.evidence["widened"] == ["opening_head_unobserved"]
+    assert symmetric(window.height) and symmetric(plan.rooms[1].openings[0].height)
+
+
+def test_annotating_twice_gives_the_same_intervals():
+    plan = one_room(notched_room())
+    plan.rooms[0].flags.append("ceiling_assumed")
+    annotate(plan, [], tier="video", quality={}, calibration=NO_CAL)
+    first = {w.id: (w.length.lo, w.length.hi, dict(w.length.evidence)) for w in plan.rooms[0].walls}
+    annotate(plan, [], tier="video", quality={}, calibration=NO_CAL)
+    for w in plan.rooms[0].walls:
+        lo, hi, ev = first[w.id]
+        assert (w.length.lo, w.length.hi) == pytest.approx((lo, hi)) and w.length.evidence.keys() == ev.keys()
 
 
 # calibration ------------------------------------------------------------------------------------------------

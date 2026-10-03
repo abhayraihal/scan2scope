@@ -2,7 +2,8 @@
 
 An interval runs from value - z q sigma to value + z q sigma_hi, with q per tier from calibration.yaml and lo
 clipped at 0. sigma is the symmetric part. A one-sided extent U (how far the evidence lets the truth lie on
-one side, at q = 1) widens only that side: sigma_hi = sqrt(sigma^2 + (U / z)^2).
+one side, at q = 1) widens only that side: sigma_hi = sqrt(sigma^2 + (U / z)^2), and the same below for
+sigma_lo.
 
 Lengths: sigma^2 = (v s)^2 + a^2 + the end-wall terms below. s is the capture's log-scale sigma, shared by
 every measurement: the larger of the tier floor and the geometry's estimate, combined with the scale
@@ -26,7 +27,10 @@ walls; a wall that is not itself a step may also span the room's extent along it
 its bounding box when any wall may be a fragment, and widens by each unobserved wall's length times that
 wall's position term.
 
-Heights add a vertical log term (photo and video see heights across the image and lengths partly in depth).
+Heights add a vertical log term (photo and video see heights across the image and lengths partly in depth) and
+a one-sided upward term when the floor or ceiling was not observed, since the level then reported is the
+lowest or highest surface seen; an unobserved ceiling may lie as high as ceiling_max_m. A door or passage
+whose head edge was not found runs to the ceiling, so its height reaches down to door_head_min_m.
 """
 
 from __future__ import annotations
@@ -60,7 +64,9 @@ SPARSE_WALL = ("wall_face_sparse",)
 
 # Defaults for the priors.yaml sections that older files do not have.
 STRUCTURE = {"min_face_points": 30, "sparse_observed": 0.1, "unobserved_end": 0.15, "short_wall_m": 0.5,
-             "step_wall_m": 1.0, "step_observed": 0.6}
+             "step_wall_m": 1.0, "step_observed": 0.6, "level_unobserved_m": 0.5, "ceiling_max_m": 4.0,
+             "level_from_global_m": 0.05, "ceiling_min_coverage": 0.05, "ceiling_min_points": 200,
+             "door_head_min_m": 1.9}
 CAPTURE = {"loop_min_overlap": 0.2, "loop_min_inliers": 0.3, "loop_max_rot_deg": 20.0, "report_ratio": 1.1}
 
 
@@ -158,8 +164,8 @@ class _Model:
         return math.hypot(base * self.inflation(sources), abs(_first(sources, RESID_KEYS) or 0.0))
 
     def set(self, m: Measurement | None, sigma: float, parts: dict[str, float], up: float = 0.0,
-            reasons: Iterable[str] = ()) -> None:
-        """Interval from the symmetric sigma and the one-sided upward extent up (at q = 1)."""
+            reasons: Iterable[str] = (), down: float = 0.0) -> None:
+        """Interval from the symmetric sigma and the one-sided extents up and down (at q = 1)."""
         if m is None:
             return
         ev = dict(_ev(m))
@@ -172,21 +178,25 @@ class _Model:
         if not math.isfinite(sigma):
             sigma = abs(v)
         up = up if math.isfinite(up) else abs(v)
+        down = down if math.isfinite(down) else abs(v)
         s_hi = math.hypot(sigma, up / self.z) if up > 0 else sigma
-        lo, hi = v - self.zq * sigma, v + self.zq * s_hi
+        s_lo = math.hypot(sigma, down / self.z) if down > 0 else sigma
+        lo, hi = v - self.zq * s_lo, v + self.zq * s_hi
         m.lo, m.hi = (max(0.0, lo) if v >= 0 else lo), hi
         ev.update(sigma=sigma, q=self.q, sigma_parts=dict(parts))
-        for k in ("sigma_hi", "widened"):
+        for k in ("sigma_hi", "sigma_lo", "widened"):
             ev.pop(k, None)
         if up > 0:
             ev["sigma_hi"] = s_hi
+        if down > 0:
+            ev["sigma_lo"] = s_lo
         why = sorted(set(reasons))
         if why:
             ev["widened"] = why
         m.evidence = ev
 
     def length(self, m: Measurement | None, a: float, extra: dict[str, float] | None = None, up: float = 0.0,
-               reasons: Iterable[str] = ()) -> None:
+               reasons: Iterable[str] = (), down: float = 0.0) -> None:
         if m is None:
             return
         sc = abs(_num(m.value) or 0.0) * self.s
@@ -195,7 +205,9 @@ class _Model:
         parts = {"scale": sc, "additive": a, **extra}
         if up > 0:
             parts["upper"] = up
-        self.set(m, sigma, parts, up, reasons)
+        if down > 0:
+            parts["lower"] = down
+        self.set(m, sigma, parts, up, reasons, down)
 
     def area(self, m: Measurement, t_add: float, extra: dict[str, float] | None = None, up: float = 0.0,
              reasons: Iterable[str] = ()) -> None:
@@ -476,6 +488,47 @@ def _walls(mdl: _Model, room: Room, a: float, st: dict[str, Any], drift_m: float
     return out
 
 
+def _head_unseen(op: Any) -> bool:
+    """A door or passage whose head edge was not found, so its height was taken up to the ceiling."""
+    if str(getattr(op, "type", "")) not in ("door", "opening"):
+        return False
+    edges = _ev(op.height).get("edges_observed")
+    header = _ev(op).get("header")
+    top_seen = edges[2] if isinstance(edges, (list, tuple)) and len(edges) >= 3 else None
+    return ((header is not None and not bool(header)) or (top_seen is not None and not bool(top_seen))
+            or any(str(f) == "edge_unobserved:top" for f in getattr(op, "flags", None) or []))
+
+
+def _levels(room: Room, flags: set[str], st: dict[str, Any], z: float) -> tuple[float, float, list[str]]:
+    """Symmetric term and one-sided upward extent (m) of a room's floor-to-ceiling height, from how its floor
+    and ceiling levels were found."""
+    ev = _ev(room.ceiling_height)
+    height = abs(_num(getattr(room.ceiling_height, "value", None)) or 0.0)
+    sym2 = up2 = 0.0
+    why: list[str] = []
+    unseen = z * st["level_unobserved_m"]
+    cov, n = _num(ev.get("observed_fraction")), _num(ev.get("ceiling_n"))
+    weak = ((cov is not None and cov < st["ceiling_min_coverage"])
+            or (n is not None and n < st["ceiling_min_points"]))
+    if (_has_flag(flags, "ceiling_assumed") or ev.get("ceiling_observed") is False
+            or (_has_flag(flags, "ceiling_not_observed") and weak)):
+        up2 += max(unseen, st["ceiling_max_m"] - height) ** 2  # anywhere up to a high room's ceiling
+        why.append("ceiling_not_observed")
+    elif _has_flag(flags, "ceiling_from_global") or _has_flag(flags, "levels_from_global"):
+        sym2 += st["level_from_global_m"] ** 2
+        why.append("ceiling_from_global")
+    if _has_flag(flags, "floor_not_observed"):
+        up2 += unseen ** 2
+        why.append("floor_not_observed")
+    elif _has_flag(flags, "floor_from_global") or _has_flag(flags, "levels_from_global"):
+        sym2 += st["level_from_global_m"] ** 2
+        why.append("floor_from_global")
+    if _has_flag(flags, "floor_camera_height_unusual"):
+        sym2 += (0.5 * st["level_unobserved_m"]) ** 2
+        why.append("floor_camera_height_unusual")
+    return math.sqrt(sym2), math.sqrt(up2), why
+
+
 def _annotate_room(mdl: _Model, room: Room, add: dict[str, float], f_room: float, flags: set[str],
                    st: dict[str, Any], cap: _Capture,
                    vertical: float) -> tuple[float, float, float, list[str]]:
@@ -490,13 +543,15 @@ def _annotate_room(mdl: _Model, room: Room, add: dict[str, float], f_room: float
         mdl.length(wall.length, o.a_own, {"end_noise": o.end_noise, "end_position": o.end_pos,
                                           "drift": cap.drift_m}, o.up, o.reasons)
         reasons += o.reasons
+    lev_sym, lev_up, lev_why = _levels(room, flags, st, mdl.z)
+    reasons += lev_why
 
     def height(m: Measurement | None, sources: list[Any]) -> None:
         if m is None:
             return
         a_h = mdl.additive(add["height"] * f_room, sources)
         vert = abs(_num(m.value) or 0.0) * vertical
-        mdl.length(m, a_h, {"vertical": vert})
+        mdl.length(m, a_h, {"vertical": vert, "level": lev_sym}, lev_up, lev_why)
 
     for wall in room.walls:
         height(wall.height, [_ev(wall.height), wall.evidence, {"observed_fraction": wall.observed_fraction}])
@@ -504,7 +559,13 @@ def _annotate_room(mdl: _Model, room: Room, add: dict[str, float], f_room: float
         for m in (op.offset, op.width, op.height, op.sill):
             if m is None:
                 continue
-            mdl.length(m, mdl.additive(add["opening"] * f_room, [_ev(m), op.evidence]))
+            down, why = 0.0, []
+            if m is op.height and _head_unseen(op):
+                down = max(0.0, abs(_num(m.value) or 0.0) - st["door_head_min_m"])
+                why = ["opening_head_unobserved"] if down > 0 else []
+            a_op = mdl.additive(add["opening"] * f_room, [_ev(m), op.evidence])
+            mdl.length(m, a_op, down=down, reasons=why)
+            reasons += why
     height(room.ceiling_height, [_ev(room.ceiling_height), room.evidence])
 
     perim = abs(_num(room.perimeter.value) or 0.0)
@@ -681,6 +742,7 @@ def describe(record: dict[str, Any] | None) -> str:
     widened = f" This capture's scale term was widened for: {', '.join(reasons)}." if reasons else ""
     tier = record.get("model_tier", record.get("tier"))
     s = float(record.get("scale_sigma", 0.0))
+    unseen, top, door = (float(st[k]) for k in ("level_unobserved_m", "ceiling_max_m", "door_head_min_m"))
     vert = float(record.get("vertical", 0.0))
     return (
         f"{tier} tier error model. Lengths: sigma = sqrt((v*s)^2 + a^2) with a scale term s = {s:.3f} shared "
@@ -695,7 +757,8 @@ def describe(record: dict[str, Any] | None) -> str:
         f"unobserved wall or a step (shorter than {float(st['short_wall_m']):.2f} m, or shorter than "
         f"{float(st['step_wall_m']):.2f} m and low) may be a fragment: its upper bound reaches the pieces "
         f"beyond the step or the room's extent along the wall. Heights add a vertical term of {vert:.2f} "
-        "(log). Areas: "
+        f"(log); an unobserved floor or ceiling widens the upper side by z*{unseen:.2f} m, an unobserved "
+        f"ceiling up to {top:.1f} m; a door with no head edge found reaches down to {door:.2f} m. Areas: "
         "sqrt((2*A*s)^2 + (sum of L_i*a_i)^2) plus unobserved wall positions, and upward to the bounding box "
         "when a wall may be a fragment. Footprint: scale term "
         "fully correlated across rooms plus independent per-room terms; unplaced rooms widen footprint and "

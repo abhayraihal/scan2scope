@@ -47,6 +47,12 @@ structure:
   short_wall_m: 0.5           # walls shorter than this may be steps from furniture or misregistration
   step_wall_m: 1.0            # ... and so may walls shorter than this whose face covers less than
   step_observed: 0.6          #     step_observed of the floor-to-ceiling plane (a counter stops low)
+  level_unobserved_m: 0.5     # 1-sigma of how far an unobserved floor or ceiling lies beyond what was seen
+  ceiling_max_m: 4.0          # an unobserved ceiling may lie as high as this above the floor
+  level_from_global_m: 0.05   # a room level taken from the property-wide level
+  ceiling_min_coverage: 0.05  # with ceiling_not_observed, a room ceiling seen over less than this share
+  ceiling_min_points: 200     #     of its area or with fewer points is unobserved too
+  door_head_min_m: 1.9        # a door or passage with no head edge found may be as low as a common door head
 
 # Capture consistency.
 capture:
