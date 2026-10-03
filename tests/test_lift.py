@@ -462,10 +462,36 @@ def test_window_on_the_ceiling_is_dropped_and_does_not_hide_a_stain(tmp_path):
     assert res.damage[0].area.value == pytest.approx(0.12, rel=0.08)
 
 
+def _see_through(view, x0, x1, z0, z1, by=2.0):
+    """Push the point-map pixels of a rectangle on the north wall `by` metres further along their rays."""
+    p = view.pointmap.astype(np.float64)
+    c = view.T_wc[:3, 3]
+    sel = (np.abs(p[..., 1] - 3.0) < 1e-6) & (p[..., 0] >= x0) & (p[..., 0] <= x1) & (p[..., 2] >= z0) & (p[..., 2] <= z1)
+    ray = p[sel] - c
+    p[sel] = c + ray * (1 + by / np.linalg.norm(ray, axis=1, keepdims=True))
+    view.pointmap = p.astype(np.float32)
+
+
+def test_see_through_fraction_separates_openings_from_flat_sheets():
+    from scan2scope.semantics.lift import see_through_fraction
+
+    view = box_view("v0", (2.0, 1.0, 1.2), (2.0, 3.0, 1.2), LO, HI)
+    quad = rect_on_wall_y(3.0, 1.4, 2.6, 0.9, 2.0)
+    mask = polygon_mask(view.width, view.height, project(quad, view.T_wc, view.K))
+    ring = lift_mask(view, mask, ring=3)
+    assert see_through_fraction(view, mask, ring) < 0.05  # flat sheet on the wall
+    _see_through(view, 1.4, 2.6, 0.9, 2.0)
+    assert see_through_fraction(view, mask, ring) > 0.9  # opening: depth behind the wall
+    view.valid[:] = True
+    view.valid[40:80, 40:120] = False
+    assert see_through_fraction(view, mask, ring) > 0.9  # glass with no depth counts as see-through
+
+
 def test_window_in_a_wall_suppresses_damage_seen_through_it(tmp_path):
     plan = make_plan(rect_room())
     scene = _scene_with_images(tmp_path, [(2.0, 1.0, 1.2)])
     view = scene.views[0]
+    _see_through(view, 1.4, 2.6, 0.9, 2.0)
     win = _working_box(rect_on_wall_y(3.0, 1.4, 2.6, 0.9, 2.0), view)
     inside = _working_box(rect_on_wall_y(3.0, 1.8, 2.1, 1.2, 1.5), view)
     det = ScriptedDetector({"v0": {"damage": [(inside, "mold", 0.7)], "object": [(win, "window", 0.7)]}})
@@ -473,6 +499,18 @@ def test_window_in_a_wall_suppresses_damage_seen_through_it(tmp_path):
     assert res.damage == [] and [o.cls for o in res.objects] == ["window"]
     assert any(r.get("reason") == "inside_window" for r in res.dropped)
     assert res.objects[0].z_range[1] > 1.9  # placed from the band around the window, on the wall
+
+
+def test_sheet_of_paper_taken_for_a_window_does_not_hide_the_stain_on_it(tmp_path):
+    plan = make_plan(rect_room())
+    scene = _scene_with_images(tmp_path, [(2.0, 1.0, 1.2)])
+    view = scene.views[0]
+    sheet = _working_box(rect_on_wall_y(3.0, 1.5, 2.3, 0.8, 1.9), view)  # staged stain on taped paper
+    stain = _working_box(rect_on_wall_y(3.0, 1.6, 2.2, 1.0, 1.6), view)
+    det = ScriptedDetector({"v0": {"damage": [(stain, "water stain", 0.6)], "object": [(sheet, "window", 0.6)]}})
+    res = analyze([scene], plan, None, detector=det, segmenter=FakeSegmenter())
+    assert [d.cls for d in res.damage] == ["water_stain"] and res.objects == []
+    assert any(r.get("reason") == "not_see_through" for r in res.dropped)
 
 
 def test_one_failing_view_is_flagged_and_skipped(tmp_path):

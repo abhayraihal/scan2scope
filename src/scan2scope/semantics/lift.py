@@ -372,6 +372,29 @@ class ObjectPlacement:
     normal_z: float = 0.0  # |z| of the area-weighted mean normal: near 0 in a wall, near 1 on floor or ceiling
 
 
+def see_through_fraction(view: CameraView, mask: np.ndarray, ring: LiftedMask, behind_m: float = 0.15) -> float:
+    """Share of a mask with no geometry or lying behind the plane of its surrounding band.
+
+    Open doors, windows and mirrors show depth beyond the wall (or none at all); a sheet of paper on the wall
+    is coplanar with its surround and scores near zero.
+    """
+    valid = view_valid(view)
+    if valid is None or len(ring.points) < 3:
+        return 0.0
+    h, w = view.pointmap.shape[:2]
+    inside = mask_coverage(mask, h, w) >= 0.5
+    total = int(inside.sum())
+    if total == 0:
+        return 0.0
+    wts = ring.area_weights
+    c = np.array([wquantile(ring.points[:, k], wts, 0.5) for k in range(3)])
+    n = (ring.normals * wts[:, None]).sum(0)
+    n /= max(float(np.linalg.norm(n)), 1e-12)  # oriented towards the camera
+    pts = view.pointmap[inside & valid].astype(np.float64)
+    behind = int(((c - pts) @ n > behind_m).sum())
+    return (int((inside & ~valid).sum()) + behind) / total
+
+
 def place_object(lifted: LiftedMask, plan: Plan, cfg: LiftConfig) -> ObjectPlacement | None:
     """Plan position, plan extent (5th to 95th percentile) and height range of a lifted object mask."""
     w = lifted.area_weights

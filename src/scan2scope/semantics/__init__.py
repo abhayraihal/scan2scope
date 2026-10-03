@@ -36,6 +36,7 @@ from scan2scope.semantics.lift import (
     measure_on_surface,
     place_object,
     pointmap_jacobian,
+    see_through_fraction,
     view_valid,
 )
 from scan2scope.semantics.merge import (
@@ -93,6 +94,8 @@ class SemanticsConfig:
     suppress_overlap: float = 0.6  # share of the damage box inside the object box
     ring_px: int = 3
     wall_object_max_nz: float = 0.5  # doors, windows and mirrors whose surround is tilted more are dropped
+    min_see_through: float = 0.3  # ... and those whose inside is mostly coplanar with the surround
+    see_through_behind_m: float = 0.15
     write_debug: bool = True
 
 
@@ -310,6 +313,7 @@ def _process_view(view: CameraView, plan: Plan, cfg: SemanticsConfig, det: Any, 
     masks = seg.masks(raw, boxes)
     jac = pointmap_jacobian(view.pointmap, view_valid(view))
     # objects first: doors, windows and mirrors only count (and only suppress damage) when they sit in a wall
+    # and their inside shows depth past it, so a sheet of paper taped to the wall is not a window
     placed: list[Detection] = []
     for d, (mask, _, _) in zip(dets, masks):
         if d.kind != "object":
@@ -320,9 +324,14 @@ def _process_view(view: CameraView, plan: Plan, cfg: SemanticsConfig, det: Any, 
         if place is None:
             records.append(_record(view, d, "dropped", "no_geometry_under_mask"))
             continue
-        if d.cls in RING_CLASSES and place.normal_z > cfg.wall_object_max_nz:
-            records.append(_record(view, d, "dropped", "not_in_a_wall", normal_z=round(place.normal_z, 3)))
-            continue
+        if d.cls in RING_CLASSES:
+            if place.normal_z > cfg.wall_object_max_nz:
+                records.append(_record(view, d, "dropped", "not_in_a_wall", normal_z=round(place.normal_z, 3)))
+                continue
+            through = see_through_fraction(view, mask, lifted, cfg.see_through_behind_m)
+            if through < cfg.min_see_through:
+                records.append(_record(view, d, "dropped", "not_see_through", see_through=round(through, 3)))
+                continue
         placed.append(d)
         object_obs.append(ObjectObservation(view.id, d.cls, d.score, place.room_id, place.xy, place.x_range,
                                             place.y_range, place.z_range, place.n_pixels))
