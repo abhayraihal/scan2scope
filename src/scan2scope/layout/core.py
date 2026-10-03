@@ -352,6 +352,7 @@ def _assemble(scene: Scene, d: _Data, lines: list[W.WallLine], cx: C.Complex, ro
     pts = R.WallPoints.build(d.P, d.N, d.wp, d.wf, fc.floor.z - 0.3, fc.ceiling.z + 0.3)
     rooms: list[Room] = []
     polys_m: list[np.ndarray] = []
+    n_steps = 0
     for k, g in enumerate(groups):
         rid = f"R{k + 1}"
         rflags: list[str] = []
@@ -377,13 +378,14 @@ def _assemble(scene: Scene, d: _Data, lines: list[W.WallLine], cx: C.Complex, ro
                   "floor_tilt": fl.tilt, "ceiling_tilt": ce.tilt, "observed_fraction": ceil_obs,
                   "ceiling_observed": bool(ce.observed), "noise_sigma": sigma}
 
-        # the room's own faces: each edge refitted from the wall points that face into this room
+        # the room's own faces: edges refitted, short steps removed
         out = R.room_outline(poly_c, pts, fl.z, ce.z, sigma)
         if out is None:
             poly_m, fits = poly_c, None
             rflags.append("outline_not_refined")
         else:
             poly_m, fits = out.polygon, [e.fit for e in out.edges]
+            n_steps += out.steps
 
         K = len(poly_m)
         edges = []
@@ -456,6 +458,7 @@ def _assemble(scene: Scene, d: _Data, lines: list[W.WallLine], cx: C.Complex, ro
                            "n_cameras": int(sum(regs[r].n_cams for r in g)),
                            "polygon_manhattan": poly_m.tolist(), "polygon_cells": poly_c.tolist()}))
         polys_m.append(poly_m)
+    meta["outline"] = {"steps_removed": n_steps}
 
     adjacency = _connect(rooms, cx, room_of_cell)
     allp = np.concatenate(polys_m)

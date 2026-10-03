@@ -1,12 +1,18 @@
-"""Room outlines from each room's own wall faces.
+"""Room outlines from each room's own wall faces: per-room wall refinement and regularisation.
 
-The cell complex puts every room edge on a wall line fitted once for the whole property, so two parallel faces
-of different rooms a few centimetres apart share one line placed between them. Per room, each edge is refitted
-from the wall points within BAND of it that face into the room and lie along it: a trimmed mean of their
-offset, started at the densest offset and iterated, or a slanted line when that explains the points clearly
-better (the edge then sits where the line crosses its midpoint). An edge with fewer than MIN_POINTS such
-points keeps its cell-complex position and is flagged wall_not_refined. Corners are where consecutive refined
-lines meet.
+The cell complex puts every room edge on a wall line fitted once for the whole property. Two parallel faces of
+different rooms a few centimetres apart then share one line placed between them, and an outline steps between
+the two faces of a wall. Per room:
+
+1. Refinement: each edge is refitted from the wall points within BAND of it that face into the room and lie
+   along it: a trimmed mean of their offset, started at the densest offset and iterated, or a slanted line
+   when that explains the points clearly better (the edge then sits where the line crosses its midpoint). An
+   edge with fewer than MIN_POINTS such points keeps its cell-complex position and is flagged
+   wall_not_refined. Corners are where consecutive refined lines meet.
+2. Regularisation: an edge shorter than STEP_MAX between two parallel edges goes. Between edges that run the
+   same way it is a step, and both snap to the face with more support over their joint extent and merge into
+   one edge; between edges that run opposite ways it is the end of a strip that thin (a wall body, a slot),
+   and the strip is cut back. It also runs once on the cell lines before the refinement.
 
 Coordinates are in the Manhattan frame. An outline is rectilinear and counter-clockwise, held as a cyclic list
 of edges whose axes alternate; vertex k is where edge k - 1 meets edge k.
@@ -27,6 +33,7 @@ from scan2scope.layout.floor_ceiling import robust_sigma
 log = logging.getLogger("scan2scope.layout")
 
 BAND = 0.15  # wall points this close to an edge are candidates for its face
+STEP_MAX = 0.25  # shorter edges between parallel edges are removed
 MIN_POINTS = 30  # fewer face voxels than this: the edge keeps its cell-complex position
 END_MARGIN = 0.03  # voxels this close to either end of an edge are left out (corner voxels mix two faces)
 WIN_MIN, WIN_MAX = 0.015, 0.08  # trimming window of the face fit
@@ -97,6 +104,7 @@ class Edge:
 class Outline:
     polygon: np.ndarray
     edges: list[Edge]  # edge k runs from polygon[k] to polygon[k + 1]
+    steps: int = 0  # steps and strips removed
 
 
 def edges_of(poly: np.ndarray) -> list[Edge] | None:
@@ -219,6 +227,65 @@ class _Room:
         flags = (f"wall_slanted:{np.degrees(np.arctan(slope)):.1f}deg",) if abs(slope) > SLANT_FLAG else ()
         return FaceFit(float(a), float(slope), float(tm), n, rms, float(s), float(wa[inl].sum()), True, flags)
 
+    def support(self, e: Edge, t0: float, t1: float) -> float:
+        """Voxels on the face of e (its fitted line, else its coordinate) over [t0, t1]."""
+        f = e.fit
+        if f is not None and f.refined:
+            a, b, tm, s = f.coord, f.slope, f.t_mid, f.sigma
+        else:
+            a, b, tm, s = e.coord, 0.0, 0.5 * (t0 + t1), self.sigma
+        win = float(np.clip(2.5 * s, WIN_MIN, WIN_MAX))
+        v, t, _, wa, _ = self.band(e, t0, t1, a, win + abs(b) * abs(t1 - t0))
+        return float(wa[np.abs(v - a - b * (t - tm)) < win].sum())
+
+def _merge_step(edges: list[Edge], e: int, room: _Room, refit: bool) -> list[Edge]:
+    """Remove the step edge e: its neighbours snap to the better-supported face and become one edge,
+    refitted over the joint extent when `refit`."""
+    K = len(edges)
+    ia, ib = (e - 1) % K, (e + 1) % K
+    a, b = edges[ia], edges[ib]
+    t0, t1 = edges[(e - 2) % K].coord, edges[(e + 2) % K].coord
+    sa, sb = room.support(a, t0, t1), room.support(b, t0, t1)
+    best = a if sa >= sb else b
+    merged = Edge(a.axis, best.coord, a.sign)
+    if refit:
+        merged.fit = room.fit(merged, t0, t1, start=best.coord)
+        if merged.fit.refined:
+            merged.coord = merged.fit.coord
+    log.debug("step %.3f m removed: faces %.3f (support %.0f) and %.3f (%.0f) -> %.3f",
+              abs(b.coord - a.coord), a.coord, sa, b.coord, sb, merged.coord)
+    return [merged if k == ia else q for k, q in enumerate(edges) if k not in (e, ib)]
+
+
+def _cut_strip(edges: list[Edge], e: int) -> list[Edge]:
+    """Remove a strip narrower than STEP_MAX whose end is edge e (its sides e - 1 and e + 1 run opposite
+    ways): the end and the shorter side go, and the edge beyond the shorter side extends to the longer
+    side."""
+    K = len(edges)
+    la = abs(edges[e].coord - edges[(e - 2) % K].coord)
+    lb = abs(edges[(e + 2) % K].coord - edges[e].coord)
+    drop = {(e - 1) % K, e} if la <= lb else {e, (e + 1) % K}
+    log.debug("strip %.3f m wide, %.3f m long removed", abs(edges[(e + 1) % K].coord - edges[e - 1].coord),
+              min(la, lb))
+    return [q for k, q in enumerate(edges) if k not in drop]
+
+
+def _regularise(edges: list[Edge], room: _Room, refit: bool) -> tuple[list[Edge], int]:
+    """Remove edges shorter than STEP_MAX between parallel edges, shortest first: a step between edges that
+    run the same way, or the end of a thin strip between edges that run opposite ways."""
+    n = 0
+    while len(edges) > 4:
+        K = len(edges)
+        step, e = min((abs(edges[(k + 1) % K].coord - edges[k - 1].coord), k) for k in range(K))
+        if step >= STEP_MAX:
+            break
+        if edges[e - 1].sign == edges[(e + 1) % K].sign:
+            edges = _merge_step(edges, e, room, refit)
+        else:
+            edges = _cut_strip(edges, e)
+        n += 1
+    return edges, n
+
 
 def _refit_all(edges: list[Edge], room: _Room, keep_face: bool) -> None:
     """Fit every edge over its current extent, then move each onto its face (all at once)."""
@@ -237,11 +304,14 @@ def room_outline(poly: np.ndarray, pts: WallPoints, floor_z: float, ceil_z: floa
     if edges is None:
         return None
     room = _Room(pts, floor_z + 0.05, ceil_z - 0.03, sigma)
+    edges, steps = _regularise(edges, room, refit=False)
     _refit_all(edges, room, keep_face=False)
-    _refit_all(edges, room, keep_face=True)  # each edge again over the extent its refitted neighbours give it
+    edges, n = _regularise(edges, room, refit=True)
+    steps += n
+    _refit_all(edges, room, keep_face=True)
     if not consistent(edges):
         log.debug("refined outline is not simple; keeping the cell polygon")
         return None
     P = outline(edges)
     start = int(np.lexsort((P[:, 0], P[:, 1]))[0])
-    return Outline(np.roll(P, -start, axis=0), edges[start:] + edges[:start])
+    return Outline(np.roll(P, -start, axis=0), edges[start:] + edges[:start], steps)
