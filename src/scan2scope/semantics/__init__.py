@@ -90,7 +90,7 @@ SURFACE_EVIDENCE: dict[str, dict[str, tuple[float, int] | None]] = {
     "peeling_paint": {"floor": None},
     "mold": {"floor": None},
     "water_stain": {"floor": (0.6, 2)},
-    "crack": {"floor": (0.6, 2)},
+    "crack": {"floor": (0.75, 3)},  # tile and plank joints are thin dark lines; in the benchmark room they reach 0.56
     "hole": {"floor": (0.75, 3)},  # dark gaps under cabinets and doors look like holes in a floor
 }
 

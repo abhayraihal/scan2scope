@@ -174,6 +174,8 @@ def test_floor_stains_need_two_views():
     assert allowed and need == (0.6, 2)
     assert surface_rule(SemanticsConfig().surface_evidence, "water_stain", "wall") == (True, None)
     assert surface_rule(SemanticsConfig().surface_evidence, "mold", "floor") == (False, None)
+    for cls in ("crack", "hole"):  # joints and dark gaps: three views and a strong combined score
+        assert surface_rule(SemanticsConfig().surface_evidence, cls, "floor") == (True, (0.75, 3))
 
 
 def test_dark_glass_counts_as_a_window_and_a_window_reaching_the_floor_does_not(tmp_path):
