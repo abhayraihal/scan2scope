@@ -13,3 +13,5 @@ __pycache__/
 /bench/data/*/raw/
 /.claude/
 /bench/synthetic/
+/dist/
+/bench/data/*/.download/
