@@ -36,7 +36,6 @@ ASPECT_SIZES = {
 }
 INFER_ARGS = {"memory_efficient_inference": True, "minibatch_size": 1, "use_amp": True, "amp_dtype": "bf16",
               "apply_mask": True, "mask_edges": True, "apply_confidence_mask": False}
-OUTPUT_KEYS = ("pts3d", "conf", "mask", "T_wc", "K", "metric_scale")
 # MapAnything confidence is 1 + exp(x); indoor surfaces measured 10 to 60, unreliable pixels sit near 1.
 CONF_REF = 30.0
 HEAVY_CROP = 0.2  # share of a resized image cut away to fit the call's aspect ratio
@@ -48,6 +47,7 @@ def confidence_weight(conf: np.ndarray) -> np.ndarray:
     """Absolute map of MapAnything confidence to [0, 1]: log(conf) / log(CONF_REF), clipped."""
     c = np.maximum(np.nan_to_num(np.asarray(conf, np.float64), nan=1.0), 1.0)
     return np.clip(np.log(c) / np.log(CONF_REF), 0.0, 1.0).astype(np.float32)
+
 
 try:
     from scan2scope.cache import CacheMiss
