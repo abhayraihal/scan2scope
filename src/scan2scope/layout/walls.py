@@ -21,7 +21,7 @@ DIR_TOL = float(np.cos(np.radians(25.0)))
 T_RES = 0.05  # support profile bins along a line
 Z_RES = 0.10
 MIN_LINE_AREA = 0.2  # m2 of observed face
-MIN_LINE_COLS = 5  # profile bins with at least 40 cm of observed height
+MIN_LINE_COLS = 5  # contiguous profile bins (25 cm) with at least 40 cm of observed height
 MAX_PEAKS_PER_DIR = 80
 
 
@@ -86,7 +86,11 @@ def direction_codes(nxy: np.ndarray) -> np.ndarray:
 
 def band_profiles(t: np.ndarray, z: np.ndarray, grid: TGrid, floor_z: float,
                   ceil_z: float) -> tuple[np.ndarray, np.ndarray, float, int]:
-    """Occupancy of a wall face on (t, z) cells -> mid-height and upper-band support, area, tall columns."""
+    """Occupancy of a wall face on (t, z) cells.
+
+    Returns mid-height and upper-band support per bin, the observed area, and the longest run of tall columns
+    (one-bin holes bridged), which keeps door jambs and other wall-thickness surfaces from becoming lines.
+    """
     zb0, zb1 = floor_z + 0.05, ceil_z - 0.05
     nz = max(1, int(np.ceil((zb1 - zb0) / Z_RES)))
     it = grid.index(t)
@@ -101,7 +105,11 @@ def band_profiles(t: np.ndarray, z: np.ndarray, grid: TGrid, floor_z: float,
     up = zc >= floor_z + 2.1
     solid = occ[:, mid].mean(1) >= 0.4 if mid.any() else occ.any(1)
     upper = occ[:, up].mean(1) >= 0.25 if (up.any() and ceil_z - floor_z >= 2.25) else np.zeros(grid.n, bool)
-    return solid, upper, float(occ.sum() * T_RES * Z_RES), int((occ.sum(1) >= 4).sum())
+    tall = occ.sum(1) >= 4
+    tall[1:-1] |= tall[:-2] & tall[2:]
+    d = np.diff(np.concatenate([[0], tall.astype(np.int8), [0]]))
+    longest = int((np.flatnonzero(d == -1) - np.flatnonzero(d == 1)).max()) if tall.any() else 0
+    return solid, upper, float(occ.sum() * T_RES * Z_RES), longest
 
 
 def _refine_sorted(v: np.ndarray, w: np.ndarray, c0: float, win0: float, win_min: float,

@@ -173,6 +173,18 @@ def _corridor(g: LineGroup, others: list[LineGroup], ogrid: TGrid, ta: float, tb
     return False
 
 
+def _solid_run(solid: np.ndarray, i: int, step: int) -> int:
+    """Length in bins of the solid run starting at bin i (or the next) in direction step, one-bin holes bridged."""
+    n = len(solid)
+    if 0 <= i < n and not solid[i]:
+        i += step
+    k = 0
+    while 0 <= i < n and (solid[i] or (0 <= i + step < n and solid[i + step])):
+        k += 1
+        i += step
+    return k
+
+
 def close_groups(gx: list[LineGroup], gy: list[LineGroup], grids: tuple[TGrid, TGrid]) -> None:
     """Wall evidence per profile bin, with door and window heads and short data gaps counted as wall."""
     for groups, others, axis in ((gx, gy, 0), (gy, gx, 1)):
@@ -186,7 +198,10 @@ def close_groups(gx: list[LineGroup], gy: list[LineGroup], grids: tuple[TGrid, T
                 if a == 0 or b == len(closed):
                     continue
                 length = (b - a) * grid.res
-                door_sized = (length <= DOOR_MAX + 1e-9 and g.solid[max(a - 2, 0):a].any() and g.solid[b:b + 2].any()
+                # a header-less door-sized gap separates rooms only in a real wall: wall on both sides, and a
+                # substantial piece on at least one (two door jambs facing across a corridor do not qualify)
+                sides = sorted((_solid_run(g.solid, a - 1, -1), _solid_run(g.solid, b, 1)))
+                door_sized = (length <= DOOR_MAX + 1e-9 and sides[0] * grid.res >= 0.1 and sides[1] * grid.res >= 0.4
                               and not _corridor(g, others, ogrid, grid.t0 + a * grid.res, grid.t0 + b * grid.res))
                 if length < SMALL_GAP - 1e-9 or door_sized:
                     closed[a:b] = True
