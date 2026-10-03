@@ -8,8 +8,9 @@ weights. Torch and transformers are imported only when a model is actually neede
 Grounding DINO scores damage weakly and confuses look-alikes, so a damage box has to survive these checks:
 it is not a box the object or distractor prompts explain at least as well (a lamp socket, a curtain, a mirror);
 it does not lie on a distractor or inside a door, window or mirror; its class fits the image (a crack needs a
-thin dark line, and an area class whose mask is a thin line is a crack); the class is plausible on the surface
-it lands on (no peeling paint or mold on a floor, more evidence for floor stains, cracks and holes).
+thin dark line that wanders like a crack, and a weak area-class box that holds one is that crack); the class
+is plausible on the surface it lands on (no peeling paint or mold on a floor, more evidence for floor stains,
+cracks and holes). Damage boxes found only on the image tiles count only as cracks.
 """
 
 from __future__ import annotations

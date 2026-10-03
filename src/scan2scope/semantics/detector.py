@@ -97,7 +97,8 @@ class DetectorConfig:
     objects: PromptSet = OBJECT_PROMPTS
     distractors: PromptSet | None = DISTRACTOR_PROMPTS
     # the damage prompt also runs on damage_tiles x damage_tiles overlapping crops, each resized to the working
-    # size, because a crack or a small hole spans only a few dozen pixels of a room-scale view (0 or 1: off)
+    # size, because a crack spans only a few dozen pixels of a room-scale view; semantics keeps a tile detection
+    # only when it turns out to be a crack (0 or 1: off)
     damage_tiles: int = 2
     tile_overlap: float = 0.2  # share of the image width (height) covered by two neighbouring tiles
     nms_iou: float = 0.5
