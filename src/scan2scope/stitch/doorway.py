@@ -317,14 +317,17 @@ def _width_ratio(a: float, b: float) -> float:
     return min(a, b) / max(a, b)
 
 
-def rank_candidates(rooms: list[StitchRoom], photo: DoorwayPhoto) -> list[int]:
-    """Rooms worth registering a doorway photo into: compatible door widths first, then folder neighbours."""
+def rank_candidates(rooms: list[StitchRoom], photo: DoorwayPhoto,
+                    hints: dict[tuple[int, str], int] | None = None) -> list[int]:
+    """Rooms worth registering a doorway photo into: the room door matching put behind this door (hints), then
+    rooms with a compatible door width, then folder neighbours and rooms with many doors."""
     a = rooms[photo.room]
+    hinted = (hints or {}).get((a.index, photo.door.id))
 
     def prio(b: StitchRoom) -> float:
         best = max((_width_ratio(d.width, photo.door.width) for d in b.doors), default=0.0)
         compat = 2.0 if best >= 0.8 else 1.0 if best >= 0.6 else 0.0
-        return compat + 1.0 / abs(a.index - b.index) + 0.1 * min(len(b.doors), 4)
+        return 10.0 * (b.index == hinted) + compat + 1.0 / abs(a.index - b.index) + 0.1 * min(len(b.doors), 4)
 
     cands = [b.index for b in rooms if b.index != a.index and _posed_views(b)]
     return sorted(cands, key=lambda k: (-prio(rooms[k]), k))
@@ -570,18 +573,26 @@ def _run(runner: RunnerFn, view: CameraView, room_b: StitchRoom, door_a: Door, c
 
 
 def register_doorways(rooms: list[StitchRoom], runner: RunnerFn, cache: Any, *, max_runs: int = 24,
-                      per_photo: int = 3) -> tuple[list[Hypothesis], list[dict], list[str], dict]:
-    """Doorway-photo hypotheses for every room, within a budget of model runs."""
+                      per_photo: int = 3, hints: dict[tuple[int, str], int] | None = None,
+                      settle_score: float = 0.6) -> tuple[list[Hypothesis], list[dict], list[str], dict]:
+    """Doorway-photo hypotheses for every room, within a budget of model runs.
+
+    Candidates are tried best first across all photos; a photo stops once it lands on a candidate's door with
+    at least settle_score.
+    """
     photos = [p for r in rooms for p in find_doorway_photos(r)]
     queue = sorted((rank, -p.score, pi, b) for pi, p in enumerate(photos)
-                   for rank, b in enumerate(rank_candidates(rooms, p)[:per_photo]))
+                   for rank, b in enumerate(rank_candidates(rooms, p, hints)[:per_photo]))
     runs: dict[tuple, Any] = {}
     hyps: list[Hypothesis] = []
     records: list[dict] = []
     flags: list[str] = []
+    settled: set[int] = set()
     n_runs = skipped = unavailable = 0
     for _, _, pi, b in queue:
         p = photos[pi]
+        if pi in settled:
+            continue
         rk = (p.room, p.view.id, b)
         if rk not in runs:
             if n_runs >= max_runs:
@@ -600,10 +611,13 @@ def register_doorways(rooms: list[StitchRoom], runner: RunnerFn, cache: Any, *, 
         records.append(rec)
         if h is not None:
             hyps.append(h)
+            if h.opening_b is not None and h.score >= settle_score:
+                settled.add(pi)
     if skipped:
         flags.append(f"doorway_runs_skipped:{skipped}")
     if n_runs and unavailable == n_runs:
         flags.append("doorway_registration_unavailable")
-    stats = {"photos": len(photos), "runs": n_runs, "skipped_runs": skipped, "hypotheses": len(hyps)}
+    stats = {"photos": len(photos), "runs": n_runs, "skipped_runs": skipped, "hypotheses": len(hyps),
+             "settled_photos": len(settled)}
     log.info("stitch: %d doorway photos, %d registration runs, %d hypotheses", len(photos), n_runs, len(hyps))
     return hyps, records, flags, stats

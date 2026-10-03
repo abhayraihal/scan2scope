@@ -376,6 +376,19 @@ def _extents(rooms: list[StitchRoom], room_list: list[Room], sol: Solution) -> t
     return out[0], out[1]
 
 
+def _door_hints(rooms: list[StitchRoom], hyps: list[Hypothesis], params: Params | None) -> dict[tuple[int, str], int]:
+    """The room that door matching alone puts behind each door; doorway photos try that room first."""
+    sol = solve(rooms, hyps, params)
+    hints: dict[tuple[int, str], int] = {}
+    for _, k in sol.parent.values():
+        e = sol.edges[k]
+        if e.opening_i is not None:
+            hints[(e.i, e.opening_i)] = e.j
+        if e.opening_j is not None:
+            hints[(e.j, e.opening_j)] = e.i
+    return hints
+
+
 def _plain(x: Any) -> Any:
     """Numpy scalars and arrays inside the stitch record become plain JSON types."""
     if isinstance(x, dict):
@@ -417,25 +430,26 @@ def stitch_rooms(room_scenes: list[Scene], room_plans: list[Plan], work_dir: str
     if not rooms:
         flags.append("no_rooms")
 
-    hyps: list[Hypothesis] = []
+    dm: list[Hypothesis] = []
+    door_pairs = 0
+    try:
+        dm, door_pairs = door_match_hypotheses(rooms)
+    except Exception as exc:
+        log.warning("stitch: door matching failed: %s", exc, exc_info=True)
+        flags.append(f"door_match_failed:{type(exc).__name__}")
+    dw: list[Hypothesis] = []
     records: list[dict] = []
     stats: dict = {"photos": 0, "runs": 0, "skipped_runs": 0, "hypotheses": 0}
     if use_doorway_photos and len(rooms) > 1:
         try:
-            dw, records, dw_flags, stats = register_doorways(rooms, runner or mapanything_runner, cache,
-                                                             max_runs=max_registrations)
-            hyps += dw
+            dw, records, dw_flags, stats = register_doorways(
+                rooms, runner or mapanything_runner, cache, max_runs=max_registrations,
+                hints=_door_hints(rooms, dm, params))
             flags += dw_flags
         except Exception as exc:  # fall back to door matching
             log.warning("stitch: doorway registration failed: %s", exc, exc_info=True)
             flags.append(f"doorway_registration_failed:{type(exc).__name__}")
-    door_pairs = 0
-    try:
-        dm, door_pairs = door_match_hypotheses(rooms)
-        hyps += dm
-    except Exception as exc:
-        log.warning("stitch: door matching failed: %s", exc, exc_info=True)
-        flags.append(f"door_match_failed:{type(exc).__name__}")
+    hyps = dw + dm
     try:
         sol = solve(rooms, hyps, params)
     except Exception as exc:  # lay rooms out side by side rather than fail the run
