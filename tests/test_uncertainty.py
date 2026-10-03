@@ -7,9 +7,15 @@ import math
 import numpy as np
 import pytest
 import yaml
-from _output_plan import make_damage, make_plan
+from _output_plan import (
+    M,
+    make_damage,
+    make_plan,
+    poly_room,
+    rect_room,
+)
 
-from scan2scope.types import TIERS, Measurement
+from scan2scope.types import TIERS, Measurement, Plan
 from scan2scope.uncertainty import annotate
 from scan2scope.uncertainty.calibrate import (
     as_record,
@@ -254,9 +260,117 @@ def test_shipped_files_match_the_spec():
     # one MapAnything metric estimate is good to about 0.08 in log scale, video chunks share that error
     assert [pri["tiers"][t]["scale_floor"] for t in ("lidar", "video", "photo")] == [0.003, 0.08, 0.08]
     assert [pri["tiers"][t]["vertical"] for t in ("lidar", "video", "photo")] == [0.0, 0.1, 0.1]
+    st = pri["structure"]
+    keys = ("min_face_points", "unobserved_end", "short_wall_m", "step_wall_m", "step_observed")
+    assert [st[k] for k in keys] == [30, 0.15, 0.5, 1.0, 0.6]
 
 
-# capture evidence -------------------------------------------------------------------------------------------
+# evidence ---------------------------------------------------------------------------------------------------
+
+
+def one_room(room) -> Plan:
+    return Plan(rooms=[room], adjacency=[], footprint_area=M(room.floor_area.value, "area", "m2"),
+                extent_x=M(4.0), extent_y=M(3.0))
+
+
+def notched_room(depth: float = 0.2):
+    """4 x 3 m room whose bottom wall steps in by depth between x = 1.5 and 2.5, as a counter face would."""
+    poly = np.array([[0, 0], [1.5, 0], [1.5, depth], [2.5, depth], [2.5, 0], [4, 0], [4, 3], [0, 3]], float)
+    return poly_room("R1", "living", poly)
+
+
+def symmetric(m: Measurement) -> bool:
+    return m.hi - m.value == pytest.approx(m.value - m.lo) and "upper" not in m.evidence["sigma_parts"]
+
+
+def unobserve(wall) -> None:
+    wall.flags = ["wall_unobserved"]
+    wall.length.evidence["n_points"] = 0
+    wall.observed_fraction = 0.0
+
+
+@pytest.mark.parametrize("tier", TIERS)
+def test_clean_rectangle_keeps_symmetric_intervals(tier):
+    plan = one_room(rect_room("R1", "living", 0, 0, 4, 3))
+    rec = annotate(plan, [], tier=tier, quality={}, calibration=NO_CAL)
+    room = plan.rooms[0]
+    for m in [w.length for w in room.walls] + [room.floor_area, room.ceiling_height, room.perimeter]:
+        assert symmetric(m)
+        assert "widened" not in m.evidence
+    assert rec["room_factors"]["R1"]["structure"] == [] and rec["capture_reasons"] == []
+
+
+def test_wall_ending_at_a_step_may_span_the_room():
+    plan = one_room(notched_room())
+    annotate(plan, [], tier="lidar", quality={}, calibration=NO_CAL)
+    walls = {w.id: w.length for w in plan.rooms[0].walls}
+    # W1 (1.5 m) ends at a 0.2 m step: if the notch is an artefact, W1, W3 and W5 are one 4 m wall
+    w1 = walls["R1-W1"]
+    assert w1.hi > 4.0 and w1.value - w1.lo == pytest.approx(Z * w1.evidence["sigma"])
+    assert w1.hi - 4.0 < 0.05  # the far end keeps the LiDAR precision
+    assert {"wall_end_step", "wall_fragment"} <= set(w1.evidence["widened"])
+    assert walls["R1-W3"].hi > 4.0 and walls["R1-W5"].hi > 4.0
+    # a step that is an artefact vanishes rather than grows, and the walls away from the notch are untouched
+    assert symmetric(walls["R1-W2"]) and walls["R1-W2"].hi < 0.25
+    for wid in ("R1-W6", "R1-W7", "R1-W8"):
+        assert symmetric(walls[wid]), wid
+    area = plan.rooms[0].floor_area
+    assert area.value == pytest.approx(11.8) and area.hi > 12.0
+    assert "room_fragment" in area.evidence["widened"]
+
+
+def test_low_short_face_counts_as_a_step():
+    room = notched_room(depth=0.8)  # 0.8 m returns: a full-height face this short is taken as a real wall
+    plan = one_room(room)
+    annotate(plan, [], tier="lidar", quality={}, calibration=NO_CAL)
+    assert symmetric(room.walls[0].length)
+    for k in (1, 3):  # ... a face covering little of its floor-to-ceiling plane is a counter or wardrobe side
+        room.walls[k].observed_fraction = 0.35
+    annotate(plan, [], tier="lidar", quality={}, calibration=NO_CAL)
+    assert {"wall_end_step", "wall_fragment"} <= set(room.walls[0].length.evidence["widened"])
+
+
+def test_unobserved_end_wall_adds_a_share_of_the_extent():
+    room = rect_room("R1", "living", 0, 0, 4, 3)
+    unobserve(room.walls[1])  # the right wall, 3 m
+    plan = one_room(room)
+    annotate(plan, [], tier="video", quality={}, calibration=NO_CAL)
+    bottom, right, top, left = (w.length for w in room.walls)
+    for m in (bottom, top):  # both end at the unobserved wall
+        assert m.evidence["sigma_parts"]["end_position"] == pytest.approx(0.15 * 4.0)
+        assert "wall_end_unobserved" in m.evidence["widened"]
+        assert symmetric(m)  # they already span the room, so nothing one-sided
+    assert "end_position" not in left.evidence["sigma_parts"]
+    assert "wall_unobserved" in right.evidence["widened"]
+    # the area carries the unobserved wall's position: its 3 m length times 0.15 of the 4 m extent across it
+    assert room.floor_area.evidence["sigma_parts"]["unobserved_walls"] == pytest.approx(3.0 * 0.15 * 4.0)
+
+
+def test_fragment_with_an_unobserved_end_reaches_the_room_extent():
+    poly = np.array([[0, 0], [1.5, 0], [1.5, 0.6], [4, 0.6], [4, 3], [0, 3]], float)  # an L with a 0.6 m step
+    room = poly_room("R1", "living", poly)
+    unobserve(room.walls[1])
+    plan = one_room(room)
+    annotate(plan, [], tier="video", quality={}, calibration=NO_CAL)
+    w1 = room.walls[0].length  # 1.5 m, ends at the unobserved step; the room is 4 m wide
+    assert w1.hi > 4.0 and {"wall_end_unobserved", "wall_fragment"} <= set(w1.evidence["widened"])
+
+
+def test_end_wall_evidence_inflates_the_length():
+    a = 0.025
+    room = rect_room("R1", "living", 0, 0, 4, 3, observed=(0.9, 0.2, 0.9, 0.9))
+    plan = one_room(room)
+    annotate(plan, [], tier="video", quality={}, calibration=NO_CAL)
+    bottom, left = room.walls[0].length, room.walls[3].length
+    expect = math.sqrt(0.5 * a * a * (2.0 ** 2 - 1))  # the right wall's 0.2 observed share doubles its term
+    assert bottom.evidence["sigma_parts"]["end_noise"] == pytest.approx(expect)
+    assert "end_noise" not in left.evidence["sigma_parts"]
+    # a face spread well beyond the capture's surface noise (two faces fitted as one) adds its excess
+    room = rect_room("R1", "living", 0, 0, 4, 3)
+    room.walls[1].length.evidence.update(fit_rms=0.05, noise_sigma=0.02)
+    plan = one_room(room)
+    annotate(plan, [], tier="lidar", quality={}, calibration=NO_CAL)
+    assert room.walls[0].length.evidence["sigma_parts"]["end_noise"] == pytest.approx(0.03)
 
 
 def test_chunk_scale_spread_widens_the_shared_scale():
@@ -303,6 +417,8 @@ def test_lidar_drift_record_leaves_the_scale_alone():
     plan.meta["drift"] = {"enabled": True, "segments": 11, "loop_closures_accepted": 2}
     rec = annotate(plan, [], tier="lidar", quality={"scale_log_sigma": 0.003}, calibration=NO_CAL)
     assert rec["scale_sigma"] == pytest.approx(0.003) and rec["capture_reasons"] == []
+
+
 
 
 # calibration ------------------------------------------------------------------------------------------------

@@ -39,6 +39,15 @@ inflation:
   few_photos: {below: 4, factor: 1.5}
   missing_exif_focal: 1.2
 
+# Plan structure: what the layout could not observe.
+structure:
+  min_face_points: 30         # an end wall with fewer face points (the layout's own bar) is unobserved
+  sparse_observed: 0.1        # ... one observed over less than this share of its face is sparse
+  unobserved_end: 0.15        # 1-sigma position of an unobserved end wall, as a share of the room extent
+  short_wall_m: 0.5           # walls shorter than this may be steps from furniture or misregistration
+  step_wall_m: 1.0            # ... and so may walls shorter than this whose face covers less than
+  step_observed: 0.6          #     step_observed of the floor-to-ceiling plane (a counter stops low)
+
 # Capture consistency.
 capture:
   loop_min_overlap: 0.2       # a rejected loop closure counts as a drift measurement only if it registered
