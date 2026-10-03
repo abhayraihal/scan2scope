@@ -446,7 +446,8 @@ def stitch_gate(tier: str, spec: dict[str, Any], fp_spec: dict[str, Any], ms: li
                 parts.append(f"adjacency missing {adj.get('missing')} extra {adj.get('extra')}"
                              + (f" unmatched {adj.get('unmatched_rooms')}" if adj.get("unmatched_rooms") else ""))
             else:
-                parts.append(f"adjacency exact ({len(adj.get('gt') or [])} pairs)")
+                k = len(adj.get("gt") or [])
+                parts.append(f"adjacency exact ({k} pair{'' if k == 1 else 's'})")
         if max_ov is not None:
             ok_ov = ov <= max_ov + 1e-12
             ok &= ok_ov

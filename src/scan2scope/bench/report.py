@@ -244,7 +244,7 @@ def _adj_text(a: dict[str, Any] | None) -> str:
     if a.get("exact") is None:
         return "GT adjacency unknown"
     if a["exact"]:
-        return f"exact ({len(a['gt'])} pairs)"
+        return f"exact ({len(a['gt'])} pair{'' if len(a['gt']) == 1 else 's'})"
     parts = [f"{len(a['correct'])}/{len(a['gt'])} correct"]
     if a["missing"]:
         parts.append("missing " + ", ".join("-".join(p) for p in a["missing"]))
