@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 import yaml
 from scipy.spatial.transform import Rotation
+from shapely.geometry import box as shapely_box
 
 from scan2scope.synth.apartment import TEMPLATES, free_mask, ground_truth_rooms, random_apartment
 from scan2scope.synth.capture import (
@@ -86,11 +87,14 @@ def test_apartment_constraints(seed):
         P = room.polygon
         assert _signed_area(P) < 0  # clockwise seen from above
         assert abs(-_signed_area(P) - room.area) < 1e-6
+    interiors = [room.shape_m() for room in apt.rooms]
     for b in apt.boxes:
-        if b.kind != "wall":
-            shape = apt.rooms[b.room].shape_m().buffer(1e-6)
-            assert shape.contains(shape.__class__([(b.lo[0], b.lo[1]), (b.hi[0], b.lo[1]), (b.hi[0], b.hi[1]),
-                                                  (b.lo[0], b.hi[1])]))
+        footprint = shapely_box(b.lo[0], b.lo[1], b.hi[0], b.hi[1])
+        if b.kind == "wall":
+            assert all(footprint.intersection(s).area < 1e-9 for s in interiors)
+            assert 0.0 <= b.lo[2] < b.hi[2] <= apt.ceiling
+        else:
+            assert interiors[b.room].buffer(1e-6).contains(footprint)
 
 
 def test_apartment_is_deterministic():
