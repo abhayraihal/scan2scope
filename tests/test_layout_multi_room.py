@@ -11,6 +11,7 @@ from scan2scope.layout import build_plan
 
 NOISY = {"noise": 0.03, "normal_noise": 0.1, "drop": 0.3, "outliers": 0.05, "seed": 5}
 YAW, SHIFT = -28.0, (3.0, 1.0)
+FAST = (144, 108)  # rays per camera where full density is not needed
 
 
 @pytest.fixture(scope="module")
@@ -53,7 +54,7 @@ def test_l_shaped_room(l_syn, kw, tol):
 def test_passage_width_decides_open_plan(passage, n_rooms, noisy):
     syn = lf.two_areas(passage)
     kw = NOISY if noisy else {"noise": 0.01}
-    plan = build_plan(lf.make_scene(syn, **kw))
+    plan = build_plan(lf.make_scene(syn, rays=FAST, **kw))
     assert len(plan.rooms) == n_rooms
     if n_rooms == 1:
         assert plan.rooms[0].floor_area.value == pytest.approx(24.36, abs=0.3)
@@ -74,7 +75,7 @@ def test_misregistered_views_do_not_open_blank_walls(seed, yaw):
     """Per-view rigid errors and depth noise push wall points behind the face; that is not see-through."""
     kw = {"noise": 0.03, "normal_noise": 0.15, "drop": 0.3, "outliers": 0.05, "seed": seed, "depth_noise": 0.01,
           "view_jitter": (0.03, 0.6)}
-    plan = build_plan(lf.make_scene(lf.two_areas("narrow"), yaw_deg=yaw, **kw))
+    plan = build_plan(lf.make_scene(lf.two_areas("narrow"), yaw_deg=yaw, rays=FAST, **kw))
     assert len(plan.rooms) == 2
     for r in plan.rooms:
         assert [o.type for o in r.openings] == ["opening"], [(o.wall_id, o.offset.value) for o in r.openings]
@@ -84,7 +85,7 @@ def test_misregistered_views_do_not_open_blank_walls(seed, yaw):
 @pytest.mark.parametrize("noisy", [False, True])
 def test_corridor_with_aligned_walls_and_facing_doors_is_one_room(noisy):
     syn = lf.corridor_aligned()
-    plan = build_plan(lf.make_scene(syn, **(NOISY if noisy else {"noise": 0.01})))
+    plan = build_plan(lf.make_scene(syn, rays=FAST, **(NOISY if noisy else {"noise": 0.01})))
     assert sorted(r.label for r in plan.rooms) == ["A", "B", "C", "D", "K"]
     corridor = _room_by_label(plan, "K")
     assert lf.cyclic_match([w.length.value for w in corridor.walls], [6.12, 1.0, 6.12, 1.0]) < 0.04
