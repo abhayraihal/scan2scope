@@ -548,6 +548,29 @@ def test_run_benchmark_with_fake_pipeline(gt, tmp_path):
     assert len(again["nodrift_metrics"]) == 1
 
 
+def test_compare_runs_before_after_table(gt, tmp_path, capsys):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("compare_runs", ROOT / "scripts" / "compare_runs.py")
+    compare_runs = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(compare_runs)
+    cfg = gates_mod.load_gates()
+    hall, kitchen = good_rooms()
+    kitchen["walls"][3]["length"] = M(4.6, 0.05)
+    for side, rooms in (("before", [hall, kitchen]), ("after", good_rooms())):
+        run = {"property": "home", "capture": "photo_1", "tier": "photo", "variant": "main", "status": "ok",
+               "error": None, "run_s": 1.0, "result": result(rooms)}
+        bench = score_runs([gt], [run], cfg)
+        write_report(tmp_path / side, bench)
+    out = tmp_path / "diff.md"
+    assert compare_runs.main([str(tmp_path / "before"), str(tmp_path / "after"), "--out", str(out)]) == 0
+    printed = capsys.readouterr().out
+    assert "wall_length" in printed and "fixed" in printed
+    text = out.read_text()
+    assert "## Worst gate before the fix" in text and "photo confident_garbage" in text
+    assert "| photo | wall_length | fail | pass | fixed |" in text
+
+
 def test_hand_built_result_is_schema_valid():
     import jsonschema
 
