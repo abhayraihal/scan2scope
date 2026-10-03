@@ -167,7 +167,7 @@ def _region_conditions(when: dict[str, Any], d: DamageRegion, idx: PlanIndex, ob
         bottom = float(min(d.v_range))
         if kind != "wall" or bottom > thr:
             return None
-        inputs.update(bottom_above_floor_m=round(bottom, 4), threshold_m=thr)
+        inputs.update(bottom_above_floor_m=round(bottom, 4), bottom_threshold_m=thr)
     if "near_fixture" in when:
         spec = when["near_fixture"]
         thr = float(spec.get("within_m", 1.0))
@@ -185,7 +185,7 @@ def _region_conditions(when: dict[str, Any], d: DamageRegion, idx: PlanIndex, ob
         if best is None or best[0] > thr:
             return None
         inputs.update(fixture=_attr(best[1], "id"), fixture_class=_attr(best[1], "cls"),
-                      distance_m=round(best[0], 4), threshold_m=thr)
+                      fixture_distance_m=round(best[0], 4), fixture_threshold_m=thr)
     if "near_window" in when:
         thr = float(when["near_window"].get("within_m", 0.5))
         dp = idx.damage_prism(d)
@@ -198,7 +198,8 @@ def _region_conditions(when: dict[str, Any], d: DamageRegion, idx: PlanIndex, ob
         best = min(dists, key=lambda x: x[0]) if dists else None
         if best is None or best[0] > thr:
             return None
-        inputs.update(window=best[1], window_source=best[2], distance_m=round(best[0], 4), threshold_m=thr)
+        inputs.update(window=best[1], window_source=best[2], window_distance_m=round(best[0], 4),
+                      window_threshold_m=thr)
     if "near_opening_corner" in when:
         spec = when["near_opening_corner"]
         thr = float(spec.get("within_m", 0.3))
@@ -225,13 +226,13 @@ def _region_conditions(when: dict[str, Any], d: DamageRegion, idx: PlanIndex, ob
         if best is None or best[0] > thr:
             return None
         inputs.update(opening=best[1].id, opening_type=best[1].type, corner=best[2],
-                      distance_m=round(best[0], 4), threshold_m=thr)
+                      corner_distance_m=round(best[0], 4), corner_threshold_m=thr)
     if "min_length_m" in when:
         thr = float(when["min_length_m"])
         length = _val(d.length) if d.length is not None else max(_val(d.width), _val(d.height))
         if length <= thr:
             return None
-        inputs.update(length_m=round(length, 4), threshold_m=thr)
+        inputs.update(length_m=round(length, 4), length_threshold_m=thr)
     return inputs
 
 

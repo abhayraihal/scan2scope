@@ -70,7 +70,7 @@ def test_stain_near_wet_fixture(plan):
     f = fired(evaluate(plan, [d], [sink]), "R-FIXTURE-LEAK")
     assert len(f) == 1
     assert f[0].inputs["fixture"] == "O1" and f[0].inputs["fixture_class"] == "sink"
-    assert f[0].inputs["distance_m"] == pytest.approx(np.hypot(0.15, 0.3), abs=1e-3)
+    assert f[0].inputs["fixture_distance_m"] == pytest.approx(np.hypot(0.15, 0.3), abs=1e-3)
     far = obj("O1", "sink", (1.0, 1.2), z=(0.8, 0.95))
     assert not fired(evaluate(plan, [d], [far]), "R-FIXTURE-LEAK")
     stove = obj("O1", "stove", (3.6, 1.2))
@@ -103,7 +103,7 @@ def test_crack_from_opening_corner(plan):
                   evidence={"endpoints_uv_all": [[[1.95, 2.05], [2.3, 2.4]]]})
     f = fired(evaluate(plan, [near], []), "R-CRACK-OPENING")
     assert len(f) == 1 and f[0].inputs["opening"] == "R1-O1" and f[0].inputs["corner"] == "top_end"
-    assert f[0].inputs["distance_m"] == pytest.approx(np.hypot(0.05, 0.05), abs=1e-3)
+    assert f[0].inputs["corner_distance_m"] == pytest.approx(np.hypot(0.05, 0.05), abs=1e-3)
     far = region("D1", "crack", "R1-W1", (3.0, 3.5), (1.0, 1.4), length=0.6,
                  evidence={"endpoints_uv_all": [[[3.0, 1.0], [3.5, 1.4]]]})
     assert not fired(evaluate(plan, [far], []), "R-CRACK-OPENING")
@@ -137,7 +137,7 @@ def test_stain_near_window(plan):
     below = region("D1", "water_stain", "R1-W3", (1.2, 1.6), (0.3, 0.6))  # window sill at 0.9
     f = fired(evaluate(plan, [below], []), "R-WINDOW-LEAK")
     assert len(f) == 1 and f[0].inputs["window"] == "R1-O2" and f[0].inputs["window_source"] == "plan_opening"
-    assert f[0].inputs["distance_m"] == pytest.approx(0.3, abs=1e-3)
+    assert f[0].inputs["window_distance_m"] == pytest.approx(0.3, abs=1e-3)
     away = region("D1", "water_stain", "R1-W3", (3.0, 3.4), (0.3, 0.6))
     assert not fired(evaluate(plan, [away], []), "R-WINDOW-LEAK")
     win = obj("O7", "window", (0.4, 3.0), z=(0.9, 2.1), half=0.05)  # a window the layout missed
