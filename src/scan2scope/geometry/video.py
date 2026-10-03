@@ -56,7 +56,7 @@ MAX_POINTS = 1_500_000
 FUSE_STRIDE = 2
 ANALYSIS_SAMPLES = 3000  # pixels per frame used for floor, wall and gravity statistics
 # MapAnything's metric error is mostly per scene: the chunks of one clip share it, so more chunks do not average
-# it out (home video_1: chunks within 2.5% of each other, clip 7.3% small; ARKitScenes kitchen: 1.7% apart,
+# it out (home video_1: chunk scales within a few percent of each other, the clip 5-7% small; ARKitScenes kitchen: 1.7% apart,
 # depth 6.5% small against LiDAR). The base is the error of one clip, not of one chunk.
 SCALE_SIGMA_BASE = 0.08
 SINGLE_RUN_SCALE_SIGMA = 0.08  # one MapAnything metric estimate

@@ -39,13 +39,13 @@ Package layout (`src/scan2scope/`): `ingest/`, `geometry/` (lidar, mapanything w
 
 ## Geometry backends
 
-LiDAR (Stray Scanner): per-frame pose, intrinsics, 256x192 depth in mm and confidence. Keep confidence 2 and depth under 4 m, back-project with per-frame intrinsics scaled from RGB to depth resolution, convert ARKit's y-up world to z-up. Drift correction runs before layout (see below).
+LiDAR (Stray Scanner): per-frame pose, intrinsics, 256x192 depth in mm and confidence. Keep depth between 0.2 and 4.5 m, weight confidence 2 at 1.0 and confidence 1 at 0.3, back-project with per-frame intrinsics scaled from RGB to depth resolution, convert ARKit's y-up world to z-up. Drift correction runs before layout (see below).
 
-Video: decode with PyAV, sample about 1-2 fps, drop blurred frames by Laplacian variance, run MapAnything (Apache-2.0 weights) on overlapping chunks of at most 24 frames (measured ceiling on 16 GB is about 32 views at 518x336), align consecutive chunks with Sim(3) on shared frames, close the loop between the first and last frames, then gravity-align and anchor to planes.
+Video: decode with PyAV, sample 1.5 fps (at most 120 frames), drop blurred frames by Laplacian variance, run MapAnything (Apache-2.0 weights) on 24-frame chunks overlapping by 5 (measured ceiling on 16 GB is about 32 views at 518x336), align consecutive chunks with Sim(3) on shared frames and refuse a link when the two runs disagree about the shared cameras, close the loop between the first and last frames, then gravity-align and anchor to planes.
 
 Photo: per room, MapAnything on the room's 2 to 8 photos with intrinsics from EXIF (`FocalLengthIn35mmFormat`, converted on the image diagonal). Each room gets its own metric frame and its own Scene.
 
-Metric scale for photo and video comes from MapAnything. A door-height prior can refine it when a full-height door opening is detected; the scale estimate and its spread feed the intervals.
+Metric scale for photo and video comes from MapAnything. No independent scale cue is applied: a door-height cue was tested on the real room and the development rooms and not shipped. The scale prior and the measured spread across chunks or views feed the intervals.
 
 ## Layout core (shared by all tiers)
 
@@ -74,7 +74,7 @@ Multi-room LiDAR and video captures accumulate drift. Correction has three parts
 2. Plane anchoring: every segment is levelled to a shared floor plane and gravity direction, which removes roll, pitch and height drift.
 3. Manhattan yaw anchoring: segment yaw is snapped to the global dominant wall directions when within 5 degrees.
 
-The ablation reports the stitched footprint with corrections off and on against ground truth, on the real video capture and on synthetic LiDAR captures with injected drift.
+The ablation reports the stitched footprint with corrections off and on against ground truth, on synthetic LiDAR captures with injected drift; the public real Stray Scanner recording is run with and without correction as a check without ground truth.
 
 ## Damage, rules and scope
 
@@ -98,7 +98,7 @@ Ground truth lives in `bench/data/<property>/ground_truth.yaml` (format in `docs
 
 Assumed thresholds where the brief is silent are marked `assumed: true` in `gates.yaml`: LiDAR wall length within max(2 cm, 1%), floor area within 2% (LiDAR), 6% (video), 16% (photo), and video and photo ceiling and opening widths within the tier's wall-length bound. The five gates listed in the brief are used as written.
 
-## Data plan
+## Data plan (as planned on 2026-10-03; what was carried out is listed under deviations in docs/technical_report.md)
 
 - Real (iPhone 17): the home captured at the photo and video tiers, one room captured twice at each of those tiers, one furnished room with staged damage of two classes, tape or laser ground truth for every reported dimension, magicplan scans of two rooms chosen before scanning.
 - Synthetic LiDAR: generated apartments with exact ground truth, captures rendered in the Stray Scanner format with ARKit-like depth noise, confidence and pose drift, including repeat captures and drift injection.
@@ -106,7 +106,7 @@ Assumed thresholds where the brief is silent are marked `assumed: true` in `gate
 
 ## Reproducibility
 
-`uv` with a lockfile, Python 3.12. `scan2scope fetch-weights` downloads pinned Hugging Face revisions with parallel range requests and checks SHA-256. Model outputs are cached by SHA-256 of the input bytes, model revision and preprocessing parameters; `--replay` reproduces the reported numbers from the cache and the default live path recomputes them. Raw benchmark data goes to GitHub Release assets (no Git LFS), with GPS removed from photos and videos. CI runs unit tests on synthetic data on Ubuntu.
+`uv` with a lockfile, Python 3.12. `scan2scope fetch-weights` downloads pinned Hugging Face revisions with parallel range requests and checks SHA-256. Model outputs are cached by SHA-256 of the input bytes, model revision and preprocessing parameters; `--cache replay` reproduces the reported numbers from the cache and the default live path recomputes them. Raw benchmark data goes to GitHub Release assets (no Git LFS), with GPS removed from photos and videos. CI runs unit tests on synthetic data on Ubuntu.
 
 ## Decision log
 

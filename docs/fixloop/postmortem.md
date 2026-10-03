@@ -15,13 +15,13 @@ The declaration (`docs/fixloop/declaration.md`, tag `fixloop-declared`) named Li
 
 Other gates moved with it: interval coverage 60.6% to 73.2%, confident-garbage values 152 to 105, repeat structure 50% to 64%. Nothing got worse.
 
-The declared before-count of wrong wall counts (43 of 112) counted room instances once per repeat pair. Counting each matched room once per capture gives 34 of 116; the after figure uses the same count.
+The declaration text says it was written at about 18:55 IST; the tagged commit is at 18:41 IST. The declared before-count of wrong wall counts (43 of 112) counted room instances once per repeat pair. Counting each matched room once per capture gives 34 of 116; the after figure uses the same count.
 
 ## Was the root cause right
 
 Partly. The three layout mechanisms were real and the fix removed them: with the exact synthetic poses, the same 12 captures go from 86.9% repeatability before the fix to 96.3% after, and the rectangle-pair median delta becomes 0.03 cm.
 
-What the declaration underweighted is pose drift that survives drift correction. After correction, camera centres are still 0.9 to 5.9 cm RMS from the truth (12.5 cm worst) and yaw is off by 0.11 to 0.73 degrees. Two captures of the same wall therefore disagree by about a centimetre even when the layout is perfect, which is the whole 1 cm allowance. Pairs that include the strong-drift capture pass 38 to 46% of walls, the two ordinary captures 63%.
+What the declaration underweighted is pose drift that survives drift correction. After correction, camera centres are still 0.9 to 5.9 cm RMS from the truth (12.5 cm worst) and yaw is off by 0.11 to 0.73 degrees. Two captures of the same wall therefore disagree by about a centimetre even when the layout is perfect, which is the whole 1 cm allowance. Pairs that include the strong-drift capture pass 64 to 65% of walls (48/74 and 47/74), the two ordinary captures 71% (60/84).
 
 The prediction was too optimistic because I attributed all of the 2.4 cm rectangle-pair spread to the wall-line step without first running the exact-pose oracle that separates layout error from pose error. That oracle was the first diagnostic run after the fix; it should have been run before the declaration.
 
