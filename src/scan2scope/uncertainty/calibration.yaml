@@ -1,0 +1,8 @@
+# Interval multiplier q per tier, written by scan2scope.uncertainty.calibrate.fit_q.
+# status prior: not fitted (fewer than min_rooms ground-truth rooms in the tier); calibrated: split-conformal fit.
+level: 0.9
+min_rooms: 9
+tiers:
+  lidar: {q: 1.0, status: prior}
+  video: {q: 1.0, status: prior}
+  photo: {q: 1.0, status: prior}
