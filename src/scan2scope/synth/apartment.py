@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from itertools import pairwise
 
 import numpy as np
-from shapely.geometry import LineString, Point, Polygon
+from shapely.geometry import LineString, Polygon
 from shapely.geometry import box as shapely_box
 from shapely.ops import unary_union
 
@@ -186,20 +186,6 @@ class Apartment:
             if any(r.contains(xm, ym) for r in room.rects):
                 return room.index
         return -1
-
-    def is_free(self, x: float, y: float, margin: float = 0.0) -> bool:
-        """True when the plan point (metres) is walkable: inside a room or a door gap, clear of furniture."""
-        xm, ym = x * 1000.0, y * 1000.0
-        inside = self.room_at(x, y) >= 0 or any(
-            o.kind != "window" and o.plan_rect().contains(xm, ym) for o in self.openings)
-        if not inside:
-            return False
-        for b in self.boxes:
-            if b.kind == "wall":
-                continue
-            if b.lo[0] - margin < x < b.hi[0] + margin and b.lo[1] - margin < y < b.hi[1] + margin:
-                return False
-        return True
 
 
 # --------------------------------------------------------------------------------------------- generation
@@ -770,7 +756,10 @@ def _place_furniture(apt: Apartment, rng: np.random.Generator) -> None:
 
 
 def ground_truth_rooms(apt: Apartment) -> list[dict]:
-    """Per-room ground truth in the bench/templates/ground_truth.yaml layout (plus `polygon`), metres."""
+    """Per-room ground truth in the bench/templates/ground_truth.yaml layout (plus `polygon`), metres.
+
+    Each opening item also carries `_opening`, its index into apt.openings; the YAML writer drops it.
+    """
     out = []
     for room in apt.rooms:
         P = room.polygon_mm
@@ -836,7 +825,3 @@ def adjacency(apt: Apartment, rooms_gt: list[dict]) -> list[dict]:
         out.append({"rooms": [apt.rooms[a].name, apt.rooms[b].name], "type": o.kind,
                     "openings": [ids.get((a, o.index)), ids.get((b, o.index))]})
     return out
-
-
-def point_in_room(apt: Apartment, room: int, x: float, y: float) -> bool:
-    return apt.rooms[room].shape_m().contains(Point(x, y))
