@@ -458,6 +458,28 @@ def test_door_with_no_head_edge_may_be_door_height():
     assert symmetric(window.height) and symmetric(plan.rooms[1].openings[0].height)
 
 
+def test_few_camera_views_widen_a_video_room():
+    plan = make_plan()
+    plan.rooms[0].view_ids = ["v1", "v2"]
+    plan.rooms[1].view_ids = [f"v{i}" for i in range(3, 12)]
+    rec = annotate(plan, [], tier="video", quality={"scenes": [{}]}, calibration=NO_CAL)
+    reasons = {r: f["reasons"] for r, f in rec["room_factors"].items()}
+    assert reasons == {"R1": ["few_views"], "R2": []}
+    plan = make_plan()
+    plan.rooms[0].view_ids = [f"v{i}" for i in range(9)]
+    plan.flags.append("room_without_cameras")  # R2 has no camera inside it
+    rec = annotate(plan, [], tier="lidar", quality={"scenes": [{}]}, calibration=NO_CAL)
+    reasons = {r: f["reasons"] for r, f in rec["room_factors"].items()}
+    assert reasons == {"R1": [], "R2": ["few_views"]}
+
+
+def test_capture_focal_flags_are_recognised():
+    for flag in ("exif_focal_missing", "video_focal_missing", "missing_exif_focal"):
+        quality = {"flags": [flag], "scenes": [{}]}
+        rec = annotate(make_plan(), [], tier="photo", quality=quality, calibration=NO_CAL)
+        assert rec["room_factors"]["R1"]["reasons"] == ["missing_exif_focal"], flag
+
+
 def test_annotating_twice_gives_the_same_intervals():
     plan = one_room(notched_room())
     plan.rooms[0].flags.append("ceiling_assumed")

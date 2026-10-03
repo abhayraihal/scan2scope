@@ -11,7 +11,7 @@ inconsistency the capture measured itself (video: the RMS deviation of the chunk
 median, and half the scale error of a loop closure that registered well but was rejected; the larger of the
 two counts). a is the tier's additive term for the measurement's role (priors.yaml), inflated by thin evidence
 on the measurement (observed_fraction, n_points, a fit residual in its own unit in quadrature) and by room
-context (low light, few photos, missing focal length).
+context (low light, few photos or views, missing focal length).
 
 A wall's length is the distance between its two end walls, so their evidence counts as well: a thinly observed
 end wall inflates the additive term the same way, the part of an end wall's face rms above the capture's
@@ -59,6 +59,7 @@ RESID_KEYS = ("residual", "residual_m", "rms", "fit_residual")
 NPHOTO_KEYS = ("n_photos", "n_images", "num_images", "n_views")
 HINT_KEYS = ("room_hint", "room", "room_id", "folder")
 NOT_EXIF = ("default", "fallback", "estimated", "predicted", "model", "none", "missing")
+FOCAL_FLAGS = ("missing_exif_focal", "exif_focal_missing", "video_focal_missing")
 UNOBSERVED_WALL = ("wall_unobserved", "wall_face_missing", "wall_face_mismatch")
 SPARSE_WALL = ("wall_face_sparse",)
 
@@ -251,11 +252,12 @@ def _room_qualities(plan: Plan, quality: dict[str, Any] | None, tier: str) -> di
             cands = [scenes[i]]
         else:
             cands = free
+        no_cams = not room.view_ids and _has_flag(plan.flags or [], "room_without_cameras")
         merged = []
         for c in cands or [{}]:
             q = {**top, **c, "flags": _flag_list(top) + _flag_list(c)}
-            if _first([q], NPHOTO_KEYS) is None and room.view_ids:
-                q["n_photos"] = len(set(room.view_ids))  # photo tier: the room's own views when no count is given
+            if _first([q], NPHOTO_KEYS) is None and (room.view_ids or no_cams):
+                q["n_photos"] = len(set(room.view_ids))  # the room's own views when no count is given
             merged.append(q)
         out[room.id] = merged
     return out
@@ -275,12 +277,12 @@ def _quality_factor(q: dict[str, Any], flags: set[str], tier: str,
         why.append("low_light")
     few = infl.get("few_photos") or {}
     n = _first([q], NPHOTO_KEYS)
-    if _has_flag(flags, "few_photos") or (tier == "photo" and few and n is not None and n < float(few["below"])):
+    if _has_flag(flags, "few_photos") or (few and n is not None and n < float(few["below"])):
         f *= float(few.get("factor", 1.0))
-        why.append("few_photos")
+        why.append("few_photos" if tier == "photo" else "few_views")
     src = q.get("intrinsics_source")
     if (q.get("missing_exif_focal") is True or q.get("exif_focal") is False
-            or _has_flag(flags, "missing_exif_focal")
+            or any(_has_flag(flags, name) for name in FOCAL_FLAGS)
             or (tier == "photo" and isinstance(src, str) and src.lower() in NOT_EXIF)):
         f *= float(infl.get("missing_exif_focal", 1.0))
         why.append("missing_exif_focal")
@@ -649,6 +651,7 @@ def annotate(plan: Plan, damage: list[DamageRegion] | None, *, tier: str,
     cap = _capture(plan, quality, s_floor, cfg)
     add = {k: float(v) for k, v in tp["additive"].items()}
     mdl = _Model(s=cap.s, q=q, z=z, infl=infl)
+    top_flags = set(_flag_list(quality)) if isinstance(quality, dict) else set()
 
     room_quality = _room_qualities(plan, quality, tier)
     room_factors: dict[str, dict[str, Any]] = {}
@@ -657,7 +660,7 @@ def annotate(plan: Plan, damage: list[DamageRegion] | None, *, tier: str,
     area_up: list[float] = []
     len_terms: list[float] = []
     for room in plan.rooms:
-        flags = _room_flags(room, plan)
+        flags = _room_flags(room, plan) | top_flags
         f_room, why = max((_quality_factor(c, flags, tier, infl) for c in room_quality[room.id]),
                           key=lambda t: t[0])
         if _has_flag(flags, "placement_uncertain"):
@@ -751,7 +754,7 @@ def describe(record: dict[str, Any] | None) -> str:
         f"a = {add.get('length', 0):.3f} m (walls), {add.get('height', 0):.3f} m (heights), "
         f"{add.get('opening', 0):.3f} m (openings), {float(record.get('damage_additive', 0.0)):.3f} m "
         "(damage), inflated for thin evidence on the measurement and on a wall's two end walls (low observed "
-        "fraction, few face points, fit residuals in quadrature, low light, fewer than 4 photos, "
+        "fraction, few face points, fit residuals in quadrature, low light, fewer than 4 photos or views, "
         "missing focal length). An end wall with no face of its own adds "
         f"{float(st['unobserved_end']):.2f} of the room's extent along the wall. A wall ending at an "
         f"unobserved wall or a step (shorter than {float(st['short_wall_m']):.2f} m, or shorter than "
