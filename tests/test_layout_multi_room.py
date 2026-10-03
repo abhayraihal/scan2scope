@@ -69,6 +69,18 @@ def test_passage_width_decides_open_plan(passage, n_rooms, noisy):
     assert len(plan.adjacency) == 1 and plan.adjacency[0].opening_b is not None
 
 
+@pytest.mark.parametrize("seed,yaw", [(201, -29.0), (202, -18.0), (206, 26.0)])
+def test_misregistered_views_do_not_open_blank_walls(seed, yaw):
+    """Per-view rigid errors and depth noise push wall points behind the face; that is not see-through."""
+    kw = {"noise": 0.03, "normal_noise": 0.15, "drop": 0.3, "outliers": 0.05, "seed": seed, "depth_noise": 0.01,
+          "view_jitter": (0.03, 0.6)}
+    plan = build_plan(lf.make_scene(lf.two_areas("narrow"), yaw_deg=yaw, **kw))
+    assert len(plan.rooms) == 2
+    for r in plan.rooms:
+        assert [o.type for o in r.openings] == ["opening"], [(o.wall_id, o.offset.value) for o in r.openings]
+        assert abs(r.openings[0].width.value - 1.0) < 0.05
+
+
 @pytest.mark.parametrize("noisy", [False, True])
 def test_corridor_with_aligned_walls_and_facing_doors_is_one_room(noisy):
     syn = lf.corridor_aligned()
