@@ -610,6 +610,14 @@ def test_repeatability_walls_and_ceiling_spread(gt):
     assert rows["photo", "repeat_structure"]["status"] == "fail"
 
 
+def test_ceiling_failure_mode_separates_bias_spread_and_missing_rooms():
+    assert gates_mod.ceiling_mode("fail", "pass", 0, 1) == "none (1 room not found)"
+    assert gates_mod.ceiling_mode("fail", "n.a.", 2, 0) == "bias"
+    assert gates_mod.ceiling_mode("fail", "fail", 1, 2) == "both (2 rooms not found)"
+    assert gates_mod.ceiling_mode("pass", "fail") == "spread"
+    assert gates_mod.ceiling_mode("n.a.", "n.a.") == "n.a."
+
+
 def test_drift_ablation_and_gate(gt):
     cfg = gates_mod.load_gates()
     on = capture_metrics(gt, gt.capture("video_1"),

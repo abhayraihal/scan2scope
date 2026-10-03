@@ -198,7 +198,8 @@ def error_gate(gate: str, tier: str, spec: dict[str, Any], records: list[dict[st
     eff = max([worst_ratio or 0.0] + ([MISSING_RATIO] if n_missing else []))
     score = max(eff - 1.0, 0.0) if status == "fail" else 0.0
     row.update(measured=measured, measured_text=", ".join(text), n=len(items), status=status,
-               pass_share=n_pass / len(items), shortfall=worst_ratio, score=score, worst=worst)
+               pass_share=n_pass / len(items), shortfall=worst_ratio, score=score, worst=worst,
+               n_missing=n_missing, n_out_of_tolerance=sum(not i["pass"] for i in measured_items))
     return row
 
 
@@ -325,7 +326,8 @@ def _ceiling_rows(tier: str, spec: dict[str, Any], ms: list[dict[str, Any]], rep
         if sp["status"] == "fail" and lim:
             sp["shortfall"] = worst["spread"] / lim
             sp["score"] = worst["spread"] / lim - 1.0
-    acc["mode"] = ceiling_mode(acc["status"], sp["status"])
+    acc["mode"] = ceiling_mode(acc["status"], sp["status"], acc.get("n_out_of_tolerance"),
+                               acc.get("n_missing") or 0)
     return acc, sp
 
 
@@ -437,14 +439,18 @@ def _synthetic_label(ms: list[dict[str, Any]]) -> str:
     return "all" if all(s) else ("some" if any(s) else "none")
 
 
-def ceiling_mode(accuracy: str, spread: str) -> str:
-    """bias, spread, both or none (GATE-09); n.a. without ceiling data."""
+def ceiling_mode(accuracy: str, spread: str, out_of_tolerance: int | None = None, missing: int = 0) -> str:
+    """bias, spread, both or none (GATE-09), plus how many rooms had no ceiling; n.a. without ceiling data.
+
+    Bias means a measured ceiling is out of tolerance; a room that was not found is reported separately.
+    """
     if accuracy == "n.a.":
         return "n.a."
-    bad_bias, bad_spread = accuracy == "fail", spread == "fail"
-    if bad_bias and bad_spread:
-        return "both"
-    return "bias" if bad_bias else ("spread" if bad_spread else "none")
+    bad_bias = accuracy == "fail" if out_of_tolerance is None else out_of_tolerance > 0
+    bad_spread = spread == "fail"
+    mode = {(True, True): "both", (True, False): "bias", (False, True): "spread"}.get((bad_bias, bad_spread),
+                                                                                     "none")
+    return f"{mode} ({missing} room{'' if missing == 1 else 's'} not found)" if missing else mode
 
 
 def stitch_gate(tier: str, spec: dict[str, Any], fp_spec: dict[str, Any],
