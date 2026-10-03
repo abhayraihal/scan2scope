@@ -129,7 +129,7 @@ rules:
 
   - id: R-PEEL-MOISTURE
     title: Peeling paint, possible moisture behind the paint film
-    when: {classes: [peeling_paint]}
+    when: {classes: [peeling_paint], surfaces: [wall, ceiling]}
     per: region
     severity: low
     basis: >-
