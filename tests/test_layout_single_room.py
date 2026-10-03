@@ -165,6 +165,39 @@ def test_two_million_points_under_30s(syn):
     assert lf.cyclic_match([w.length.value for w in plan.rooms[0].walls], [4.2, 3.1, 4.2, 3.1]) < 0.01
 
 
+@pytest.mark.parametrize("case", ["no_view_index", "unoriented_normals", "far_outliers", "missing_wall"])
+def test_degraded_scene_still_gives_the_room(syn, case):
+    base = lf.make_scene(syn, noise=0.01)
+    P, N, V = base.points.copy(), base.normals.copy(), base.view_index.copy()
+    rng = np.random.default_rng(11)
+    if case == "no_view_index":
+        V[:] = -1
+    elif case == "unoriented_normals":
+        N[rng.random(len(N)) < 0.5] *= -1
+    elif case == "far_outliers":
+        far = rng.uniform(-45, 45, (20000, 3)).astype(np.float32)
+        P = np.concatenate([P, far])
+        N = np.concatenate([N, np.tile(np.float32([0, 0, 1]), (len(far), 1))])
+        V = np.concatenate([V, rng.integers(0, len(base.views), len(far))])
+    elif case == "missing_wall":
+        keep = P[:, 0] < 4.0
+        P, N, V = P[keep], N[keep], V[keep]
+    sc = Scene("lidar", base.views, P, N, np.ones(len(P), np.float32), V)
+    plan = build_plan(sc)
+    assert len(plan.rooms) == 1, plan.flags
+    room = plan.rooms[0]
+    truth = lf.truth_polygon(syn, "R")
+    tol = 0.12 if case == "missing_wall" else 0.03
+    assert Polygon(room.polygon).symmetric_difference(truth).area < tol * truth.area
+    if case == "missing_wall":
+        flags = [f for w in room.walls for f in w.flags]
+        assert "wall_unobserved" in flags or "wall_face_missing" in flags
+    elif case == "no_view_index":
+        assert "free_space_from_floor" in plan.flags
+    else:
+        assert lf.cyclic_match([w.length.value for w in room.walls], [4.2, 3.1, 4.2, 3.1]) < 0.02
+
+
 def _view() -> CameraView:
     return CameraView("v0", None, 64, 48, np.eye(3), np.eye(4))
 
