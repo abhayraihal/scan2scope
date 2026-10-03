@@ -272,6 +272,30 @@ def two_areas(passage: str) -> Synth:
     return Synth(free, [], cams, H, rooms, ops)
 
 
+def corridor_aligned() -> Synth:
+    """A 1 m corridor between two rows of rooms whose dividing walls line up across it (x = 3.0 to 3.12)."""
+    rooms = {"K": [(0, 0, 6.12, 1.0)], "A": [(0, 1.12, 3.0, 4.0)], "B": [(3.12, 1.12, 6.12, 4.0)],
+             "C": [(0, -3.12, 3.0, -0.12)], "D": [(3.12, -3.12, 6.12, -0.12)]}
+    free = [Box((r[0], r[1], 0), (r[2], r[3], H)) for rs in rooms.values() for r in rs]
+    doors = [("A", 1.0, 1.9, 1.0), ("B", 4.2, 5.1, 1.0), ("C", 1.0, 1.9, -0.12), ("D", 4.2, 5.1, -0.12)]
+    free += [Box((a, y, 0), (b, y + 0.12, 2.05)) for _, a, b, y in doors]
+    cams = [Cam((0.5, 0.5, 1.5), 0), Cam((3.06, 0.5, 1.5), 0), Cam((3.06, 0.5, 1.5), 180), Cam((5.6, 0.5, 1.5), 180),
+            Cam((1.45, 0.5, 1.5), 90, -5), Cam((4.65, 0.5, 1.5), 90, -5), Cam((1.45, 0.5, 1.5), -90, -5),
+            Cam((4.65, 0.5, 1.5), -90, -5)]
+    for name in "ABCD":
+        x0, y0, x1, y1 = rooms[name][0]
+        cams += [Cam((x0 + 0.5, y0 + 0.5, 1.5), 40), Cam((x1 - 0.5, y0 + 0.5, 1.5), 140),
+                 Cam((x1 - 0.5, y1 - 0.5, 1.5), -140), Cam((x0 + 0.5, y1 - 0.5, 1.5), -40)]
+    for c in cams:
+        x, y = c.pos[:2]
+        c.room = next(k for k, rs in rooms.items() if any(r[0] <= x <= r[2] and r[1] <= y <= r[3] for r in rs))
+    ops = []
+    for name, a, b, y in doors:
+        face_k, face_r = (y, y + 0.12) if name in "AB" else (y + 0.12, y)
+        ops += [Opening("K", "door", "y", face_k, a, b, 0, 2.05, name), Opening(name, "door", "y", face_r, a, b, 0, 2.05, "K")]
+    return Synth(free, [], cams, H, rooms, ops)
+
+
 def hallway_three_rooms() -> Synth:
     """Hallway along y=0..1.2 with rooms A and B above it and a room C at its east end."""
     t = 0.12

@@ -69,6 +69,19 @@ def test_passage_width_decides_open_plan(passage, n_rooms, noisy):
     assert len(plan.adjacency) == 1 and plan.adjacency[0].opening_b is not None
 
 
+@pytest.mark.parametrize("noisy", [False, True])
+def test_corridor_with_aligned_walls_and_facing_doors_is_one_room(noisy):
+    syn = lf.corridor_aligned()
+    plan = build_plan(lf.make_scene(syn, **(NOISY if noisy else {"noise": 0.01})))
+    assert sorted(r.label for r in plan.rooms) == ["A", "B", "C", "D", "K"]
+    corridor = _room_by_label(plan, "K")
+    assert lf.cyclic_match([w.length.value for w in corridor.walls], [6.12, 1.0, 6.12, 1.0]) < 0.04
+    assert sorted(o.type for o in corridor.openings) == ["door"] * 4
+    pairs = {frozenset((a.room_a, a.room_b)) for a in plan.adjacency}
+    assert pairs == {frozenset((corridor.id, _room_by_label(plan, k).id)) for k in "ABCD"}
+    assert lf.overlap_area([r.polygon for r in plan.rooms]) < 1e-6
+
+
 def _room_by_label(plan, label):
     return next(r for r in plan.rooms if r.label == label)
 
