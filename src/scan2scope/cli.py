@@ -23,7 +23,7 @@ def _cmd_bench(args: argparse.Namespace) -> int:
     from scan2scope.bench.runner import run_benchmark
 
     run_benchmark(Path(args.data).expanduser(), Path(args.out).expanduser(), cache_mode=args.cache,
-                  only=args.only, skip_run=args.skip_run)
+                  only=args.only, skip_run=args.skip_run, semantics=not args.no_semantics)
     return 0
 
 
@@ -68,6 +68,7 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--cache", choices=["live", "replay", "off"], default="live")
     b.add_argument("--only", nargs="*", help="capture ids to run")
     b.add_argument("--skip-run", action="store_true", help="score existing results without rerunning")
+    b.add_argument("--no-semantics", action="store_true", help="skip damage detection (synthetic captures)")
     b.set_defaults(fn=_cmd_bench)
 
     f = sub.add_parser("fetch-weights", help="download pinned model weights")

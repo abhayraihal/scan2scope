@@ -75,7 +75,7 @@ def _reload(run: dict[str, Any], dest: Path) -> dict[str, Any]:
 
 
 def run_one(gt: GroundTruth, cap: GTCapture, dest: Path, *, cache_mode: str, skip_run: bool, drift: bool,
-            run_fn: RunFn | None = None) -> dict[str, Any]:
+            run_fn: RunFn | None = None, semantics: bool = True) -> dict[str, Any]:
     """One pipeline run (or a reload with skip_run); failures are recorded, never raised."""
     run: dict[str, Any] = {"property": gt.property, "capture": cap.id, "tier": cap.tier,
                            "variant": "main" if drift else "nodrift", "out_dir": str(dest), "status": "ok",
@@ -95,7 +95,7 @@ def run_one(gt: GroundTruth, cap: GTCapture, dest: Path, *, cache_mode: str, ski
             run_fn = run_capture
         try:
             run["result"] = run_fn(cap.path, dest, tier=cap.tier, cache_mode=cache_mode,
-                                   drift_correction=drift, semantics=drift, quiet=True)
+                                   drift_correction=drift, semantics=semantics and drift, quiet=True)
         except Exception as exc:  # noqa: BLE001  one broken capture must not stop the benchmark
             tb = traceback.format_exc(limit=12)
             log.error("%s/%s%s failed: %s", gt.property, cap.id, "" if drift else NODRIFT_SUFFIX, exc)
@@ -145,7 +145,7 @@ def score_runs(gts: list[GroundTruth], runs: list[dict[str, Any]], cfg: dict[str
 
 def run_benchmark(data_root: str | Path, out_dir: str | Path, *, cache_mode: str = "live",
                   only: list[str] | None = None, skip_run: bool = False, gates_path: str | Path | None = None,
-                  run_fn: RunFn | None = None) -> dict[str, Any]:
+                  run_fn: RunFn | None = None, semantics: bool = True) -> dict[str, Any]:
     """Run (or with skip_run reuse) every listed capture, then score and write benchmark_report.md,
     metrics.json and gates.json to out_dir. Returns the scored benchmark dict."""
     data_root, out_dir = Path(data_root), Path(out_dir)
@@ -168,7 +168,7 @@ def run_benchmark(data_root: str | Path, out_dir: str | Path, *, cache_mode: str
                 continue
             log.info("benchmark: %s/%s (%s)", gt.property, cap.id, cap.tier)
             runs.append(run_one(gt, cap, out_dir / gt.property / cap.id, cache_mode=cache_mode,
-                                skip_run=skip_run, drift=True, run_fn=run_fn))
+                                skip_run=skip_run, drift=True, run_fn=run_fn, semantics=semantics))
             if needs_ablation(gt, cap):
                 runs.append(run_one(gt, cap, out_dir / gt.property / f"{cap.id}{NODRIFT_SUFFIX}",
                                     cache_mode=cache_mode, skip_run=skip_run, drift=False, run_fn=run_fn))
