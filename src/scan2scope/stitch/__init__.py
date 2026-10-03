@@ -352,7 +352,7 @@ def _assemble(rooms: list[StitchRoom], sol: Solution, hyps: list[Hypothesis], re
     plan_flags = list(dict.fromkeys(flags))
     room_meta = {sr.id: sr.aux.get("layout_meta", {}) for sr in rooms}
     return Plan(room_list, adjacency, footprint, extent_x, extent_y, flags=plan_flags,
-                meta={"stitch": meta, "layout_per_room": room_meta})
+                meta={"stitch": _plain(meta), "layout_per_room": room_meta})
 
 
 def _extents(rooms: list[StitchRoom], room_list: list[Room], sol: Solution) -> tuple[Measurement, Measurement]:
@@ -374,6 +374,23 @@ def _extents(rooms: list[StitchRoom], room_list: list[Room], sol: Solution) -> t
             "rooms_at_bounds": [rooms[lo[0]].id, rooms[hi[0]].id],
             "chain_edges": _path_edges(sol, lo[0], hi[0]), "uncertain_rooms": uncertain}))
     return out[0], out[1]
+
+
+def _plain(x: Any) -> Any:
+    """Numpy scalars and arrays inside the stitch record become plain JSON types."""
+    if isinstance(x, dict):
+        return {str(k): _plain(v) for k, v in x.items()}
+    if isinstance(x, (list, tuple)):
+        return [_plain(v) for v in x]
+    if isinstance(x, np.ndarray):
+        return _plain(x.tolist())
+    if isinstance(x, np.bool_):
+        return bool(x)
+    if isinstance(x, np.integer):
+        return int(x)
+    if isinstance(x, (float, np.floating)):
+        return float(x) if np.isfinite(x) else None
+    return x
 
 
 def _write_debug(work_dir: str | Path | None, meta: dict) -> None:
@@ -441,7 +458,9 @@ def stitch_rooms(room_scenes: list[Scene], room_plans: list[Plan], work_dir: str
             continue
         # a scene without a room still goes into the property frame, clear of every room
         P = np.asarray(scene.points, float)
-        P = P[np.isfinite(P).all(1)] if P.ndim == 2 and len(P) else np.zeros((1, 3))
+        P = P[np.isfinite(P).all(1)] if P.ndim == 2 and P.shape[1:] == (3,) else np.zeros((0, 3))
+        if len(P) == 0:
+            P = np.zeros((1, 3))
         T = rigid2(0.0, (right + GAP - P[:, 0].min(), -P[:, 1].min()))
         right += GAP + float(np.ptp(P[:, 0]))
         out_scenes.append(_transform_scene(scene, _lift(T, 0.0), {"room_id": None, "method": "unplaced"}))
