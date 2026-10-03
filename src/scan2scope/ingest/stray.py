@@ -84,8 +84,8 @@ def _float(s: str) -> float:
 
 
 def _read_csv_rows(path: Path) -> tuple[list[str], list[list[str]], bool]:
-    """Header names and stripped fields per row; header is None-like ([]) when the first line is numeric."""
-    text = path.read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
+    """Lower-case header names (empty when the first line is numeric), stripped fields per row, has_header."""
+    text = path.read_text(encoding="utf-8-sig", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
     lines = [ln for ln in text.split("\n") if ln.strip()]
     if not lines:
         return [], [], True
@@ -137,7 +137,7 @@ class StrayCapture:
     timestamps: np.ndarray  # (N,) float64 seconds, device clock
     T_wc: np.ndarray  # (N, 4, 4) camera-to-world, OpenCV camera axes, ARKit world (y up)
     K: np.ndarray  # (N, 3, 3) intrinsics at rgb_size
-    rgb_size: tuple[int, int] | None  # (width, height) of rgb.mp4, None when it cannot be read
+    rgb_size: tuple[int, int]  # (width, height) of rgb.mp4; from the principal point if unreadable (flagged)
     depth_size: tuple[int, int] | None  # (width, height) of the depth maps
     has_depth: np.ndarray  # (N,) bool
     has_conf: np.ndarray  # (N,) bool
@@ -155,7 +155,7 @@ class StrayCapture:
 
     @property
     def duration_s(self) -> float:
-        return float(self.timestamps[-1] - self.timestamps[0]) if len(self) > 1 else 0.0
+        return float(self.timestamps.max() - self.timestamps.min()) if len(self) > 1 else 0.0
 
     @property
     def fps(self) -> float:

@@ -101,6 +101,25 @@ def test_messy_files_are_flagged_not_fatal(tmp_path):
     np.testing.assert_allclose(cap.K, ds.K_rgb, atol=1e-3)
 
 
+def test_bom_headerless_and_unordered_odometry(tmp_path):
+    ds = write_stray_dataset(tmp_path / "bom", n_frames=6)
+    path = ds.root / "odometry.csv"
+    rows = path.read_text().splitlines()
+    path.write_text("﻿" + "\n".join(rows) + "\n", encoding="utf-8")
+    assert load_stray(ds.root).flags == []
+    body = rows[1:]
+    body[2], body[3] = body[3], body[2]  # rows out of order; the frame column puts them back
+    path.write_text("\n".join(body) + "\n")
+    cap = load_stray(ds.root)
+    assert "odometry_header_missing" in cap.flags
+    np.testing.assert_array_equal(cap.frame_ids, ds.frame_ids)
+    np.testing.assert_allclose(cap.T_wc, ds.T_wc, atol=1e-6)
+    times = [r.split(", ") for r in body]
+    times[4][0] = repr(float(times[1][0]))  # frame 4 stamped like frame 1: one step goes backwards
+    path.write_text("\n".join(", ".join(r) for r in times) + "\n")
+    assert "timestamps_not_increasing:1" in load_stray(ds.root).flags
+
+
 def test_missing_video_degrades(tmp_path):
     ds = write_stray_dataset(tmp_path / "novid", n_frames=6)
     (ds.root / "rgb.mp4").unlink()
