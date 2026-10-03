@@ -267,21 +267,27 @@ def _their_rooms(gt: GroundTruth, stats: dict[str, Any] | None, dims: dict[str, 
 
 
 def compare_capture(gt: GroundTruth, m: dict[str, Any], theirs: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    """Dimension-by-dimension table for one of our captures against magicplan."""
+    """Dimension-by-dimension table for one of our captures against magicplan.
+
+    A dimension counts when the GT and magicplan both have it. If our capture covers the room but did not report
+    the dimension (room, wall or opening not found), it counts as a loss.
+    """
     dims = []
 
     def add(room: str, dimension: str, kind: str, g: float | None, ours: float | None, th: float | None) -> None:
-        if g is None or ours is None or th is None or g <= 0:
+        if g is None or th is None or g <= 0:
             return
         dims.append({"property": gt.property, "capture": m["capture"], "tier": m["tier"], "room": room,
-                     "dimension": dimension, "kind": kind, "gt": g, "ours": ours, "theirs": th, "ours_err": ours - g,
-                     "theirs_err": th - g, "beat_or_tie": beat_or_tie(ours, th, g, kind)})
+                     "dimension": dimension, "kind": kind, "gt": g, "ours": ours, "theirs": th,
+                     "ours_err": None if ours is None else ours - g, "theirs_err": th - g,
+                     "beat_or_tie": ours is not None and beat_or_tie(ours, th, g, kind)})
 
+    covered = set(m.get("gt_rooms") or [])
     for rid in sorted(theirs):
-        idx = m.get("by_gt", {}).get(rid)
         room = gt.room(rid)
-        if idx is None or room is None:
+        if room is None or rid not in covered:
             continue
+        idx = m.get("by_gt", {}).get(rid) or {"walls": {}, "openings": {}}
         t = theirs[rid]
         for w in room.walls:
             add(rid, f"{w.id} length", "length", w.length, (idx["walls"].get(w.id) or {}).get("pred"),

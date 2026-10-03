@@ -508,11 +508,12 @@ def h2h_gate(tier: str, h2h: dict[str, Any], cfg: dict[str, Any]) -> dict[str, A
     k = sum(bool(d["beat_or_tie"]) for d in dims)
     share = k / len(dims)
     status = "pass" if share >= target - 1e-12 else "fail"
-    losses = [d for d in dims if not d["beat_or_tie"]]
+    losses = [{"item": f"{d['room']}/{d['dimension']}", "capture": d["capture"], "property": d["property"],
+               "pass": False, "ours_err": d["ours_err"], "theirs_err": d["theirs_err"],
+               **({"reason": "not reported by our capture"} if d["ours_err"] is None else {})}
+              for d in dims if not d["beat_or_tie"]]
     row.update(measured=share, n=len(dims), status=status, pass_share=share, shortfall=max(target - share, 0.0),
-               score=(target - share) / target if status == "fail" else 0.0,
-               worst=[{"item": f"{d['room']}/{d['dimension']}", "capture": d["capture"], "property": d["property"],
-                       "pass": False, "ours_err": d["ours_err"], "theirs_err": d["theirs_err"]} for d in losses][:WORST_N],
+               score=(target - share) / target if status == "fail" else 0.0, worst=losses[:WORST_N],
                measured_text=f"{k}/{len(dims)} dimensions beat or tie ({_pct(share)}) over "
                              f"{', '.join(sorted({c['capture'] for c in comps}))}")
     return row

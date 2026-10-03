@@ -659,6 +659,10 @@ def test_head_to_head_with_fake_magicplan_export(gt):
     assert comp["share"] == pytest.approx(comp["beat_or_tie"] / comp["n"])
     row = gates_mod.h2h_gate("photo", {"comparisons": h["comparisons"]}, {})
     assert row["measured"] == pytest.approx(comp["share"])
+    kitchen["openings"] = kitchen["openings"][:1]  # our window is missing: a loss, not a skipped dimension
+    comp2 = head_to_head(gt, [capture_metrics(gt, gt.capture("photo_1"), result([hall, kitchen]))])["comparisons"][0]
+    n1 = next(d for d in comp2["dimensions"] if d["dimension"] == "N1 width")
+    assert n1["ours"] is None and not n1["beat_or_tie"] and comp2["n"] == comp["n"]
 
 
 def test_magicplan_template_placeholders_are_ignored():
