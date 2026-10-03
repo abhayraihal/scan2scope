@@ -1,9 +1,11 @@
 """Merge per-view observations of the same damage region or object across views.
 
-Damage observations merge when class and surface match and their uv boxes overlap (IoU above min_iou) or their
-centres are within max_center_dist. A cluster holds at most one observation per view. The merged area, width,
-height and length are medians of the per-view estimates; the uv box is the union. The score is a noisy-OR of
-the best top_k per-view scores: a ranking signal, not a calibrated probability.
+Damage observations on one surface merge when their uv boxes overlap (IoU above min_iou) or their centres are
+within max_center_dist. Views can disagree on the label of one region, so with soft_class observations of
+different classes also merge, but only when their boxes overlap by cross_class_min_iou; the cluster then takes
+the class with the largest summed per-view class score. A cluster holds at most one observation per view. The
+merged area, width, height and length are medians of the per-view estimates; the uv box is the union. The score
+is a noisy-OR of the best top_k per-view scores of the merged class: a ranking signal, not a probability.
 """
 
 from __future__ import annotations
@@ -25,6 +27,8 @@ class MergeConfig:
     top_k: int = 3  # views that count towards the combined score
     object_max_dist: float = 0.5  # m in plan between observations of the same object
     drop_single_view_objects: bool = True
+    soft_class: bool = True  # observations of different classes may merge; summed class scores pick the class
+    cross_class_min_iou: float = 0.3  # uv box IoU needed to merge observations of different classes
 
 
 @dataclass
@@ -48,6 +52,11 @@ class DamageObservation:
     match: str = "wall"
     mask_fallback: bool = False
     phrase_scores: list[float] = field(default_factory=list)
+    class_scores: dict[str, float] = field(default_factory=dict)  # this view's score for each damage class
+    shape: dict[str, Any] = field(default_factory=dict)  # mask shape and line evidence behind the class
+
+    def class_score(self, cls: str) -> float:
+        return float(self.class_scores.get(cls, self.score if cls == self.cls else 0.0))
 
     @property
     def box(self) -> np.ndarray:
@@ -121,9 +130,21 @@ def _match(a: DamageObservation, b: DamageObservation, cfg: MergeConfig) -> floa
     """Merge affinity (higher is better) or None when the pair should not merge."""
     iou = box_iou(a.box, b.box)
     dist = float(np.linalg.norm(a.center - b.center))
+    if a.cls != b.cls:
+        return iou - 0.01 * dist if cfg.soft_class and iou >= cfg.cross_class_min_iou else None
     if iou > cfg.min_iou or dist <= cfg.max_center_dist:
         return iou - 0.01 * dist
     return None
+
+
+def cluster_class(members: list[DamageObservation]) -> tuple[str, dict[str, float]]:
+    """Class with the largest summed per-view class score; a tie goes to the best single observation's class."""
+    votes: dict[str, float] = {}
+    for o in members:
+        for c in {*o.class_scores, o.cls}:
+            votes[c] = votes.get(c, 0.0) + o.class_score(c)
+    best = max(members, key=lambda o: o.score).cls
+    return max(votes, key=lambda c: (round(votes[c], 9), c == best)), votes
 
 
 def _clusters(items: list, views: list[str], affinity, keys: list) -> list[list[int]]:
@@ -174,16 +195,17 @@ def merge_damage(obs: list[DamageObservation], cfg: MergeConfig | None = None
     cfg = cfg or MergeConfig()
     order = sorted(range(len(obs)), key=lambda i: -obs[i].score)
     items = [obs[i] for i in order]
-    clusters = _clusters(items, [o.view_id for o in items], lambda a, b: _match(a, b, cfg),
-                         [(o.cls, o.surface_id) for o in items])
+    keys = [o.surface_id if cfg.soft_class else (o.cls, o.surface_id) for o in items]
+    clusters = _clusters(items, [o.view_id for o in items], lambda a, b: _match(a, b, cfg), keys)
     merged, dropped = [], []
     for members in clusters:
-        ms = sorted((items[m] for m in members), key=lambda o: -o.score)
-        score = combine_scores([o.score for o in ms], cfg.top_k)
+        cls, votes = cluster_class([items[m] for m in members])
+        ms = sorted((items[m] for m in members), key=lambda o: (o.cls != cls, -o.class_score(cls)))
+        score = combine_scores([o.class_score(cls) for o in ms], cfg.top_k)
         best = ms[0]
-        if len(ms) == 1 and best.score < cfg.min_single_view_score:
-            dropped.append({"kind": "damage", "class": best.cls, "surface_id": best.surface_id,
-                            "view_id": best.view_id, "score": round(best.score, 4),
+        if len(ms) == 1 and score < cfg.min_single_view_score:
+            dropped.append({"kind": "damage", "class": cls, "surface_id": best.surface_id,
+                            "view_id": best.view_id, "score": round(score, 4),
                             "reason": f"single_view_score_below_{cfg.min_single_view_score}"})
             continue
         areas = [o.area for o in ms]
@@ -195,10 +217,12 @@ def merge_damage(obs: list[DamageObservation], cfg: MergeConfig | None = None
             "n_views": len(ms),
             "single_view": len(ms) == 1,
             "score_method": f"noisy_or_top{cfg.top_k}",
-            "per_view": [{"view_id": o.view_id, "score": round(o.score, 4), "area_m2": round(o.area, 5),
-                          "width_m": round(o.width, 4), "height_m": round(o.height, 4),
+            "per_view": [{"view_id": o.view_id, "class": o.cls, "score": round(o.score, 4),
+                          "area_m2": round(o.area, 5), "width_m": round(o.width, 4), "height_m": round(o.height, 4),
                           "u_range": [round(x, 4) for x in o.u_range], "v_range": [round(x, 4) for x in o.v_range],
-                          "match": o.match, "mask_fallback": o.mask_fallback} for o in ms],
+                          "match": o.match, "mask_fallback": o.mask_fallback, **({"shape": o.shape} if o.shape else {})}
+                         for o in ms],
+            "class_votes": {c: round(v, 4) for c, v in sorted(votes.items(), key=lambda kv: -kv[1])},
             "area_rel_spread": round(_rel_spread(areas), 4),
             "pixel_m": round(float(np.median([o.pixel_m for o in ms])), 5),
             "valid_fraction": round(float(min(o.valid_fraction for o in ms)), 4),
@@ -209,7 +233,7 @@ def merge_damage(obs: list[DamageObservation], cfg: MergeConfig | None = None
         if best.phrase_scores:
             evidence["phrase_scores"] = [round(float(x), 4) for x in np.mean([o.phrase_scores for o in ms], 0)]
         merged.append(MergedDamage(
-            cls=best.cls, room_id=best.room_id, surface_id=best.surface_id, kind=best.kind, score=score,
+            cls=cls, room_id=best.room_id, surface_id=best.surface_id, kind=best.kind, score=score,
             area=float(np.median(areas)), width=float(np.median([o.width for o in ms])),
             height=float(np.median([o.height for o in ms])), length=float(np.median([o.length for o in ms])),
             u_range=(u0, u1), v_range=(v0, v1), view_ids=[o.view_id for o in ms], evidence=evidence))

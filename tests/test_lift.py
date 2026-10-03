@@ -219,8 +219,33 @@ def test_merge_two_views_of_one_stain():
 def test_merge_needs_matching_class_and_surface_and_overlap():
     obs = [_obs("v1", score=0.6), _obs("v2", cls="mold", score=0.6), _obs("v3", surface="R1-W2", score=0.6),
            _obs("v4", u=(3.0, 3.5), score=0.6)]
-    merged, _ = merge_damage(obs)
+    merged, _ = merge_damage(obs, MergeConfig(soft_class=False))
     assert len(merged) == 4
+
+
+def test_soft_class_merge_takes_the_class_with_the_most_evidence():
+    # the same region is a crack in two views and a hole in a third: one region, class crack
+    a = _obs("v1", cls="crack", score=0.4)
+    a.class_scores = {"crack": 0.4, "hole": 0.2}
+    b = _obs("v2", cls="crack", u=(1.62, 2.42), score=0.35)
+    b.class_scores = {"crack": 0.35, "hole": 0.1}
+    c = _obs("v3", cls="hole", u=(1.65, 2.4), score=0.45)
+    c.class_scores = {"crack": 0.3, "hole": 0.45}
+    other = _obs("v4", cls="mold", u=(3.0, 3.5), score=0.6)  # different place: stays its own region
+    merged, dropped = merge_damage([a, b, c, other])
+    assert len(merged) == 2 and not dropped
+    m = next(x for x in merged if x.cls != "mold")
+    assert m.cls == "crack" and sorted(m.view_ids) == ["v1", "v2", "v3"]
+    assert m.evidence["class_votes"]["crack"] == pytest.approx(1.05)
+    assert m.score == pytest.approx(1 - 0.6 * 0.65 * 0.7)  # noisy-OR of the crack scores of the three views
+
+
+def test_soft_class_merge_needs_more_overlap_across_classes():
+    # a crack and a stain next to each other on one wall (centres 0.25 m apart, IoU 0) stay apart
+    a = _obs("v1", cls="crack", u=(1.0, 1.1), v=(1.0, 1.3), score=0.6)
+    b = _obs("v2", cls="water_stain", u=(1.2, 1.5), v=(1.0, 1.3), score=0.6)
+    merged, _ = merge_damage([a, b])
+    assert sorted(m.cls for m in merged) == ["crack", "water_stain"]
 
 
 def test_merge_by_centre_distance_without_overlap():
@@ -316,6 +341,8 @@ class FakeDetector:
     def predict(self, image, prompt):
         self.calls += 1
         h, w = image.shape[:2]
+        if prompt.kind == "distractor":
+            return {"boxes": np.zeros((0, 4), np.float32), "phrase_scores": np.zeros((0, len(prompt.phrases)))}
         dmg, obj = self.boxes_by_view[f"v{(int(image[0, 0, 0]) - 50) // 10}"]
         b = dmg if prompt.kind == "damage" else obj
         ps = np.full((1, len(prompt.phrases)), 0.05, np.float32)
