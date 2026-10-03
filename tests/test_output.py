@@ -208,6 +208,19 @@ def test_render_writes_plan_and_room_sheets(tmp_path):
     assert "R1-W3" in sheet and "R2 kitchen" not in sheet
 
 
+def test_wall_labels_outside_exterior_walls_and_inside_own_room_on_shared_walls():
+    res = build()
+    rooms = [render._parse_room(r, "#ffffff", False) for r in res["rooms"]]
+    fig = render._figure(res, rooms, [r.shape for r in rooms], sheet=None, skip_swing=set())
+    xs: dict[str, list[float]] = {}
+    for t in fig.axes[0].texts:
+        xs.setdefault(t.get_text().split(" ")[0], []).append(t.get_position()[0])
+    w2 = sorted(xs["W2"])  # R1-W2 is shared at x = 4.0, R2-W2 is exterior at x = 7.1
+    assert w2[0] < 4.0 and w2[1] > 7.1
+    w4 = sorted(xs["W4"])  # R1-W4 is exterior at x = 0, R2-W4 is shared at x = 4.1
+    assert w4[0] < 0.0 and 4.1 < w4[1] < 7.1
+
+
 def test_console_ids_match_the_render(tmp_path):
     res = build()
     render.render_all(res, tmp_path)
