@@ -56,7 +56,7 @@ FLOOR_BELOW = (0.5, 2.2)  # a segment's floor is the lowest dominant up-facing p
 FLOOR_ANCHOR_MAX = 0.6  # floors further than this from the common level are left alone (another storey)
 FLOOR_OUTLIER = 0.10  # a floor this far from the median of its neighbours in time is a table, not the floor
 TILT_DEADBAND_DEG = 0.5
-TILT_MAX_DEG = 3.0
+TILT_MAX_DEG = 1.5  # ARKit levels with the accelerometer; a larger floor tilt is a real slope
 JUMP_SPEED = 3.0  # m/s between consecutive keyframes marks a relocalisation jump
 
 _UP = np.array([0.0, 0.0, 1.0])

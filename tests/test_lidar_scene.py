@@ -191,6 +191,19 @@ def test_two_frame_capture_still_builds(tmp_path):
     assert sc.meta["drift"]["enabled"] is True
 
 
+def test_mostly_untrusted_depth_is_flagged(tmp_path):
+    fx = write_stray_dataset(tmp_path / "dim", n_frames=6)
+    for p in (fx.root / "confidence").iterdir():
+        c = np.zeros((192, 256), np.uint8)
+        c[80:120, 100:160] = 1
+        cv2.imwrite(str(p), c)
+    sc = build_scene(fx.root, tmp_path / "work", drift_correction=False)
+    flags = sc.meta["flags"]
+    assert any(f.startswith("low_valid_depth:") for f in flags)
+    assert any(f.startswith("low_depth_confidence:") for f in flags)
+    assert len(sc.points) > 0
+
+
 def test_no_depth_at_all_raises(tmp_path):
     fx = write_stray_dataset(tmp_path / "nodepth", n_frames=4)
     for p in (fx.root / "depth").iterdir():

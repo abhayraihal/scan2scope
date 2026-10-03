@@ -28,6 +28,8 @@ MAX_KEYFRAMES = 400
 VIEW_SPACING_S = 1.0
 MAX_VIEWS = 60
 SCALE_LOG_SIGMA = 0.003
+LOW_VALID_DEPTH = 0.3  # below this share of trusted depth pixels the capture is flagged (far walls, outdoors)
+LOW_MEAN_CONF = 0.4
 NORMAL_STEP = 2
 FUSE_STRIDE = 2
 DRIFT_STRIDE = 4
@@ -246,6 +248,10 @@ def build_scene(root: str | Path, work_dir: str | Path, *, drift_correction: boo
         "mean_conf": round(conf_sum / conf_n / 2.0, 4) if conf_n else 0.5,
         "valid_depth_fraction": round(float(valid_frac.mean()), 4),
     }
+    if quality["valid_depth_fraction"] < LOW_VALID_DEPTH:
+        flags.append(f"low_valid_depth:{quality['valid_depth_fraction']:.2f}")
+    if quality["mean_conf"] < LOW_MEAN_CONF:
+        flags.append(f"low_depth_confidence:{quality['mean_conf']:.2f}")
     meta = {
         "drift": drift,
         "quality": quality,
