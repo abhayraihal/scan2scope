@@ -172,6 +172,23 @@ def test_low_light_flag_on_the_room_and_index_mapping():
     assert rec["room_factors"]["R2"]["factor"] == pytest.approx(1.3 * 1.5)
 
 
+def test_photo_count_falls_back_to_room_views_and_capture_flags_merge():
+    plan = make_plan()
+    plan.rooms[0].view_ids = ["a", "b", "c"]
+    plan.rooms[1].view_ids = ["d", "e", "f", "g", "h"]
+    quality = {"scale_log_sigma": 0.0, "flags": ["low_light"], "scenes": [{"flags": ["x"]}, {"flags": ["y"]}]}
+    _, _, rec = run("photo", plan=plan, quality=quality)
+    assert rec["room_factors"]["R1"]["reasons"] == ["low_light", "few_photos"]
+    assert rec["room_factors"]["R2"]["reasons"] == ["low_light"]
+
+
+def test_missing_footprint_does_not_crash():
+    plan = make_plan()
+    plan.footprint_area = None
+    annotate(plan, [], tier="lidar", quality={}, calibration=NO_CAL)
+    assert plan.extent_x.lo < 7.1 < plan.extent_x.hi
+
+
 def test_lo_is_clipped_at_zero():
     _, damage, _ = run("photo")
     crack = damage[2]

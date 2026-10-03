@@ -173,13 +173,23 @@ def _room_qualities(plan: Plan, quality: dict[str, Any] | None, tier: str) -> di
             cands = [scenes[i]]
         else:
             cands = scenes
-        out[room.id] = [{**top, **c} for c in cands] or [top]
+        merged = []
+        for c in cands or [{}]:
+            q = {**top, **c, "flags": _flag_list(top) + _flag_list(c)}
+            if _first([q], NPHOTO_KEYS) is None and room.view_ids:
+                q["n_photos"] = len(set(room.view_ids))  # photo tier: the room's own views when no count is given
+            merged.append(q)
+        out[room.id] = merged
     return out
 
 
+def _flag_list(q: dict[str, Any]) -> list[str]:
+    fl = q.get("flags")
+    return [str(f) for f in fl] if isinstance(fl, (list, tuple, set)) else []
+
+
 def _quality_factor(q: dict[str, Any], flags: set[str], tier: str, infl: dict[str, Any]) -> tuple[float, list[str]]:
-    if isinstance(q.get("flags"), (list, tuple, set)):
-        flags = flags | {str(f) for f in q["flags"]}
+    flags = flags | set(_flag_list(q))
     f, why = 1.0, []
     if q.get("low_light") is True or _has_flag(flags, "low_light"):
         f *= float(infl.get("low_light", 1.0))
@@ -306,13 +316,15 @@ def annotate(plan: Plan, damage: list[DamageRegion] | None, *, tier: str, qualit
 
     # Footprint: the scale term is fully correlated across rooms, the per-room terms are independent.
     f_place = float(infl.get("placement_uncertain", 1.0)) if placement else 1.0
-    sc = 2.0 * abs(_num(plan.footprint_area.value) or 0.0) * s
-    t_fp = math.sqrt(sum(t * t for t in area_terms))
-    mdl.set(plan.footprint_area, math.hypot(sc, t_fp) * f_place, (sc * f_place, t_fp * f_place))
+    if isinstance(plan.footprint_area, Measurement):
+        sc = 2.0 * abs(_num(plan.footprint_area.value) or 0.0) * s
+        t_fp = math.sqrt(sum(t * t for t in area_terms))
+        mdl.set(plan.footprint_area, math.hypot(sc, t_fp) * f_place, (sc * f_place, t_fp * f_place))
     a_ext = math.sqrt(sum(a * a for a in len_terms)) if len_terms else add["length"]
     for m in (plan.extent_x, plan.extent_y):
-        sc = abs(_num(m.value) or 0.0) * s
-        mdl.set(m, math.hypot(sc, a_ext) * f_place, (sc * f_place, a_ext * f_place))
+        if isinstance(m, Measurement):
+            sc = abs(_num(m.value) or 0.0) * s
+            mdl.set(m, math.hypot(sc, a_ext) * f_place, (sc * f_place, a_ext * f_place))
 
     a_d = float(pri.get("damage_additive", 0.02))
     for d in damage or []:
