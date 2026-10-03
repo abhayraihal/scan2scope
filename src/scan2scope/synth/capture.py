@@ -171,10 +171,10 @@ class _Path:
 
     def follow(self, pts: np.ndarray, yaws: np.ndarray, speed: float, rate: float, mode: int) -> None:
         """Walk through points (K, 2) with continuous yaw targets (K,), turning on the spot to yaws[0] first."""
-        yaws = yaws + 2 * np.pi * np.round((self.yaw[-1] - yaws[0]) / (2 * np.pi))
         self.line_to(pts[0, 0], pts[0, 1], speed, rate, mode, yaw=self.yaw[-1])
         self.turn_to(yaws[0], rate, TURN)
-        self.yaw[-1] = float(yaws[0])
+        # turn_to may land on yaws[0] +- 2 pi (a half turn can go either way); continue from where it landed
+        yaws = yaws + 2 * np.pi * np.round((self.yaw[-1] - yaws[0]) / (2 * np.pi))
         for i in range(1, len(pts)):
             ds = float(np.linalg.norm(pts[i] - pts[i - 1]))
             dyaw = float(yaws[i] - yaws[i - 1])
