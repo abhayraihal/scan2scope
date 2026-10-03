@@ -46,7 +46,7 @@ DRIFT_MODES = ("none", "normal", "strong")
 
 HOLD, CORRIDOR, DOOR, LOOP, TURN, PAN = range(6)
 _PAN_AMP = np.radians([0.0, 22.0, 3.0, 14.0, 0.0, 0.0])
-_PITCH_BASE = np.radians([-14.0, -8.0, -6.0, -4.0, -8.0, -14.0])
+_PITCH_BASE = np.radians([-20.0, -8.0, -6.0, -4.0, -8.0, -20.0])  # start/end views include the floor line
 _PITCH_AMP = np.radians([0.0, 14.0, 4.0, 31.0, 6.0, 4.0])
 
 
