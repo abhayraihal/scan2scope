@@ -345,6 +345,98 @@ def test_adjacency_decides_between_rooms_of_equal_shape(tmp_path):
     assert match_capture(gt, gt.capture("video_1"), res).room_map == {"P0": "H", "P1": "A", "P2": "B"}
 
 
+# Written by scan2scope.synth (apartment seed 1001, template single_end): polygon plus adjacency fields.
+SYNTH_YAML = """
+property: synth_1
+measured_by: synthetic
+rooms:
+  - id: "01 hallway"
+    walls: [{id: W1, length: 1.064}, {id: W2, length: 6.446}, {id: W3, length: 1.064}, {id: W4, length: 6.446}]
+    diagonal: null
+    ceiling_height: [2.501, 2.501, 2.501]
+    openings:
+      - {id: D1, type: door, wall: W2, offset: 1.516, width: 0.744, height: 2.026, leads_to: "02 bedroom"}
+      - {id: D2, type: door, wall: W2, offset: 5.348, width: 0.856, height: 2.100, leads_to: "03 bathroom"}
+      - {id: D3, type: door, wall: W3, offset: 0.150, width: 0.764, height: 2.044, leads_to: "04 living"}
+    damage: []
+    polygon: [[0.000, 0.000], [0.000, 1.064], [6.446, 1.064], [6.446, 0.000]]
+  - id: "02 bedroom"
+    walls: [{id: W1, length: 3.054}, {id: W2, length: 4.272}, {id: W3, length: 6.446}, {id: W4, length: 1.263},
+            {id: W5, length: 3.392}, {id: W6, length: 3.009}]
+    diagonal: 5.455
+    ceiling_height: [2.501, 2.501, 2.501]
+    openings:
+      - {id: D1, type: door, wall: W1, offset: 0.794, width: 0.744, height: 2.026, leads_to: "01 hallway"}
+      - {id: N1, type: window, wall: W2, offset: 0.520, width: 0.886, height: 1.226, sill: 0.866}
+    damage: []
+    polygon: [[3.054, 1.189], [0.000, 1.189], [0.000, 5.461], [6.446, 5.461], [6.446, 4.198], [3.054, 4.198]]
+  - id: "03 bathroom"
+    walls: [{id: W1, length: 3.274}, {id: W2, length: 2.892}, {id: W3, length: 3.274}, {id: W4, length: 2.892}]
+    diagonal: null
+    ceiling_height: [2.501, 2.501, 2.501]
+    openings:
+      - {id: D1, type: door, wall: W1, offset: 0.242, width: 0.856, height: 2.100, leads_to: "01 hallway"}
+    damage: []
+    polygon: [[6.446, 1.189], [3.172, 1.189], [3.172, 4.081], [6.446, 4.081]]
+  - id: "04 living"
+    walls: [{id: W1, length: 5.461}, {id: W2, length: 5.231}, {id: W3, length: 5.461}, {id: W4, length: 5.231}]
+    diagonal: null
+    ceiling_height: [2.501, 2.501, 2.501]
+    openings:
+      - {id: D1, type: door, wall: W1, offset: 0.150, width: 0.764, height: 2.044, leads_to: "01 hallway"}
+      - {id: N1, type: window, wall: W2, offset: 3.640, width: 1.120, height: 1.118, sill: 0.966}
+      - {id: N2, type: window, wall: W3, offset: 0.770, width: 1.111, height: 1.101, sill: 0.871}
+      - {id: N3, type: window, wall: W3, offset: 2.845, width: 0.856, height: 1.153, sill: 0.875}
+      - {id: N4, type: window, wall: W4, offset: 3.912, width: 0.899, height: 1.390, sill: 0.854}
+    damage: []
+    polygon: [[6.558, 0.000], [6.558, 5.461], [11.789, 5.461], [11.789, 0.000]]
+adjacency:
+  - {rooms: ["01 hallway", "02 bedroom"], type: door, openings: [D1, D1]}
+  - {rooms: ["01 hallway", "03 bathroom"], type: door, openings: [D2, D1]}
+  - {rooms: ["01 hallway", "04 living"], type: door, openings: [D3, D1]}
+captures:
+  - {id: lidar_1, tier: lidar, path: raw/lidar_1}
+"""
+
+
+def _perfect_room(rid, g, shift):
+    """Our counter-clockwise room from a GT room: polygon reversed, offsets from our wall start."""
+    P = np.asarray(g.polygon, float)
+    n = len(P)
+    ccw = np.roll(P[::-1], -shift, axis=0)
+    ops = []
+    for o in g.openings:
+        k = g.wall_index(o.wall)
+        a, b = P[k], P[(k + 1) % n]  # GT wall k runs from its left end a to b; our edge runs b -> a
+        j = next(j for j in range(n) if np.allclose(ccw[j], b) and np.allclose(ccw[(j + 1) % n], a))
+        ops.append((j, g.walls[k].length - o.offset - o.width, o.width, o.type))
+    r = room(rid, ccw.tolist(), openings=ops, ceiling=g.ceiling_height)
+    for op, o in zip(r["openings"], g.openings):
+        op["height"] = M(o.height, 0.05)
+    return r
+
+
+def test_synthetic_ground_truth_and_a_perfect_lidar_result(tmp_path):
+    p = tmp_path / "synth_1" / "ground_truth.yaml"
+    p.parent.mkdir()
+    p.write_text(SYNTH_YAML)
+    gt = load_ground_truth(p)
+    assert gt.synthetic and not gt.flags
+    bedroom = gt.room("02 bedroom")
+    assert bedroom.area_method == "polygon" and bedroom.floor_area == pytest.approx(17.331, abs=1e-3)
+    assert shoelace(bedroom.polygon) < 0 and bedroom.closure_error == pytest.approx(0.0, abs=1e-3)
+    rng = np.random.default_rng(3)
+    ids = ["R3", "R1", "R4", "R2"]
+    rooms = [_perfect_room(ids[k], g, int(rng.integers(len(g.walls)))) for k, g in enumerate(gt.rooms)]
+    adj = [(ids[0], ids[1]), (ids[0], ids[2]), (ids[0], ids[3])]
+    res = result(rooms[::-1], tier="lidar", adjacency=adj, drift={"enabled": True})
+    m = capture_metrics(gt, gt.capture("lidar_1"), res)
+    assert {r["pred_room"]: r["gt_room"] for r in m["match"]["rooms"]} == dict(zip(ids, [r.id for r in gt.rooms]))
+    assert not m["missing"] and m["openings"]["matched"] == 11 and m["openings"]["phantom"] == 0
+    assert max(abs(r["err"]) for r in m["records"]) == pytest.approx(0.0, abs=1e-9)
+    assert m["adjacency"]["exact"]
+
+
 def test_gates_pass_on_a_good_capture_and_rank_failures(gt):
     cfg = gates_mod.load_gates()
     good = capture_metrics(gt, gt.capture("photo_1"), result(good_rooms(), damage=[stain()]))
