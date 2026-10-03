@@ -320,6 +320,41 @@ def corridor_aligned() -> Synth:
     return Synth(free, [], cams, H, rooms, ops)
 
 
+def offset_rooms() -> Synth:
+    """A hallway between two rows of rooms whose dividing walls do not line up (after the synth_0 benchmark
+    property): B's west face (x = 4.15) and D's (x = 4.01) are 14 cm apart, A's east face (4.0) and C's (3.9)
+    10 cm. Furniture: a wardrobe (2.0 m, 0.6 m deep) against A's west wall, a counter (0.9 m) along C's south
+    wall, a cabinet (1.8 m) in D's south-east corner and a door leaf flat against B's hallway wall."""
+    rooms = {"H": [(0, 0, 7.6, 1.5)], "A": [(0, 1.62, 4.0, 5.6)], "B": [(4.15, 1.62, 7.6, 5.6)],
+             "C": [(0, -3.9, 3.9, -0.12)], "D": [(4.01, -3.9, 7.6, -0.12)]}
+    free = [Box((r[0], r[1], 0), (r[2], r[3], H)) for rs in rooms.values() for r in rs]
+    doors = [("A", 1.0, 1.85, 1.5), ("B", 5.2, 6.05, 1.5), ("C", 0.6, 1.4, -0.12), ("D", 5.5, 6.3, -0.12)]
+    free += [Box((a, y, 0), (b, y + 0.12, 2.05)) for _, a, b, y in doors]
+    solids = [Box((0.0, 2.6, 0.0), (0.6, 3.8, 2.0)),  # wardrobe
+              Box((1.0, -3.9, 0.0), (2.6, -3.3, 0.9)),  # counter
+              Box((6.8, -3.9, 0.0), (7.6, -3.5, 1.8)),  # cabinet
+              Box((6.1, 1.62, 0.01), (6.9, 1.66, 2.04))]  # door leaf
+    cams = [Cam((0.6, 0.75, 1.5), 0), Cam((3.8, 0.75, 1.5), 180), Cam((3.8, 0.75, 1.5), 0),
+            Cam((7.0, 0.75, 1.5), 180), Cam((1.4, 0.4, 1.5), 90, -5), Cam((5.6, 0.4, 1.5), 90, -5),
+            Cam((1.0, 1.1, 1.5), -90, -5), Cam((5.9, 1.1, 1.5), -90, -5)]
+    for name in "ABCD":
+        x0, y0, x1, y1 = rooms[name][0]
+        cx, cy = 0.5 * (x0 + x1), 0.5 * (y0 + y1)
+        cams += [Cam((x0 + 0.6, y0 + 0.6, 1.5), 40), Cam((x1 - 0.6, y0 + 0.6, 1.5), 140),
+                 Cam((x1 - 0.6, y1 - 0.6, 1.5), -140), Cam((x0 + 0.6, y1 - 0.6, 1.5), -40),
+                 Cam((cx, cy, 1.5), 90, -10), Cam((cx, cy, 1.5), -90, -10), Cam((cx, cy, 1.5), 0, 10),
+                 Cam((cx, cy, 1.5), 180, 10)]
+    for c in cams:
+        x, y = c.pos[:2]
+        c.room = _room_of(rooms, x, y)
+    ops = []
+    for name, a, b, y in doors:
+        face_h, face_r = (y, y + 0.12) if name in "AB" else (y + 0.12, y)
+        ops += [Opening("H", "door", "y", face_h, a, b, 0, 2.05, name),
+                Opening(name, "door", "y", face_r, a, b, 0, 2.05, "H")]
+    return Synth(free, solids, cams, H, rooms, ops)
+
+
 def hallway_three_rooms() -> Synth:
     """Hallway along y=0..1.2 with rooms A and B above it and a room C at its east end."""
     t = 0.12

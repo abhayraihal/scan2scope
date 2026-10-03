@@ -156,6 +156,34 @@ def test_doors_and_windows_match_truth(house_clean, house):
     assert {k: len(labels[k].openings) for k in "HABC"} == n_true
 
 
+@pytest.fixture(scope="module")
+def offset():
+    return lf.offset_rooms()
+
+
+@pytest.mark.parametrize("kw,tol", [({"noise": 0.01}, 0.01), (NOISY, 0.02)])
+def test_rooms_across_a_hallway_get_their_own_faces(offset, kw, tol):
+    """Parallel faces of different rooms 10 and 14 cm apart, furniture and a door leaf against walls."""
+    plan = build_plan(lf.make_scene(offset, rays=FAST, yaw_deg=YAW, shift=SHIFT, **kw))
+    assert sorted(r.label for r in plan.rooms) == ["A", "B", "C", "D", "H"]
+    for r in plan.rooms:
+        x0, y0, x1, y1 = offset.rooms[r.label][0]
+        assert len(r.walls) == 4, (r.label, [w.length.value for w in r.walls])
+        assert lf.cyclic_match([w.length.value for w in r.walls], [x1 - x0, y1 - y0] * 2) < tol, r.label
+        truth = lf.truth_polygon(offset, r.label, YAW, SHIFT)
+        assert Polygon(r.polygon).symmetric_difference(truth).area < tol * 2 * (x1 - x0 + y1 - y0), r.label
+        for o in r.openings:
+            wall = next(w for w in r.walls if w.id == o.wall_id)
+            d = (wall.end - wall.start) / wall.length.value
+            assert abs(np.dot(o.center - wall.start, d) - (o.offset.value + 0.5 * o.width.value)) < 1e-6
+            assert abs(np.dot(o.center - wall.start, [-d[1], d[0]])) < 1e-6  # on the refined wall
+    hall = _room_by_label(plan, "H")
+    assert sorted(o.type for o in hall.openings) == ["door"] * 4
+    pairs = {frozenset((a.room_a, a.room_b)) for a in plan.adjacency}
+    assert pairs == {frozenset((hall.id, _room_by_label(plan, k).id)) for k in "ABCD"}
+    assert lf.overlap_area([r.polygon for r in plan.rooms]) < 1e-6
+
+
 def test_extents_follow_the_wall_directions(house_clean):
     assert house_clean.extent_x.value == pytest.approx(8.5, abs=0.02)
     assert house_clean.extent_y.value == pytest.approx(4.5, abs=0.02)
