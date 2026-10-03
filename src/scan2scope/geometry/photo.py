@@ -18,7 +18,7 @@ import numpy as np
 from PIL import Image, ImageOps
 
 from scan2scope.geometry import gravity
-from scan2scope.geometry.mapanything_backend import MapAnythingRunner, OutputCacheLike
+from scan2scope.geometry.mapanything_backend import MapAnythingRunner, OutputCacheLike, focal_check
 from scan2scope.geometry.pointmaps import normals_from_pointmap
 from scan2scope.types import CameraView, Scene
 
@@ -29,7 +29,9 @@ MAX_PHOTOS = 8
 MAX_IMAGE_SIDE = 4096
 VOXEL = 0.02
 MAX_POINTS = 400_000
-SCALE_LOG_SIGMA = 0.08
+# Log-scale error of one room's MapAnything run, measured on four real rooms: home photos -10.5% (tape), and
+# ARKitScenes photo sets -16%, -20% and +10% (depth against LiDAR); rms 0.16 in log units.
+SCALE_LOG_SIGMA = 0.15
 MIN_WEIGHT = 0.1  # drop pixels with MapAnything confidence below about 1.4
 NORMAL_STEP = 2
 FILM_DIAGONAL_MM = math.hypot(36.0, 24.0)
@@ -370,20 +372,25 @@ def build_room_scene(name: str, paths: list[Path], *, cache: OutputCacheLike | N
         flags.append("few_points")
     valid_w = np.concatenate([w[pr.mask] for w, pr in zip(weights, preds)])
     n_exif = sum(K is not None for K in Ks)
+    exif_fl = [K[0, 0] / max(im.shape[1], im.shape[0]) for K, (_, im, _, _) in zip(Ks, loaded) if K is not None]
+    focal, focal_flags = focal_check(preds, float(np.median(exif_fl)) if exif_fl else None)
+    flags.extend(focal_flags)
+    scale_log_sigma = math.hypot(SCALE_LOG_SIGMA, focal["sigma_log"])
     quality = {
         "n_photos": len(loaded), "n_photos_total": n_total, "exif_focal": n_exif == len(loaded),
         "n_exif_focal": n_exif, "low_light": any(ex.low_light for _, _, ex, _ in loaded),
         "n_low_light": sum(ex.low_light for _, _, ex, _ in loaded),
         "mean_conf": float(valid_w.mean()) if valid_w.size else 0.0,
         "valid_fraction": float(np.mean([pr.mask.mean() for pr in preds])), "thin": len(loaded) == 1,
+        "ma_focal_long": focal["ma_focal_long"], "focal_sigma_log": focal["sigma_log"],
     }
     meta = {"quality": quality, "metric_scale": [pr.metric_scale for pr in preds], "gravity": ginfo,
             "rotation_applied": R.tolist(), "flags": flags, "photos": [p.name for p, *_ in loaded],
-            "drift": {"enabled": False, "reason": "photo rooms are single MapAnything runs"}}
-    log.info("room %s: %d photos, %d points, mean conf %.2f%s", name, len(loaded), len(P), quality["mean_conf"],
-             f", flags {flags}" if flags else "")
+            "focal": focal, "drift": {"enabled": False, "reason": "photo rooms are single MapAnything runs"}}
+    log.info("room %s: %d photos, %d points, mean conf %.2f, scale sigma %.3f%s", name, len(loaded), len(P),
+             quality["mean_conf"], scale_log_sigma, f", flags {flags}" if flags else "")
     return Scene(tier="photo", views=views, points=P, normals=N, weights=W, view_index=V,
-                 scale_log_sigma=SCALE_LOG_SIGMA, room_hint=name, meta=meta)
+                 scale_log_sigma=scale_log_sigma, room_hint=name, meta=meta)
 
 
 def build_room_scenes(root: Path, work_dir: Path, *, cache: OutputCacheLike | None = None,

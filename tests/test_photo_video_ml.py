@@ -118,8 +118,9 @@ def test_video_scene_from_kitchen_clip(tmp_path):
     clip = tmp_path / "kitchen.mp4"
     _encode_kitchen_video(clip)
     cache = NpzCache(tmp_path)
+    # the clip is 2 fps; sample all of it
     on = video.build_scene(clip, tmp_path / "work_on", drift_correction=True, cache=cache, chunk_size=8, overlap=3,
-                           loop_frames=4)
+                           loop_frames=4, target_fps=2.0)
     q, d = on.meta["quality"], on.meta["drift"]
     assert q["n_frames"] >= 20 and abs(q["duration_s"] - 12.5) < 0.6
     assert q["n_chunks"] == len(video.plan_chunks(q["n_frames"], 8, 3))
@@ -134,7 +135,7 @@ def test_video_scene_from_kitchen_clip(tmp_path):
 
     misses = cache.misses
     off = video.build_scene(clip, tmp_path / "work_off", drift_correction=False, cache=cache, chunk_size=8,
-                            overlap=3, loop_frames=4)
+                            overlap=3, loop_frames=4, target_fps=2.0)
     assert cache.misses == misses  # every chunk came from the cache
     assert not off.meta["drift"]["enabled"] and not off.meta["drift"]["loop_closure"]["attempted"]
     _check_scene(off)

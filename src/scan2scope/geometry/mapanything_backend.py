@@ -13,6 +13,7 @@ import gc
 import hashlib
 import io
 import logging
+import math
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -41,6 +42,13 @@ CONF_REF = 30.0
 HEAVY_CROP = 0.2  # share of a resized image cut away to fit the call's aspect ratio
 # MapAnything accepts intrinsics on some views and not others; False drops them all unless every view has them.
 ALLOW_PARTIAL_INTRINSICS = True
+# The capture protocol's 1x main lens (iPhone 15 or newer, 24 or 26 mm equivalent) has a focal of 0.69 to 0.75 times
+# the long side of a 4:3 photo, and more in 16:9 video (stabilisation crops). On recompressed images MapAnything
+# predicts far shorter focals and too small a scene: ARKitScenes kitchen photos re-saved at JPEG quality 70 went
+# from 0.80 to 0.43 (true 0.84) with metric depth 35% short, at any resolution; the WhatsApp home captures came out
+# at 0.53 to 0.55 against 0.75 to 0.85 from vanishing points and two-view self-calibration.
+PROTOCOL_MIN_FOCAL_LONG = 0.6
+FOCAL_MISMATCH_LOG = 0.1  # a predicted focal this far (log) from the EXIF one: the model did not take it
 
 
 def confidence_weight(conf: np.ndarray) -> np.ndarray:
@@ -210,6 +218,33 @@ class ViewPrediction:
         out = np.full((h2, w2) + arr.shape[2:], fill, dtype=arr.dtype)
         out[oy:oy + h, ox:ox + w] = arr
         return out
+
+
+def focal_check(preds: Sequence[ViewPrediction], ref_focal_long: float | None = None) -> tuple[dict, list[str]]:
+    """Compare MapAnything's predicted focal (median over views, times the image's long side) with the EXIF focal
+    when known, else with the shortest focal the protocol's camera can have. The log distance beyond those bounds
+    is returned as an extra 1-sigma log-scale uncertainty: the captures where it was off had metric errors of 7 to
+    41%, and passing intrinsics does not fix it (MapAnything keeps its own, wider field of view)."""
+    fl = [p.K_image()[0, 0] / max(p.image_size) for p in preds if p.pose_ok and np.isfinite(p.K).all()]
+    rec: dict[str, Any] = {"ma_focal_long": None, "ref_focal_long": ref_focal_long, "sigma_log": 0.0}
+    if not fl:
+        return rec, []
+    f = float(np.median(fl))
+    rec["ma_focal_long"] = f
+    flags = []
+    if ref_focal_long is not None and ref_focal_long > 0:
+        d = abs(math.log(f / ref_focal_long))
+        rec["ref_kind"] = "exif"
+        if d > FOCAL_MISMATCH_LOG:
+            rec["sigma_log"] = d
+            flags.append(f"mapanything_focal_mismatch:{f:.2f}/{ref_focal_long:.2f}")
+    else:
+        rec["ref_kind"] = "protocol_min"
+        rec["ref_focal_long"] = PROTOCOL_MIN_FOCAL_LONG
+        if f < PROTOCOL_MIN_FOCAL_LONG:
+            rec["sigma_log"] = math.log(PROTOCOL_MIN_FOCAL_LONG / f)
+            flags.append(f"mapanything_focal_implausible:{f:.2f}")
+    return rec, flags
 
 
 class MapAnythingRunner:

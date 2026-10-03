@@ -43,13 +43,17 @@ def render_box(T_wc):
 
 class FakeRunner:
     """Renders each call in the frame of its first camera, with a random per-call Sim(3) and an optional bend
-    that grows with the position in the call (yaw, tilt, height and scale), so chained chunks drift."""
+    that grows with the position in the call (yaw, tilt, height and scale), so chained chunks drift.
 
-    def __init__(self, poses_by_sha, bend=(0.0, 0.0, 0.0, 0.0), seed=0, invalid=()):
+    spread maps a chunk's first frame to a factor on its camera spacing: the call keeps every view's depth map
+    but moves its cameras (and their points) apart by that factor, as MapAnything does on some real chunks."""
+
+    def __init__(self, poses_by_sha, bend=(0.0, 0.0, 0.0, 0.0), seed=0, invalid=(), spread=None):
         self.poses = poses_by_sha
         self.bend = bend
         self.seed = seed
         self.invalid = set(invalid)  # image hashes that come back without a usable pose
+        self.spread = dict(spread or {})
         self.calls = []
 
     def infer(self, images, intrinsics=None, key=None, cache=None):
@@ -80,6 +84,14 @@ class FakeRunner:
                 T_wc=np.eye(4) if bad else T_out, K=K_TRUE.copy(), metric_scale=float(se3.decompose_sim3(D)[0]),
                 image_size=(W, H), resized_size=(W, H), crop=(0, 0), intrinsics_given=Ks[i] is not None,
                 pose_ok=not bad))
+        lam = self.spread.get((key or {}).get("chunk", [None])[0])
+        if lam is not None:
+            c0 = out[0].T_wc[:3, 3].copy()
+            for p in out:
+                shift = (lam - 1.0) * (p.T_wc[:3, 3] - c0)
+                p.T_wc = p.T_wc.copy()
+                p.T_wc[:3, 3] += shift
+                p.pts3d = np.where(p.mask[..., None], p.pts3d + shift, 0.0).astype(np.float32)
         return out
 
 
@@ -141,6 +153,25 @@ def test_confidence_weight_is_bounded_and_monotone():
     w = mb.confidence_weight(np.array([0.5, 1.0, 2.0, 10.0, 30.0, 500.0, np.nan]))
     assert w[0] == 0.0 and w[1] == 0.0 and w[-1] == 0.0
     assert np.all(np.diff(w[1:5]) > 0) and w[4] == 1.0 and w[5] == 1.0
+
+
+def _pred_with_focal(f):
+    K = np.array([[f, 0.0, (W - 1) / 2], [0.0, f, (H - 1) / 2], [0.0, 0.0, 1.0]])
+    return mb.ViewPrediction(np.zeros((H, W, 3), np.float32), np.ones((H, W), np.float32), np.ones((H, W), bool),
+                             np.eye(4), K, 1.0, (W, H), (W, H), (0, 0))
+
+
+def test_focal_check_against_the_protocol_camera_and_exif():
+    rec, flags = mb.focal_check([_pred_with_focal(50.0)] * 3)  # 0.78 of the long side: a 1x main camera
+    assert flags == [] and rec["sigma_log"] == 0.0 and math.isclose(rec["ma_focal_long"], 50 / 64)
+    rec, flags = mb.focal_check([_pred_with_focal(0.43 * W)] * 3)  # what recompressed photos come back as
+    assert flags == ["mapanything_focal_implausible:0.43"]
+    assert math.isclose(rec["sigma_log"], math.log(mb.PROTOCOL_MIN_FOCAL_LONG / 0.43))
+    rec, flags = mb.focal_check([_pred_with_focal(0.55 * W)], ref_focal_long=0.75)  # EXIF said 26 mm
+    assert flags == ["mapanything_focal_mismatch:0.55/0.75"]
+    assert math.isclose(rec["sigma_log"], math.log(0.75 / 0.55))
+    assert mb.focal_check([_pred_with_focal(0.72 * W)], ref_focal_long=0.75)[1] == []
+    assert mb.focal_check([])[0]["sigma_log"] == 0.0
 
 
 class _DictCache:
@@ -405,6 +436,44 @@ def test_build_room_scenes_with_fake_runner(tmp_path):
         assert np.std(s.points[down, 2]) < 0.02
 
 
+class ShortFocalRunner(FakeRunner):
+    """FakeRunner whose views come back with a focal of 0.45 of the long side, as MapAnything does on
+    recompressed images (the point maps stay those of the true camera)."""
+
+    def infer(self, images, intrinsics=None, key=None, cache=None):
+        out = super().infer(images, intrinsics, key=key, cache=cache)
+        for p in out:
+            p.K = p.K.copy()
+            p.K[0, 0] = p.K[1, 1] = 0.45 * W
+        return out
+
+
+def test_implausible_focal_widens_the_scale_interval(tmp_path):
+    rng = np.random.default_rng(4)
+    room = tmp_path / "Scan" / "01 bed"
+    room.mkdir(parents=True)
+    by_sha = {}
+    for k, T in enumerate(_room_shots(rng, 4)):
+        p = room / f"IMG_{k:04d}.jpg"
+        _save_with_exif(p, _noise_image(rng), focal35=None, iso=100, exposure=1 / 60)
+        img, _, _ = photo.load_photo(p)
+        by_sha[mb.array_sha256(img)] = T
+    plain = photo.build_room_scenes(room.parent, tmp_path / "w1", runner=FakeRunner(by_sha))[0]
+    short = photo.build_room_scenes(room.parent, tmp_path / "w2", runner=ShortFocalRunner(by_sha))[0]
+    assert plain.scale_log_sigma == photo.SCALE_LOG_SIGMA and not any("focal" in f for f in plain.meta["flags"])
+    assert "mapanything_focal_implausible:0.45" in short.meta["flags"]
+    assert math.isclose(short.scale_log_sigma, math.hypot(photo.SCALE_LOG_SIGMA, math.log(0.6 / 0.45)))
+    assert math.isclose(short.meta["quality"]["ma_focal_long"], 0.45)
+    (tmp_path / "v").mkdir()
+    frames, vids, _ = _loop_frames(tmp_path / "v", n=24)
+    v_plain = video.build_scene_from_frames(frames, runner=FakeRunner(vids), chunk_size=8, overlap=3, loop_frames=4)
+    v_short = video.build_scene_from_frames(frames, runner=ShortFocalRunner(vids), chunk_size=8, overlap=3,
+                                            loop_frames=4)
+    assert "mapanything_focal_implausible:0.45" in v_short.meta["flags"]
+    assert v_short.scale_log_sigma > v_plain.scale_log_sigma + 0.15
+    assert v_short.meta["scale"]["focal_sigma_log"] > 0 and v_plain.meta["scale"]["focal_sigma_log"] == 0
+
+
 def test_rotated_jpeg_gets_an_upright_copy_and_bad_views_are_dropped(tmp_path):
     rng = np.random.default_rng(5)
     root = tmp_path / "Scan"
@@ -462,6 +531,73 @@ def test_plan_chunks_and_owners():
     owners = video.assign_owners(40, spans)
     assert owners[0] == 0 and owners[39] == len(spans) - 1
     assert all(spans[c][0] <= f < spans[c][1] for f, c in enumerate(owners))
+
+
+def _two_runs(tmp_path, spread):
+    """One chunk's frames rendered twice: the second run keeps every depth map but spreads its cameras."""
+    frames, by_sha, _ = _loop_frames(tmp_path, n=40)
+    imgs = [np.asarray(Image.open(f.path).convert("RGB")) for f in frames[:6]]
+    a = FakeRunner(by_sha).infer(imgs, key={"chunk": [0, 6]})
+    b = FakeRunner(by_sha, seed=3, spread={0: spread}).infer(imgs, key={"chunk": [0, 6]})
+    return a, b
+
+
+def test_align_runs_keeps_a_consistent_link_on_its_joint_fit(tmp_path):
+    a, b = _two_runs(tmp_path, 1.0)
+    lk = video.align_runs(a, b, list(range(6)), seed=1)
+    assert lk.ok and lk.method == "points" and lk.camera_disagreement < 0.01 and lk.n_frames_ok == 6
+    assert lk.joint_inlier_frac > 0.9 and len(lk.frames_used) == 6
+
+
+def test_align_runs_refuses_runs_that_disagree_about_the_cameras(tmp_path):
+    a, b = _two_runs(tmp_path, 2.5)
+    lk = video.align_runs(a, b, list(range(6)), seed=1)
+    # every frame still registers on its own (same depth maps), the joint fit does not, and the cameras of the
+    # two runs end up far apart under any single transform
+    assert lk.n_frames_ok == 6 and lk.joint_inlier_frac < video.ALIGN_GOOD_INLIERS
+    assert lk.method in ("points_subset", "single_frame") and not lk.ok
+    assert lk.camera_disagreement > video.LINK_MAX_DISAGREE and lk.reason.startswith("cameras_disagree")
+    rec = lk.record()
+    assert rec["align_method"] == lk.method and rec["align_ok"] is False
+    json.dumps(rec)
+
+
+def test_video_inconsistent_chunk_is_dropped_not_chained(tmp_path):
+    frames, by_sha, poses = _loop_frames(tmp_path)
+    # chunk 1 (frames 5-12) keeps its depth maps but spreads its cameras 2.5x, as MapAnything does on some chunks
+    s = video.build_scene_from_frames(frames, drift_correction=False, runner=FakeRunner(by_sha, spread={5: 2.5}),
+                                      chunk_size=8, overlap=3, loop_frames=4)
+    flags = s.meta["flags"]
+    assert "chunk_align_failed:1" in flags and "chunk_align_failed:2" in flags
+    assert "video_segment_dropped:0-9" in flags and not any(f.startswith("chunk_align_fallback") for f in flags)
+    q = s.meta["quality"]
+    assert q["frames_dropped"] == 10 and q["n_chunks_used"] == 6 and q["n_chunks"] == 8
+    chunks = s.meta["drift"]["chunks"]
+    assert [c["kept"] for c in chunks] == [False, False] + [True] * 6
+    assert chunks[1]["align_camera_disagreement"] > video.LINK_MAX_DISAGREE
+    ok = s.meta["frames"]["pose_ok"]
+    assert not any(ok[:10]) and all(ok[10:]) and all(v.meta["frame_index"] >= 10 for v in s.views)
+    ate, _ = _ate([T for T, o in zip(s.meta["frames"]["T_wc"], ok) if o], poses[10:])
+    assert ate < 0.05
+    clean = video.build_scene_from_frames(frames, drift_correction=False, runner=FakeRunner(by_sha), chunk_size=8,
+                                          overlap=3, loop_frames=4)
+    assert not any(f.startswith(("chunk_align", "video_segment")) for f in clean.meta["flags"])
+    assert s.scale_log_sigma > clean.scale_log_sigma
+    json.dumps(s.meta["drift"])
+
+
+def test_video_loop_registration_bridges_a_refused_link(tmp_path):
+    frames, by_sha, poses = _loop_frames(tmp_path)
+    s = video.build_scene_from_frames(frames, drift_correction=True, runner=FakeRunner(by_sha, spread={5: 2.5}),
+                                      chunk_size=8, overlap=3, loop_frames=4)
+    flags = s.meta["flags"]
+    assert "chunk_align_loop_bridge" in flags and "video_segment_dropped:8-9" in flags
+    assert s.meta["drift"]["loop_closure"]["reason"] == "used_as_link"
+    assert [c["kept"] for c in s.meta["drift"]["chunks"]] == [True, False] + [True] * 6
+    ok = s.meta["frames"]["pose_ok"]
+    assert sum(ok) == 38 and not ok[8] and not ok[9]
+    ate, _ = _ate([T for T, o in zip(s.meta["frames"]["T_wc"], ok) if o], [P for P, o in zip(poses, ok) if o])
+    assert ate < 0.05
 
 
 def _loop_frames(tmp_path, n=40, radius=1.0):
