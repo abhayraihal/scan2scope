@@ -13,18 +13,38 @@ import hashlib
 import json
 import logging
 import os
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 
-from scan2scope.semantics.detector import (Detection, DetectorConfig, GroundingDinoDetector, ModelUnavailable,
-                                           box_iou_matrix, decode, working_size)
-from scan2scope.semantics.lift import (LiftConfig, assign_surface, lift_mask, measure_on_surface, place_object,
-                                       pointmap_jacobian, view_valid)
-from scan2scope.semantics.merge import (DamageObservation, MergeConfig, ObjectObservation, merge_damage,
-                                        merge_objects)
+from scan2scope.semantics.detector import (
+    Detection,
+    DetectorConfig,
+    GroundingDinoDetector,
+    ModelUnavailable,
+    box_iou_matrix,
+    decode,
+    working_size,
+)
+from scan2scope.semantics.lift import (
+    LiftConfig,
+    assign_surface,
+    lift_mask,
+    measure_on_surface,
+    place_object,
+    pointmap_jacobian,
+    view_valid,
+)
+from scan2scope.semantics.merge import (
+    DamageObservation,
+    MergeConfig,
+    ObjectObservation,
+    merge_damage,
+    merge_objects,
+)
 from scan2scope.semantics.segmenter import Sam2Segmenter, SegmenterConfig
 from scan2scope.types import CameraView, DamageRegion, Measurement, Plan, Scene
 
@@ -111,8 +131,8 @@ def load_view_image(view: CameraView, long_side: int) -> tuple[np.ndarray, list[
             import pillow_heif
 
             pillow_heif.register_heif_opener()
-        except Exception:
-            pass
+        except ImportError:
+            log.debug("pillow_heif not installed; HEIC images cannot be read")
         with Image.open(view.image_path) as im:
             rgb = np.asarray(ImageOps.exif_transpose(im).convert("RGB"))
     if rgb.ndim == 2:

@@ -6,11 +6,10 @@ import json
 
 import numpy as np
 import pytest
+from semantics_fixtures import add_opening, make_plan, rect_room, region
 
 from scan2scope.rules import evaluate, load_rules
 from scan2scope.semantics import SceneObject
-
-from semantics_fixtures import add_opening, make_plan, rect_room, region
 
 
 @pytest.fixture

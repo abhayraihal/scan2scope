@@ -7,6 +7,7 @@ back to the box itself when SAM returns almost nothing.
 
 from __future__ import annotations
 
+import importlib.util
 import logging
 from dataclasses import dataclass
 
@@ -49,7 +50,7 @@ def postprocess(mask: np.ndarray, box: np.ndarray, cfg: SegmenterConfig) -> tupl
     if out.sum() >= cfg.min_mask_frac * box_area:
         return out, False
     out[:] = False
-    out[max(0, int(round(y0))):min(h, int(round(y1))), max(0, int(round(x0))):min(w, int(round(x1)))] = True
+    out[max(0, round(y0)):min(h, round(y1)), max(0, round(x0)):min(w, round(x1))] = True
     return out, True
 
 
@@ -75,10 +76,9 @@ class Sam2Segmenter:
         d = self.spec.local_dir
         if not (d / "config.json").exists() or not (d / "model.safetensors").exists():
             raise ModelUnavailable(f"SAM 2.1 weights not found in {d}; run `scan2scope fetch-weights`")
-        try:
-            from transformers import Sam2Model, Sam2Processor
-        except ImportError as exc:
-            raise ModelUnavailable("semantics needs torch and transformers (install the ml extra)") from exc
+        if importlib.util.find_spec("torch") is None or importlib.util.find_spec("transformers") is None:
+            raise ModelUnavailable("semantics needs torch and transformers (install the ml extra)")
+        from transformers import Sam2Model, Sam2Processor
         self.device = self.device or torch_device()
         self.processor = Sam2Processor.from_pretrained(d, local_files_only=True)
         model = Sam2Model.from_pretrained(d, local_files_only=True).eval()

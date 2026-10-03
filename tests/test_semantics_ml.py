@@ -79,11 +79,10 @@ def test_detector_and_segmenter_run_on_a_test_image(models):
 
 def test_analyze_with_real_models_on_a_synthetic_wall(models, tmp_path):
     from PIL import Image
+    from semantics_fixtures import box_view, make_plan, rect_room
 
     from scan2scope.semantics import analyze
     from scan2scope.types import Scene
-
-    from semantics_fixtures import box_view, make_plan, rect_room
 
     path = tmp_path / "view.png"
     Image.fromarray(_test_image()).resize((640, 480)).save(path)

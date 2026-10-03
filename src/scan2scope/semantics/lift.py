@@ -226,7 +226,7 @@ def room_polygons(plan: Plan) -> list[Polygon]:
         try:
             poly = Polygon(np.asarray(r.polygon, float))
             polys.append(poly if poly.is_valid else poly.buffer(0))
-        except Exception:  # degenerate polygon: never matches
+        except (ValueError, TypeError, shapely.errors.ShapelyError):  # degenerate polygon: never matches
             polys.append(Polygon())
     _POLY_CACHE.clear()
     _POLY_CACHE[id(plan)] = (plan, polys)

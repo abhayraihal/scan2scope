@@ -161,9 +161,7 @@ def _matches(entry: dict[str, Any], d: DamageRegion) -> bool:
     area = at(d.area, "value")
     if "max_area_m2" in entry and area > float(entry["max_area_m2"]):
         return False
-    if "min_area_m2" in entry and area <= float(entry["min_area_m2"]):
-        return False
-    return True
+    return not ("min_area_m2" in entry and area <= float(entry["min_area_m2"]))
 
 
 def _item(entry: dict[str, Any], surface_id: str, room_id: str, surface: Surface | None,

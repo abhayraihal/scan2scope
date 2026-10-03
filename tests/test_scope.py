@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import pytest
+from semantics_fixtures import add_opening, make_plan, rect_room, region
 
 from scan2scope.rules import evaluate
 from scan2scope.scope import generate, load_catalog
 from scan2scope.scope.generator import M2_TO_SF, M_TO_LF
 from scan2scope.semantics import SceneObject
 from scan2scope.types import ConcealedFlag
-
-from semantics_fixtures import add_opening, make_plan, rect_room, region
 
 SF, LF = 10.7639, 3.28084
 
@@ -108,7 +107,7 @@ def test_wicking_flag_gives_flood_cut_insulation_and_drywall(plan):
     assert q(cut) == pytest.approx((1.7 * LF, 1.65 * LF, 1.75 * LF))
     (ins,) = items_by(items, ("INS", "BATT"))
     assert q(ins) == pytest.approx((1.7 * 0.6 * SF, 1.65 * 0.6 * SF, 1.75 * 0.6 * SF))
-    wick = [f for f in flags if f.rule_id == "R-WALL-WICK"][0]
+    wick = next(f for f in flags if f.rule_id == "R-WALL-WICK")
     assert cut.flag_ids == [wick.id] and cut.damage_ids == ["D1"] and cut.surface_id == "R1-W2"
 
 

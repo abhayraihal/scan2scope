@@ -7,6 +7,7 @@ The model is loaded lazily from the pinned local snapshot, so cached outputs rep
 
 from __future__ import annotations
 
+import importlib.util
 import logging
 from dataclasses import dataclass, field
 
@@ -159,11 +160,9 @@ class GroundingDinoDetector:
         d = self.spec.local_dir
         if not (d / "config.json").exists() or not (d / "model.safetensors").exists():
             raise ModelUnavailable(f"Grounding DINO weights not found in {d}; run `scan2scope fetch-weights`")
-        try:
-            import torch
-            from transformers import AutoProcessor, GroundingDinoForObjectDetection
-        except ImportError as exc:
-            raise ModelUnavailable("semantics needs torch and transformers (install the ml extra)") from exc
+        if importlib.util.find_spec("torch") is None or importlib.util.find_spec("transformers") is None:
+            raise ModelUnavailable("semantics needs torch and transformers (install the ml extra)")
+        from transformers import AutoProcessor, GroundingDinoForObjectDetection
         self.device = self.device or torch_device()
         self.processor = AutoProcessor.from_pretrained(d, local_files_only=True)
         model = GroundingDinoForObjectDetection.from_pretrained(d, local_files_only=True).eval()
@@ -182,7 +181,7 @@ class GroundingDinoDetector:
         if list(enc["input_ids"]) == list(input_ids):
             for t, (a, b) in enumerate(enc["offset_mapping"]):
                 for p, (s, e) in enumerate(prompt.phrase_char_spans()):
-                    if b > a and a >= s and b <= e:
+                    if s <= a < b <= e:
                         spans[p].append(t)
         else:  # fall back to splitting on the period token
             dot = tok.convert_tokens_to_ids(".")

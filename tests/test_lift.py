@@ -7,20 +7,38 @@ import json
 import numpy as np
 import pytest
 from PIL import Image
+from semantics_fixtures import box_view, make_plan, polygon_mask, project, rect_on_wall_y, rect_room
 
 from scan2scope.config import ModelSpec
-from scan2scope.semantics import SemanticsConfig, analyze
-from scan2scope.semantics.detector import (DAMAGE_PROMPTS, OBJECT_PROMPTS, Detection, DetectorConfig,
-                                           GroundingDinoDetector, decode, nms)
-from scan2scope.semantics.lift import (LiftConfig, LiftedMask, assign_surface, lift_mask, measure_on_surface,
-                                       robust_extent, wquantile)
-from scan2scope.semantics.merge import (DamageObservation, MergeConfig, ObjectObservation, combine_scores,
-                                        merge_damage, merge_objects)
+from scan2scope.semantics import SemanticsConfig, analyze, suppress_inside_objects
+from scan2scope.semantics.detector import (
+    DAMAGE_PROMPTS,
+    OBJECT_PROMPTS,
+    Detection,
+    DetectorConfig,
+    GroundingDinoDetector,
+    decode,
+    nms,
+)
+from scan2scope.semantics.lift import (
+    LiftConfig,
+    LiftedMask,
+    assign_surface,
+    lift_mask,
+    measure_on_surface,
+    robust_extent,
+    wquantile,
+)
+from scan2scope.semantics.merge import (
+    DamageObservation,
+    MergeConfig,
+    ObjectObservation,
+    combine_scores,
+    merge_damage,
+    merge_objects,
+)
 from scan2scope.semantics.segmenter import SegmenterConfig, pack_masks, postprocess, unpack_masks
-from scan2scope.semantics import suppress_inside_objects
 from scan2scope.types import Scene
-
-from semantics_fixtures import box_view, make_plan, polygon_mask, project, rect_on_wall_y, rect_room
 
 LO, HI = np.array([0.0, 0.0, 0.0]), np.array([4.0, 3.0, 2.5])
 CFG = LiftConfig()
@@ -315,7 +333,7 @@ class FakeSegmenter:
         h, w = image.shape[:2]
         masks = np.zeros((len(boxes), h, w), bool)
         for k, (x0, y0, x1, y1) in enumerate(np.asarray(boxes)):
-            masks[k, int(round(y0)):int(round(y1)) + 1, int(round(x0)):int(round(x1)) + 1] = True
+            masks[k, round(y0):round(y1) + 1, round(x0):round(x1) + 1] = True
         return {"masks": pack_masks(masks), "shape": np.array([h, w]), "iou": np.full(len(boxes), 0.9, np.float32)}
 
     def masks(self, raw, boxes):

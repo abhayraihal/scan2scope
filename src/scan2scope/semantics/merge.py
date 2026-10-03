@@ -241,14 +241,12 @@ def merge_objects(obs: list[ObjectObservation], cfg: MergeConfig | None = None
             continue
         rooms = [o.room_id for o in ms if o.room_id is not None]
         room_id = max(set(rooms), key=rooms.count) if rooms else None
-
-        def med(attr: str, k: int) -> float:
-            return float(np.median([getattr(o, attr)[k] for o in ms]))
-
+        rng = {a: (float(np.median([getattr(o, a)[0] for o in ms])), float(np.median([getattr(o, a)[1] for o in ms])))
+               for a in ("x_range", "y_range", "z_range")}
         merged.append(MergedObject(
             cls=ms[0].cls, room_id=room_id, xy=np.median(np.stack([np.asarray(o.xy, float) for o in ms]), 0),
-            x_range=(med("x_range", 0), med("x_range", 1)), y_range=(med("y_range", 0), med("y_range", 1)),
-            z_range=(med("z_range", 0), med("z_range", 1)), score=score, view_ids=[o.view_id for o in ms],
+            x_range=rng["x_range"], y_range=rng["y_range"], z_range=rng["z_range"], score=score,
+            view_ids=[o.view_id for o in ms],
             evidence={"n_views": len(ms), "single_view": len(ms) == 1, "score_method": f"noisy_or_top{cfg.top_k}",
                       "per_view_scores": [round(o.score, 4) for o in ms]}))
     return merged, dropped

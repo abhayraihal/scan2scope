@@ -141,11 +141,9 @@ def _base_inputs(d: DamageRegion) -> dict[str, Any]:
 
 def _crack_ends(d: DamageRegion) -> list[np.ndarray]:
     ends: list[np.ndarray] = []
-    for pair in d.evidence.get("endpoints_uv_all") or [d.evidence.get("endpoints_uv")] or []:
-        if pair is None:
-            continue
-        for p in np.asarray(pair, float).reshape(-1, 2):
-            ends.append(p)
+    for pair in d.evidence.get("endpoints_uv_all") or [d.evidence.get("endpoints_uv")]:
+        if pair is not None:
+            ends.extend(np.asarray(pair, float).reshape(-1, 2))
     if not ends:  # no principal-axis ends recorded: use the corners of the uv box
         u0, u1 = d.u_range
         v0, v1 = d.v_range

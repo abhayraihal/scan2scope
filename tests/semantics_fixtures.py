@@ -52,7 +52,7 @@ def make_plan(*rooms: Room) -> Plan:
                 extent_x=meas(1.0), extent_y=meas(1.0))
 
 
-def look_at(cam: np.ndarray, target: np.ndarray, up: np.ndarray = np.array([0.0, 0.0, 1.0])) -> np.ndarray:
+def look_at(cam: np.ndarray, target: np.ndarray, up: tuple[float, float, float] = (0.0, 0.0, 1.0)) -> np.ndarray:
     """Camera-to-world pose in OpenCV axes (x right, y down, z forward)."""
     cam = np.asarray(cam, float)
     z = np.asarray(target, float) - cam
