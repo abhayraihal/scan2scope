@@ -12,3 +12,4 @@ __pycache__/
 *.npz
 /bench/data/*/raw/
 /.claude/
+/bench/synthetic/
