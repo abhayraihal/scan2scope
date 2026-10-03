@@ -28,7 +28,8 @@ class _Data:
     P: np.ndarray  # voxel centroids, Manhattan frame
     N: np.ndarray
     wp: np.ndarray  # mean confidence per voxel (peak finding, occupancy)
-    wf: np.ndarray  # summed confidence per voxel (fits, edge profiles)
+    wf: np.ndarray  # summed confidence per voxel (fits)
+    wn: np.ndarray  # length of the confidence-weighted normal sum; its projection on a wall normal is face mass
     O: np.ndarray  # ray origins (raw point subsample), Manhattan frame
     E: np.ndarray  # ray ends
     cams: np.ndarray  # camera centres, Manhattan frame
@@ -79,7 +80,10 @@ def _sanitize(scene: Scene) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndar
             ok &= ~far
     P, N, Wt, V = P[ok], N[ok] / nn[ok, None], Wt[ok], V[ok]
     V = np.where((V >= 0) & (V < len(cams)), V, -1)
-    V = np.where(V >= 0, np.where(cam_ok[np.maximum(V, 0)], V, -1), -1)
+    if len(cams):
+        V = np.where(V >= 0, np.where(cam_ok[np.maximum(V, 0)], V, -1), -1)
+    else:
+        flags.append("no_views")
     return P, N, Wt, V, cams, cam_ok, flags
 
 
@@ -97,7 +101,7 @@ def _voxelize(P: np.ndarray, N: np.ndarray, Wt: np.ndarray, voxel: float) -> tup
     keep = nn > 1e-9
     Nv = Nv / np.maximum(nn, 1e-12)[:, None]
     ws = np.bincount(inv, Wt, m)
-    return Pv[keep], Nv[keep], (ws / cnt)[keep], ws[keep]
+    return Pv[keep], Nv[keep], (ws / cnt)[keep], ws[keep], nn[keep]
 
 
 def _label(hint: str | None) -> str | None:
@@ -133,7 +137,7 @@ def build_plan(scene: Scene, *, single_room: bool = False) -> Plan:
         log.warning("layout: only %d usable points", len(P_raw))
         return _empty_plan(flags + ["too_few_points"], meta)
     rng = np.random.default_rng(0)
-    Pv, Nv, wp, wf = _voxelize(P_raw, N_raw, W_raw, VOXEL)
+    Pv, Nv, wp, wf, wn = _voxelize(P_raw, N_raw, W_raw, VOXEL)
     ridx = rng.permutation(np.flatnonzero(V_raw >= 0))[:MAX_RAYS]
     if len(ridx) == 0:
         flags.append("no_camera_rays")
@@ -148,7 +152,7 @@ def build_plan(scene: Scene, *, single_room: bool = False) -> Plan:
     if wall_m.sum() < 100 or conc < 0.15:
         flags.append("manhattan_weak")
     Rm = _rot(-theta)
-    d = _Data(_xy(Pv, Rm), _xy(Nv, Rm), wp, wf, _xy(O_w, Rm), _xy(E_w, Rm), _xy(cams_w, Rm), cam_ok)
+    d = _Data(_xy(Pv, Rm), _xy(Nv, Rm), wp, wf, wn, _xy(O_w, Rm), _xy(E_w, Rm), _xy(cams_w, Rm), cam_ok)
     En = _xy(En_w, Rm)
     codes = W.direction_codes(d.N[wall_m, :2])
     off_axis = float((wp[wall_m][codes < 0]).sum() / max(wp[wall_m].sum(), 1e-9))
@@ -326,7 +330,7 @@ def _assemble(scene: Scene, d: _Data, lines: list[W.WallLine], cx: C.Complex, ro
             face = _face_evidence(lines, axis, coord, n_sign, min(t0, t1), max(t0, t1))
             frame = OP.WallFrame(axis, float(coord), n_sign, float(t0), 1 if t1 > t0 else -1, float(abs(t1 - t0)),
                                  fl.z, ce.z)
-            wa = OP.analyze_wall(frame, d.P, d.N, d.wp, d.wf, d.O, d.E, face.sigma if face.n >= 30 else sigma)
+            wa = OP.analyze_wall(frame, d.P, d.N, d.wp, d.wn, d.O, d.E, face.sigma if face.n >= 30 else sigma)
             edges.append((p, q, nin, face, frame, wa))
 
         walls: list[Wall] = []
@@ -376,6 +380,7 @@ def _assemble(scene: Scene, d: _Data, lines: list[W.WallLine], cx: C.Complex, ro
     allp = np.concatenate(polys_m)
     ext = allp.max(0) - allp.min(0)
     tot_ev = {"n_rooms": len(rooms), "frame": "manhattan", "manhattan_angle_deg": float(np.degrees(theta)),
+              "n_points": int(sum(r.floor_area.evidence["n_points"] for r in rooms)),
               "fit_rms": float(np.mean([r.floor_area.evidence["fit_rms"] for r in rooms])),
               "observed_fraction": float(np.mean([r.floor_area.evidence["observed_fraction"] for r in rooms])),
               "noise_sigma": sigma}

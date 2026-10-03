@@ -119,7 +119,7 @@ def _edge(prof: np.ndarray, start: int, step: int, level_hint: float, max_bins: 
     return None if e is None else _steepest(prof, e, step, sigma_bins)
 
 
-def analyze_wall(wf: WallFrame, P: np.ndarray, N: np.ndarray, w_occ: np.ndarray, w_cnt: np.ndarray,
+def analyze_wall(wf: WallFrame, P: np.ndarray, N: np.ndarray, w_occ: np.ndarray, w_nsum: np.ndarray,
                  O: np.ndarray, E: np.ndarray, sigma: float) -> WallAnalysis:
     a, b = wf.axis, 1 - wf.axis
     L, fz, cz = wf.length, wf.floor_z, wf.ceil_z
@@ -133,7 +133,9 @@ def analyze_wall(wf: WallFrame, P: np.ndarray, N: np.ndarray, w_occ: np.ndarray,
     iu = np.minimum((u[sel] / RES).astype(np.int64), nu - 1)
     iz = np.clip(((P[sel, 2] - fz) / RES).astype(np.int64), 0, nz - 1)
     occ = np.bincount(iu * nz + iz, weights=w_occ[sel], minlength=nu * nz).reshape(nu, nz)
-    cnt = np.bincount(iu * nz + iz, weights=w_cnt[sel], minlength=nu * nz).reshape(nu, nz)
+    # face mass per voxel: a corner voxel that is mostly jamb or sill contributes only its face share
+    face_mass = np.abs(N[sel, a]) * w_nsum[sel]
+    cnt = np.bincount(iu * nz + iz, weights=face_mass, minlength=nu * nz).reshape(nu, nz)
     n_pts = int(sel.sum())
 
     dO = (O[:, a] - wf.coord) * wf.n_sign
@@ -202,16 +204,18 @@ def _fit_candidate(m: np.ndarray, occ: np.ndarray, cnt: np.ndarray, hits_s: np.n
     colprof = cnt[:, rows].sum(1)
     wall_cols = (~empty[:, rows]).mean(1) >= 0.5
     level = float(np.median(colprof[wall_cols & (colprof > 0)])) if (wall_cols & (colprof > 0)).any() else 0.0
-    max_walk = int(0.7 / RES)
+    # walks start at the emptiest column/row of the seed, so a seed that spills onto sparse wall still works
+    max_walk = int(1.8 / RES)
     sb = sigma / RES
-    el = _edge(colprof, i0, -1, level, max_walk, sb)
-    er = _edge(colprof, i1 - 1, 1, level, max_walk, sb)
+    start = i0 + int(np.argmin(uniform_filter1d(colprof, 5, mode="nearest")[i0:i1]))
+    el = _edge(colprof, start, -1, level, max_walk, sb)
+    er = _edge(colprof, start, 1, level, max_walk, sb)
     left_obs, right_obs = el is not None, er is not None
-    u0 = el * RES if el is not None else (0.0 if i0 == 0 else i0 * RES)
-    u1 = er * RES if er is not None else (wf.length if i1 >= nu else i1 * RES)
-    if not left_obs and i0 > 0:
+    u0 = el * RES if el is not None else (0.0 if i0 <= 2 else i0 * RES)
+    u1 = er * RES if er is not None else (wf.length if i1 >= nu - 2 else i1 * RES)
+    if not left_obs and i0 > 2:
         flags.append("edge_unobserved:left")
-    if not right_obs and i1 < nu:
+    if not right_obs and i1 < nu - 2:
         flags.append("edge_unobserved:right")
     log.debug("gap seed u=[%.2f, %.2f] z=[%.2f, %.2f] level %.1f -> jambs %s %s", i0 * RES, i1 * RES,
               j0 * RES, j1 * RES, level, None if el is None else round(el * RES, 3),
@@ -223,18 +227,17 @@ def _fit_candidate(m: np.ndarray, occ: np.ndarray, cnt: np.ndarray, hits_s: np.n
     c1 = int(np.clip(np.ceil(u1 / RES - 0.1 * (u1 - u0) / RES), c0 + 1, nu))
     rowprof = cnt[c0:c1].sum(0)
     rlevel = float(np.median(rowprof[rowprof > 0])) if (rowprof > 0).any() else 0.0
-    et = _edge(rowprof, j1 - 1, 1, rlevel, int(1.2 / RES), sb)
+    zstart = j0 + int(np.argmin(uniform_filter1d(rowprof, 5, mode="nearest")[j0:j1]))
+    et = _edge(rowprof, zstart, 1, rlevel, nz, sb)
     header = et is not None
     z1 = fz + et * RES if et is not None else cz
     if et is None and not empty[c0:c1, j1:].mean() > 0.7:
         flags.append("edge_unobserved:top")
-    near_floor = j0 * RES <= NEAR_FLOOR or (j0 > 0 and empty[c0:c1, :j0].mean() > 0.7)
-    z0 = fz
-    if not near_floor:
-        eb = _edge(rowprof, j0, -1, rlevel, int(1.0 / RES), sb)
-        z0 = fz + eb * RES if eb is not None else fz + j0 * RES
-        if z0 - fz <= NEAR_FLOOR:
-            near_floor, z0 = True, fz
+    eb = _edge(rowprof, zstart, -1, rlevel, nz, sb)
+    z0 = fz + eb * RES if eb is not None else fz
+    near_floor = eb is None or z0 - fz <= NEAR_FLOOR
+    if near_floor:
+        z0 = fz
 
     # the seed must sit inside a real gap: mostly empty over the refined box, with rays through it
     bi0, bi1 = int(np.clip(u0 / RES, 0, nu - 1)), int(np.clip(np.ceil(u1 / RES), 1, nu))
@@ -306,8 +309,11 @@ def _edge_rms(cnt: np.ndarray, rows: np.ndarray, u0: float, u1: float, sigma: fl
         if er is not None:
             est_r.append(er * RES)
     fallback = max(sigma, RES / np.sqrt(12))
-    rl = float(np.std(est_l)) if len(est_l) >= 3 else fallback
-    rr = float(np.std(est_r)) if len(est_r) >= 3 else fallback
+    def spread(v: list[float]) -> float:
+        return float(max(1.4826 * np.median(np.abs(np.asarray(v) - np.median(v))), RES / np.sqrt(12)))
+
+    rl = spread(est_l) if len(est_l) >= 3 else fallback
+    rr = spread(est_r) if len(est_r) >= 3 else fallback
     return rl, rr
 
 
