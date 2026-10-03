@@ -281,9 +281,13 @@ def test_render_odd_results(tmp_path):
     assert "no rooms in this result" in (tmp_path / "empty" / "plan.svg").read_text()
 
     broken = copy.deepcopy(res)
-    broken["rooms"][0]["polygon"] = [[0, 0], [1, 1]]
+    broken["rooms"][0]["polygon"] = []
     broken["rooms"][0]["walls"][0]["start"] = None
+    broken["rooms"][1]["polygon"] = [[0, 0], [1, 1]]
     broken["rooms"][1]["openings"][0]["width"] = None
+    broken["damage"] = [{"id": "D9", "room_id": "R1", "surface_id": "R1-W2", "class": "hole", "u_range": [0.5],
+                         "v_range": [0.0, 1.0]}]
     info = render.render_all(broken, tmp_path / "broken")
+    assert info["errors"] == []
     assert (tmp_path / "broken" / "plan.svg").stat().st_size > 0 and (tmp_path / "broken" / "rooms" / "R1.svg").exists()
     assert console.format_summary(broken)

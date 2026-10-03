@@ -137,8 +137,8 @@ def fit_q(records: Iterable[Any], *, path: str | Path = CALIBRATION_PATH, write:
                 entry.update(q=round(q_reported * max(quant, MIN_FACTOR), 4), status="calibrated",
                              conformal_quantile=round(quant, 4))
             else:
-                log.warning("tier %s: conformal quantile is not finite (zero-width intervals that missed); "
-                            "q stays at %.3f", tier, q_now)
+                log.warning("tier %s: conformal quantile is not finite (too few rooms for level %.2f, or a "
+                            "zero-width interval that missed); q stays at %.3f", tier, level, q_now)
         else:
             log.info("tier %s: %d rooms (< %d); q stays at %.3f with status prior, empirical quantile %s",
                      tier, n_rooms, min_rooms, q_now, entry["empirical_quantile"])

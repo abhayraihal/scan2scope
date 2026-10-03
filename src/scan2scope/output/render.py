@@ -282,12 +282,17 @@ def _wall_damage(ax: Any, w: _Wall, d: dict, labels: _Labels, labels_todo: list)
     labels_todo.append(([w.at(c, 0.2), w.at(c, 0.35), w.at(c + 0.4, 0.2), w.at(c - 0.4, 0.2)], text))
 
 
+def _anchor(room: _Room) -> np.ndarray:
+    pts = room.poly if len(room.poly) else np.array([p for w in room.walls for p in (w.p0, w.p1)]).reshape(-1, 2)
+    return pts.mean(0) if len(pts) else np.zeros(2)
+
+
 def _room_label(ax: Any, room: _Room, labels: _Labels) -> None:
     try:
         p = polylabel(room.shape, tolerance=0.05) if room.shape.area > 0 else None
-        xy = np.array([p.x, p.y]) if p is not None else room.poly.mean(0)
+        xy = np.array([p.x, p.y]) if p is not None else _anchor(room)
     except (GEOSException, ValueError, TypeError):
-        xy = room.poly.mean(0) if len(room.poly) else np.zeros(2)
+        xy = _anchor(room)
     lines = [(f"{room.id} {room.label}", 8.0, {"fontweight": "bold", "color": INK})]
     fa = mvals(room.data.get("floor_area"))
     if fa is not None:
@@ -442,7 +447,8 @@ def _figure(result: dict[str, Any], shown: list[_Room], others: list[Any], *, sh
     shown_ids = {r.id for r in shown}
     damage_labels: list = []
     for d in result.get("damage") or []:
-        if not isinstance(d, dict) or not isinstance(d.get("u_range"), list) or not isinstance(d.get("v_range"), list):
+        if not isinstance(d, dict) or not all(isinstance(d.get(k), list) and len(d[k]) >= 2
+                                              for k in ("u_range", "v_range")):
             continue
         sid = str(d.get("surface_id"))
         if sid in by_wall:
