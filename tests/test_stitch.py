@@ -380,8 +380,9 @@ def test_doorway_photos_resolve_identical_doors():
 
 def test_room_geometry_resolves_identical_doors_and_repairs_greedy_choice():
     # the bedroom's door is listed first in the hallway, so the greedy tree tries the kitchen there first; the
-    # swap leaves no room for the bedroom, the local search repairs it, and no ambiguity is flagged
-    specs = layout(k_width=0.8, b_width=0.8, swap_hall_doors=True)
+    # swap leaves no room for the bedroom, the local search repairs it, and no ambiguity is flagged (the
+    # exterior door is too wide to take either room)
+    specs = layout(k_width=0.8, b_width=0.8, entry=1.2, swap_hall_doors=True)
     cap = make_capture(specs, seed=4)
     plan, _ = stitch_rooms(cap.scenes, cap.plans, None, use_doorway_photos=False)
     assert max(centre_errors(plan, specs).values()) < 0.02

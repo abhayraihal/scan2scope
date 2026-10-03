@@ -388,7 +388,7 @@ def _extents(rooms: list[StitchRoom], room_list: list[Room],
 def _door_hints(rooms: list[StitchRoom], hyps: list[Hypothesis],
                 params: Params | None) -> dict[tuple[int, str], int]:
     """The room that door matching alone puts behind each door; doorway photos try that room first."""
-    sol = solve(rooms, hyps, params)
+    sol = solve(rooms, hyps, params, search=False)
     hints: dict[tuple[int, str], int] = {}
     for _, k in sol.parent.values():
         e = sol.edges[k]

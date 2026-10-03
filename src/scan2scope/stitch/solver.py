@@ -139,17 +139,23 @@ class Edge:
         return self.opening_i if k == self.i else self.opening_j
 
 
+def evidence(score: float) -> float:
+    """Score as evidence, -log(1 - score): merging hypotheses by noisy-OR adds their evidence."""
+    return float(-np.log1p(-min(max(score, 0.0), 0.999)))
+
+
 @dataclass
 class Params:
     shrink: float = 0.02
     max_overlap_m2: float = 0.05
-    margin: float = 0.25  # alternatives within this share of the used score count as ambiguous
+    margin: float = 0.5  # an alternative with this share of the used evidence makes a placement ambiguous
     min_score: float = 0.08
     weak_score: float = 0.2
     merge_dist: float = 0.3
     merge_angle: float = np.radians(10.0)
     differ_dist: float = 0.25
     differ_angle: float = np.radians(10.0)
+    nudge_free: float = 0.1  # nudges within layout noise cost nothing
     nudge_sigma: float = 0.15
     gap: float = 1.0
     max_forced_runs: int = 200
@@ -160,6 +166,7 @@ _NUDGES = sorted(
      if (du, dn) != (0.0, 0.0)),
     key=lambda s: (np.hypot(*s), abs(s[0])),
 )
+_MAX_NUDGE = float(max(np.hypot(*s) for s in _NUDGES))
 
 
 def cluster_hypotheses(rooms: list[StitchRoom], hyps: list[Hypothesis], params: Params) -> list[Edge]:
@@ -221,6 +228,16 @@ def _blockers(poly, polys: dict[int, Any], limit: float) -> list[int]:
     return [r for r, q in polys.items() if q is not None and poly.intersection(q).area > limit]
 
 
+def _too_deep(poly, polys: dict[int, Any], blockers: list[int], depth: float) -> bool:
+    """True when an overlap is thicker than any nudge can undo; area over half the perimeter estimates the
+    thickness of a sliver."""
+    for r in blockers:
+        inter = poly.intersection(polys[r])
+        if inter.area / max(inter.length / 2.0, 1e-9) > depth:
+            return True
+    return False
+
+
 def _differs(room: StitchRoom, Ta: np.ndarray, Tb: np.ndarray, params: Params) -> bool:
     d = np.linalg.norm(apply2(Ta, room.centroid) - apply2(Tb, room.centroid))
     return bool(d > params.differ_dist or abs(wrap_angle(yaw2(Ta) - yaw2(Tb))) > params.differ_angle)
@@ -252,7 +269,7 @@ class Tree:
 
     @property
     def total(self) -> float:
-        return float(sum(self.eff_score.values()))
+        return float(sum(evidence(v) for v in self.eff_score.values()))
 
     def key(self) -> tuple[int, float]:
         return len(self.T), round(self.total, 9)
@@ -289,6 +306,9 @@ def grow(rooms: list[StitchRoom], edges: list[Edge], root: int, members: set[int
         poly = shrunk_polygon(rooms[child], Tc, params.shrink)
         blockers = _blockers(poly, polys, params.max_overlap_m2)
         shift = np.zeros(2)
+        if blockers and _too_deep(poly, polys, blockers, _MAX_NUDGE + 0.1):
+            tree.rejected[k] = blockers
+            continue
         if blockers:
             n_dir = _away_direction(rooms, e, placed, child, Tc, T[placed])
             u_dir = np.array([-n_dir[1], n_dir[0]])
@@ -306,7 +326,8 @@ def grow(rooms: list[StitchRoom], edges: list[Edge], root: int, members: set[int
         T[child] = Tc
         polys[child] = poly
         tree.parent[child] = (placed, k)
-        penalty = np.exp(-0.5 * (np.linalg.norm(shift) / params.nudge_sigma) ** 2)
+        excess = max(float(np.linalg.norm(shift)) - params.nudge_free, 0.0)
+        penalty = np.exp(-0.5 * (excess / params.nudge_sigma) ** 2)
         tree.eff_score[child] = float(e.score * penalty)
         if np.linalg.norm(shift) > 0:
             tree.shift[child] = shift
@@ -324,7 +345,7 @@ def _forcings(rooms: list[StitchRoom], edges: list[Edge], tree: Tree, members: s
         for x, y in ((e.i, e.j), (e.j, e.i)):
             if x == tree.root or x not in members or y not in tree.T:
                 continue
-            if x in tree.T and (e.score < min_ratio * tree.eff_score.get(x, 0.0)
+            if x in tree.T and (evidence(e.score) < min_ratio * evidence(tree.eff_score.get(x, 0.0))
                                 or not _differs(rooms[x], tree.T[y] @ e.T_into(y), tree.T[x], params)):
                 continue
             out.append((x, k))
@@ -336,12 +357,32 @@ def _changed(rooms: list[StitchRoom], a: Tree, b: Tree, params: Params) -> list[
     return sorted(r for r in keys if (r in a.T) != (r in b.T) or _differs(rooms[r], a.T[r], b.T[r], params))
 
 
+def _cannot_improve(edges: list[Edge], tree: Tree, members: set[int]) -> bool:
+    """Every room reachable from the root is placed, each through its best-scoring edge."""
+    reach, frontier = {tree.root}, [tree.root]
+    while frontier:
+        r = frontier.pop()
+        for e in edges:
+            if r in (e.i, e.j) and e.other(r) in members and e.other(r) not in reach:
+                reach.add(e.other(r))
+                frontier.append(e.other(r))
+    if reach - set(tree.T):
+        return False
+    best: dict[int, float] = {}
+    for e in edges:
+        for r in (e.i, e.j):
+            best[r] = max(best.get(r, 0.0), e.score)
+    return tree.total >= sum(evidence(best[r]) for r in tree.T if r != tree.root) - 1e-9
+
+
 def _improve_and_flag(rooms: list[StitchRoom], edges: list[Edge], tree: Tree, members: set[int],
                       params: Params, budget: list[int]) -> tuple[Tree, dict[int, str]]:
     """Single-edge local search, then flag rooms whose placement has a near-equal feasible alternative."""
     for _ in range(10):
+        if _cannot_improve(edges, tree, members):
+            break
         better = None
-        for x, k in _forcings(rooms, edges, tree, members, params, 0.5):
+        for x, k in _forcings(rooms, edges, tree, members, params, 0.25):
             if budget[0] <= 0:
                 break
             budget[0] -= 1
@@ -356,6 +397,8 @@ def _improve_and_flag(rooms: list[StitchRoom], edges: list[Edge], tree: Tree, me
         tree = better
     ambiguous: dict[int, str] = {}
     for x, k in _forcings(rooms, edges, tree, members, params, 1.0 - params.margin):
+        if x in ambiguous:
+            continue
         if budget[0] <= 0:
             break
         budget[0] -= 1
@@ -366,8 +409,9 @@ def _improve_and_flag(rooms: list[StitchRoom], edges: list[Edge], tree: Tree, me
             continue
         # the rooms that move (or swap in and out) must be about as well supported as they are now
         changed = _changed(rooms, tree, forced, params)
-        base_s = sum(tree.eff_score.get(r, 0.0) for r in changed)
-        if not changed or sum(forced.eff_score.get(r, 0.0) for r in changed) < (1.0 - params.margin) * base_s:
+        base_s = sum(evidence(tree.eff_score.get(r, 0.0)) for r in changed)
+        alt_s = sum(evidence(forced.eff_score.get(r, 0.0)) for r in changed)
+        if not changed or alt_s < (1.0 - params.margin) * base_s:
             continue
         e = edges[k]
         alt = f"{rooms[e.i].id}-{rooms[e.j].id}:{e.source}:{e.opening_i}/{e.opening_j}:{e.score:.2f}"
@@ -449,7 +493,9 @@ def _bbox(rooms: list[StitchRoom], T: dict[int, np.ndarray], ids: list[int]) -> 
     return np.array([P[:, 0].min(), P[:, 1].min(), P[:, 0].max(), P[:, 1].max()])
 
 
-def solve(rooms: list[StitchRoom], hyps: list[Hypothesis], params: Params | None = None) -> Solution:
+def solve(rooms: list[StitchRoom], hyps: list[Hypothesis], params: Params | None = None, *,
+          search: bool = True) -> Solution:
+    """Place every room; search=False skips the local search and the ambiguity checks."""
     params = params or Params()
     edges = cluster_hypotheses(rooms, hyps, params)
     sol = Solution({}, {}, {}, {}, {}, {}, edges, {}, [], None)
@@ -461,7 +507,9 @@ def solve(rooms: list[StitchRoom], hyps: list[Hypothesis], params: Params | None
     while remaining:
         root = _pick_root(remaining, edges)
         tree = grow(rooms, edges, root, remaining, params)
-        tree, ambiguous = _improve_and_flag(rooms, edges, tree, remaining, params, budget)
+        ambiguous: dict[int, str] = {}
+        if search:
+            tree, ambiguous = _improve_and_flag(rooms, edges, tree, remaining, params, budget)
         trees.append((tree, ambiguous))
         remaining -= set(tree.T)
     if budget[0] <= 0:
