@@ -39,6 +39,8 @@ OUTPUT_KEYS = ("pts3d", "conf", "mask", "T_wc", "K", "metric_scale")
 # MapAnything confidence is 1 + exp(x); indoor surfaces measured 10 to 60, unreliable pixels sit near 1.
 CONF_REF = 30.0
 HEAVY_CROP = 0.2  # share of a resized image cut away to fit the call's aspect ratio
+# MapAnything accepts intrinsics on some views and not others; False drops them all unless every view has them.
+ALLOW_PARTIAL_INTRINSICS = True
 
 
 def confidence_weight(conf: np.ndarray) -> np.ndarray:
@@ -152,6 +154,11 @@ class ViewPrediction:
         """Confidence normalised to [0, 1], zero outside the mask."""
         return np.where(self.mask, confidence_weight(self.conf), 0.0).astype(np.float32)
 
+    @property
+    def scale(self) -> tuple[float, float]:
+        """(sx, sy): resized pixels per input-image pixel; with crop this is the image-to-model mapping."""
+        return self.scale_to()
+
     def scale_to(self, width: int | None = None, height: int | None = None) -> tuple[float, float]:
         """Resized-frame pixels per pixel of an image with the same content at (width, height)."""
         W, H = (width or self.image_size[0]), (height or self.image_size[1])
@@ -239,12 +246,15 @@ class MapAnythingRunner:
         if len(Ks) != n:
             raise ValueError(f"{n} images but {len(Ks)} intrinsics")
         Ks = [_valid_K(K) for K in Ks]
+        flags = []
+        if not ALLOW_PARTIAL_INTRINSICS and any(K is None for K in Ks) and any(K is not None for K in Ks):
+            flags.append("intrinsics_dropped_partial")
+            Ks = [None] * n
         sizes = [(im.shape[1], im.shape[0]) for im in imgs]
         target = target_size(sizes)
         geoms = [resize_geometry(w, h, target) for w, h in sizes]
         Km = [None if K is None else intrinsics_to_model(K, sz, target) for K, sz in zip(Ks, sizes)]
         n_given = sum(K is not None for K in Km)
-        flags = []
         if 0 < n_given < n:
             flags.append(f"intrinsics_partial:{n_given}/{n}")
         cropped = [1.0 - target[0] * target[1] / (w2 * h2) for (w2, h2), _ in geoms]

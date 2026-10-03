@@ -38,6 +38,7 @@ from scan2scope.types import CameraView, Scene
 
 log = logging.getLogger("scan2scope.geometry")
 
+VIDEO_SUFFIXES = {".mov", ".mp4", ".m4v", ".avi", ".mkv", ".webm", ".3gp", ".hevc"}
 TARGET_FPS = 2.0
 MAX_FRAMES = 200
 FRAME_MAX_SIDE = 1280
@@ -54,6 +55,11 @@ BLUR_REL = 0.35
 TILT_MAX_DEG = 3.0
 YAW_MAX_DEG = 5.0
 FLOOR_MAX_DZ = 0.2
+MANHATTAN_MIN_CONC = 0.3  # |sum w exp(4i angle)| / sum w; 1 for perfectly perpendicular walls
+# A wrong loop closure bends the whole walk, so it must be consistent with the chain it corrects.
+LOOP_MIN_OVERLAP = 0.2
+LOOP_MAX_DRIFT = 0.10  # loop error as a share of the walked path
+LOOP_MAX_ROT_DEG = 20.0
 MIN_WEIGHT = 0.1
 CORR_PER_FRAME = 3000
 
@@ -395,11 +401,25 @@ def _floor_spread(values: list[float]) -> float | None:
     return float(np.std(v)) if len(v) >= 2 else 0.0
 
 
+def resolve_video(path: Path) -> Path:
+    """The clip itself, or the single video inside a folder."""
+    path = Path(path)
+    if not path.is_dir():
+        return path
+    clips = sorted(p for p in path.rglob("*") if p.is_file() and p.suffix.lower() in VIDEO_SUFFIXES
+                   and not p.name.startswith("."))
+    if not clips:
+        raise ValueError(f"no video file in {path}")
+    if len(clips) > 1:
+        log.warning("%d videos in %s, using the largest", len(clips), path)
+    return max(clips, key=lambda p: p.stat().st_size)
+
+
 def build_scene(video_path: Path, work_dir: Path, *, drift_correction: bool = True,
                 cache: OutputCacheLike | None = None, runner: MapAnythingRunner | None = None,
                 chunk_size: int = CHUNK_SIZE, overlap: int = OVERLAP, target_fps: float = TARGET_FPS,
                 max_frames: int = MAX_FRAMES, loop_frames: int = LOOP_FRAMES) -> Scene:
-    video_path = Path(video_path)
+    video_path = resolve_video(video_path)
     frames, info = sample_frames(video_path, Path(work_dir) / "frames", target_fps=target_fps,
                                  max_frames=max_frames)
     if not frames:
@@ -426,6 +446,8 @@ def build_scene_from_frames(frames: list[Frame], *, drift_correction: bool = Tru
     owners = assign_owners(n, spans)
     if n < 3:
         flags.append("thin")
+    if info.get("decode_error"):
+        flags.append("video_decode_error")
 
     runs: list[ChunkRun] = []
     for c, (a, b) in enumerate(spans):
@@ -581,9 +603,9 @@ def _loop_closure(frames, runs, owners, X, seq_edges, runner, cache, source_key,
                  "path_length_m": path})
     checks = {
         "residual": resid <= max(0.03, 0.03 * depth),
-        "overlap": over >= 0.15,
-        "translation": err["trans"] <= max(0.5, 0.15 * path),
-        "rotation": err["rot_deg"] <= 20.0,
+        "overlap": over >= LOOP_MIN_OVERLAP,
+        "translation": err["trans"] <= max(0.5, LOOP_MAX_DRIFT * path),
+        "rotation": err["rot_deg"] <= LOOP_MAX_ROT_DEG,
         "scale": abs(err["log_scale"]) <= 0.25,
     }
     failed = [k for k, ok in checks.items() if not ok]
@@ -616,7 +638,7 @@ def _anchor_chunks(runs, X, owned, floors, edges):
         own = owned[c]
         _, N, W, _ = _chunk_cloud(runs[c], X[c], own) if own else (None, np.zeros((0, 3)), np.zeros(0), None)
         z, wsum = manhattan_vector(N, W)
-        if wsum > 0 and abs(z) / wsum >= 0.2:
+        if wsum > 0 and abs(z) / wsum >= MANHATTAN_MIN_CONC:
             mvec[c] = z
     theta_g = float(np.angle(sum(mvec.values())) / 4.0) if mvec else None
 

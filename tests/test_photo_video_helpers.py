@@ -117,6 +117,7 @@ def test_pixel_mapping_and_intrinsics_round_trip():
     pred = mb.ViewPrediction(np.zeros((392, 518, 3), np.float32), np.ones((392, 518), np.float32),
                              np.ones((392, 518), bool), np.eye(4), Km, 1.0, size, (w2, h2), crop)
     assert np.allclose(pred.K_image(), K0, atol=1e-9)
+    assert np.allclose(pred.scale, (522 / 4032, 392 / 3024))
     u, v = np.array([0.0, 100.0, 517.0]), np.array([0.0, 50.0, 391.0])
     ui, vi = pred.model_to_image(u, v)
     assert np.allclose(pred.image_to_model(ui, vi), (u, v))
@@ -176,6 +177,9 @@ def test_runner_infer_caches_and_builds_predictions(monkeypatch):
     assert key["caller"] == {"room": "a"} and key["intrinsics"][1] is None
     again = runner.infer(imgs, [K, None, K], key={"room": "a"}, cache=cache)
     assert len(calls) == 1 and np.array_equal(again[2].pts3d, preds[2].pts3d)
+    monkeypatch.setattr(mb, "ALLOW_PARTIAL_INTRINSICS", False)
+    strict = runner.infer(imgs, [K, None, K])
+    assert calls[-1][1] == [False, False, False] and "intrinsics_dropped_partial" in strict[0].meta["flags"]
     with pytest.raises(ValueError):
         runner.infer([imgs[0]] * (mb.MAX_VIEWS + 1))
     with pytest.raises(ValueError):
@@ -452,6 +456,16 @@ def test_video_loop_rejected_when_the_walk_does_not_return(tmp_path):
     assert ate < 0.05
 
 
+def test_video_loop_rejected_when_the_correction_is_implausible(tmp_path):
+    frames, by_sha, _ = _loop_frames(tmp_path)
+    runner = FakeRunner(by_sha, bend=(1.5, 0.0, 0.0, 0.0))  # about 50 degrees of yaw drift around the loop
+    s = video.build_scene_from_frames(frames, drift_correction=True, runner=runner, chunk_size=8, overlap=3,
+                                      loop_frames=4)
+    lc = s.meta["drift"]["loop_closure"]
+    assert lc["attempted"] and not lc["accepted"] and "rotation" in lc["reason"], lc
+    assert lc["error_rot_deg"] > video.LOOP_MAX_ROT_DEG
+
+
 def test_video_single_chunk_and_tiny_inputs(tmp_path):
     frames, by_sha, _ = _loop_frames(tmp_path, n=5)
     s = video.build_scene_from_frames(frames, runner=FakeRunner(by_sha), chunk_size=8, overlap=3)
@@ -493,6 +507,13 @@ def test_sample_frames_rate_rotation_and_cap(tmp_path):
     assert img[:10, -10:].mean() > 200 and img[:10, :10].mean() < 200
     few, info2 = video.sample_frames(clip, tmp_path / "few", target_fps=2.0, max_frames=3)
     assert len(few) <= 3 and info2["sample_fps"] < 2.0
+    folder = tmp_path / "handoff"
+    folder.mkdir()
+    (folder / ".hidden.mov").write_bytes(b"x")
+    clip.rename(folder / "IMG_0001.MOV")
+    assert video.resolve_video(folder) == folder / "IMG_0001.MOV"
+    with pytest.raises(ValueError):
+        video.resolve_video(tmp_path / "frames")
     junk = tmp_path / "junk.mov"
     junk.write_bytes(b"not a video at all" * 10)
     with pytest.raises(ValueError):
