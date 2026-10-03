@@ -364,6 +364,20 @@ def test_tile_detections_add_only_what_the_full_view_missed():
     assert [(d.cls, d.source) for d in out] == [("crack", "full"), ("crack", "tile"), ("hole", "tile")]
 
 
+def test_area_classes_from_tiles_need_a_line():
+    from scan2scope.semantics import SemanticsConfig, resolve_class
+
+    L = np.full((200, 200), 80.0, np.float32)
+    mask = np.zeros((200, 200), bool)
+    mask[50:150, 50:150] = True
+    L[mask] = 55.0  # a dark stain, well above its class minimum
+    d = Detection("water_stain", "damage", np.array([50, 50, 150, 150.0]), 0.5, class_scores={"water_stain": 0.5})
+    assert resolve_class(d, mask, lambda: L, DAMAGE_PROMPTS, SemanticsConfig())[0] == "water_stain"
+    d.source = "tile"
+    cls, _, _, info = resolve_class(d, mask, lambda: L, DAMAGE_PROMPTS, SemanticsConfig())
+    assert cls is None and info["reason"] == "tile_area_without_line"
+
+
 def test_damage_inside_window_box_is_suppressed():
     dets = [Detection("water_stain", "damage", np.array([110, 110, 150, 150.0]), 0.5),
             Detection("water_stain", "damage", np.array([300, 300, 350, 350.0]), 0.5),
