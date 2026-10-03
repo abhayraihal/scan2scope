@@ -248,6 +248,24 @@ def test_load_photo_exif_orientation_and_intrinsics(tmp_path):
     assert size == (5000, 100) and max(img.shape[:2]) == photo.MAX_IMAGE_SIDE
 
 
+def test_load_photo_odd_formats(tmp_path):
+    rng = np.random.default_rng(0)
+    cases = {
+        "grey.png": Image.fromarray(rng.integers(0, 255, (20, 30), dtype=np.uint8)),
+        "rgba.png": Image.fromarray(rng.integers(0, 255, (20, 30, 4), dtype=np.uint8), mode="RGBA"),
+        "deep.png": Image.fromarray(rng.integers(0, 65535, (20, 30), dtype=np.uint16)),
+        "pal.gif": Image.fromarray(rng.integers(0, 255, (20, 30, 3), dtype=np.uint8)).convert("P"),
+        "tiny.jpg": Image.fromarray(np.zeros((2, 3, 3), np.uint8)),
+    }
+    for name, im in cases.items():
+        im.save(tmp_path / name)
+        img, exif, size = photo.load_photo(tmp_path / name)
+        assert img.dtype == np.uint8 and img.ndim == 3 and img.shape[2] == 3, name
+        assert size == (img.shape[1], img.shape[0]) and exif.focal_35mm is None
+    assert mb.as_rgb_uint8(np.ones((4, 5), float)).shape == (4, 5, 3)
+    assert mb.as_rgb_uint8(np.full((4, 5, 3), 0.5)).max() == 128
+
+
 def test_spread_indices():
     idx = photo.spread_indices(12, 8)
     assert len(idx) == 8 and idx[0] == 0 and idx[-1] == 11
@@ -470,6 +488,7 @@ def test_video_single_chunk_and_tiny_inputs(tmp_path):
     frames, by_sha, _ = _loop_frames(tmp_path, n=5)
     s = video.build_scene_from_frames(frames, runner=FakeRunner(by_sha), chunk_size=8, overlap=3)
     assert s.meta["quality"]["n_chunks"] == 1 and not s.meta["drift"]["loop_closure"]["attempted"]
+    assert math.isclose(s.scale_log_sigma, video.SINGLE_RUN_SCALE_SIGMA)
     one = video.build_scene_from_frames(frames[:1], runner=FakeRunner(by_sha), chunk_size=8, overlap=3)
     assert "thin" in one.meta["flags"] and len(one.views) == 1
 

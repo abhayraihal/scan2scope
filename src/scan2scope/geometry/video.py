@@ -51,6 +51,7 @@ MAX_POINTS = 1_500_000
 FUSE_STRIDE = 2
 ANALYSIS_SAMPLES = 3000  # pixels per frame used for floor, wall and gravity statistics
 SCALE_SIGMA_BASE = 0.05
+SINGLE_RUN_SCALE_SIGMA = 0.08  # photo.SCALE_LOG_SIGMA: one MapAnything metric estimate
 BLUR_REL = 0.35
 TILT_MAX_DEG = 3.0
 YAW_MAX_DEG = 5.0
@@ -78,14 +79,17 @@ class ChunkRun:
     start: int
     end: int
     preds: list[ViewPrediction]
-    normals: list[np.ndarray] = field(default_factory=list)  # per frame, chunk frame
-    normal_ok: list[np.ndarray] = field(default_factory=list)
+    _normals: dict[int, tuple[np.ndarray, np.ndarray]] = field(default_factory=dict)
 
     def pred(self, f: int) -> ViewPrediction:
         return self.preds[f - self.start]
 
-    def has(self, f: int) -> bool:
-        return self.start <= f < self.end
+    def normals(self, f: int) -> tuple[np.ndarray, np.ndarray]:
+        """Normals of frame f in the chunk frame and their validity, computed on first use."""
+        if f not in self._normals:
+            p = self.pred(f)
+            self._normals[f] = normals_from_pointmap(p.pts3d, p.mask, p.T_wc[:3, 3], step=2)
+        return self._normals[f]
 
 
 # ----------------------------------------------------------------------------------------------- sampling
@@ -377,14 +381,14 @@ def _chunk_cloud(run: ChunkRun, X: np.ndarray, frames: list[int]):
     pts, nrm, ws, cz = [], [], [], []
     for f in frames:
         p = run.pred(f)
-        k = f - run.start
+        normals, ok = run.normals(f)
         stride = max(1, int(math.sqrt(p.mask.size / ANALYSIS_SAMPLES)))
-        sel = run.normal_ok[k] & (p.weight >= MIN_WEIGHT)
+        sel = ok & (p.weight >= MIN_WEIGHT)
         grid = np.zeros_like(sel)
         grid[::stride, ::stride] = True
         sel &= grid
         pts.append(p.pts3d[sel] @ (s * R).T + t)
-        nrm.append(run.normals[k][sel] @ R.T)
+        nrm.append(normals[sel] @ R.T)
         ws.append(p.weight[sel])
         cz.append((s * R @ p.T_wc[:3, 3] + t)[2])
     if not pts:
@@ -454,12 +458,7 @@ def build_scene_from_frames(frames: list[Frame], *, drift_correction: bool = Tru
         imgs = [_load_rgb(frames[f].path) for f in range(a, b)]
         key = {**source_key, "chunk": [a, b], "frames": [frames[f].source_index for f in range(a, b)]}
         preds = runner.infer(imgs, None, key=key, cache=cache)
-        run = ChunkRun(a, b, preds)
-        for p in preds:
-            nr, ok = normals_from_pointmap(p.pts3d, p.mask, p.T_wc[:3, 3], step=2)
-            run.normals.append(nr)
-            run.normal_ok.append(ok)
-        runs.append(run)
+        runs.append(ChunkRun(a, b, preds))
         log.info("video chunk %d/%d: frames %d-%d, metric scale %.3f", c + 1, len(spans), a, b - 1,
                  preds[0].metric_scale)
 
@@ -514,6 +513,8 @@ def build_scene_from_frames(frames: list[Frame], *, drift_correction: bool = Tru
         ci["floor_z_final"] = None if floors_after[c] is None else floors_after[c]["z"]
         ci.update(anchor.get("per_chunk", {}).get(c, {}))
     scale_log_sigma = math.sqrt(SCALE_SIGMA_BASE ** 2 + scale["spread"] ** 2 / len(runs))
+    if len(runs) < 3:  # one or two chunks cannot show their spread; fall back to the single-run photo prior
+        scale_log_sigma = max(scale_log_sigma, SINGLE_RUN_SCALE_SIGMA / math.sqrt(len(runs)))
     scale["sigma_log"] = scale_log_sigma
 
     scene = _fuse_scene(frames, runs, X, owners, flags)
@@ -700,16 +701,16 @@ def _fuse_scene(frames: list[Frame], runs: list[ChunkRun], X: list[np.ndarray], 
         s, R, t = decompose_sim3(X[c])
         T_wc = _world_pose(X[c], p.T_wc)
         frame_T[f] = T_wc
-        k = f - run.start
+        normals, ok = run.normals(f)
         w = p.weight
         wmeans.append(float(w[p.mask].mean()) if p.mask.any() else 0.0)
-        sel = run.normal_ok[k] & p.mask & (w >= MIN_WEIGHT)
+        sel = ok & p.mask & (w >= MIN_WEIGHT)
         grid = np.zeros_like(sel)
         grid[::FUSE_STRIDE, ::FUSE_STRIDE] = True
         sel &= grid
         pw = p.pts3d[sel] @ (s * R).T + t
         pts.append(pw)
-        nrm.append(run.normals[k][sel] @ R.T)
+        nrm.append(normals[sel] @ R.T)
         ws.append(w[sel])
         vidx.append(np.full(len(pw), nearest_key[f], np.int64))
         score.append(w[sel] + (0.5 if f in key_of else 0.0))

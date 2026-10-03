@@ -16,6 +16,7 @@ import logging
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Any, Protocol
 
 import numpy as np
@@ -149,7 +150,7 @@ class ViewPrediction:
     def model_size(self) -> tuple[int, int]:
         return int(self.pts3d.shape[1]), int(self.pts3d.shape[0])
 
-    @property
+    @cached_property
     def weight(self) -> np.ndarray:
         """Confidence normalised to [0, 1], zero outside the mask."""
         return np.where(self.mask, confidence_weight(self.conf), 0.0).astype(np.float32)
