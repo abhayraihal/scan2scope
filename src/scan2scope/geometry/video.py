@@ -53,8 +53,11 @@ VOXEL = 0.02
 MAX_POINTS = 1_500_000
 FUSE_STRIDE = 2
 ANALYSIS_SAMPLES = 3000  # pixels per frame used for floor, wall and gravity statistics
-SCALE_SIGMA_BASE = 0.05
-SINGLE_RUN_SCALE_SIGMA = 0.08  # photo.SCALE_LOG_SIGMA: one MapAnything metric estimate
+# MapAnything's metric error is mostly per scene: the chunks of one clip share it, so more chunks do not average
+# it out (home video_1: chunks within 2.5% of each other, clip 7.3% small; ARKitScenes kitchen: 1.7% apart,
+# depth 6.5% small against LiDAR). The base is the error of one clip, not of one chunk.
+SCALE_SIGMA_BASE = 0.08
+SINGLE_RUN_SCALE_SIGMA = 0.08  # one MapAnything metric estimate
 BLUR_REL = 0.35
 TILT_MAX_DEG = 3.0
 YAW_MAX_DEG = 5.0

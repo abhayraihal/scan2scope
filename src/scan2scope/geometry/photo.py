@@ -29,7 +29,9 @@ MAX_PHOTOS = 8
 MAX_IMAGE_SIDE = 4096
 VOXEL = 0.02
 MAX_POINTS = 400_000
-SCALE_LOG_SIGMA = 0.08
+# Log-scale error of one room's MapAnything run, measured on four real rooms: home photos -10.5% (tape), and
+# ARKitScenes photo sets -16%, -20% and +10% (depth against LiDAR); rms 0.16 in log units.
+SCALE_LOG_SIGMA = 0.15
 MIN_WEIGHT = 0.1  # drop pixels with MapAnything confidence below about 1.4
 NORMAL_STEP = 2
 FILM_DIAGONAL_MM = math.hypot(36.0, 24.0)
