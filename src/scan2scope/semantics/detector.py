@@ -17,6 +17,10 @@ from scan2scope.config import MODELS, torch_device
 log = logging.getLogger("scan2scope.semantics")
 
 
+class ModelUnavailable(RuntimeError):
+    """A model is needed but its weights or the ml extra are missing."""
+
+
 @dataclass(frozen=True)
 class PromptSet:
     """Phrases in Grounding DINO text format (lowercase, each ending with a period) and their classes."""
@@ -154,12 +158,12 @@ class GroundingDinoDetector:
             return
         d = self.spec.local_dir
         if not (d / "config.json").exists() or not (d / "model.safetensors").exists():
-            raise RuntimeError(f"Grounding DINO weights not found in {d}; run `scan2scope fetch-weights`")
+            raise ModelUnavailable(f"Grounding DINO weights not found in {d}; run `scan2scope fetch-weights`")
         try:
             import torch
             from transformers import AutoProcessor, GroundingDinoForObjectDetection
         except ImportError as exc:
-            raise RuntimeError("semantics needs torch and transformers (install the ml extra)") from exc
+            raise ModelUnavailable("semantics needs torch and transformers (install the ml extra)") from exc
         self.device = self.device or torch_device()
         self.processor = AutoProcessor.from_pretrained(d, local_files_only=True)
         model = GroundingDinoForObjectDetection.from_pretrained(d, local_files_only=True).eval()
@@ -191,7 +195,7 @@ class GroundingDinoDetector:
                 elif p < len(spans):
                     spans[p].append(t)
         if any(not s for s in spans):
-            raise RuntimeError(f"could not map prompt phrases to tokens: {prompt.text!r}")
+            raise ModelUnavailable(f"could not map prompt phrases to tokens: {prompt.text!r}")
         return spans
 
     def _forward(self, inputs: dict):

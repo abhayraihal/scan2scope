@@ -455,3 +455,34 @@ def test_window_in_a_wall_suppresses_damage_seen_through_it(tmp_path):
     assert res.damage == [] and [o.cls for o in res.objects] == ["window"]
     assert any(r.get("reason") == "inside_window" for r in res.dropped)
     assert res.objects[0].z_range[1] > 1.9  # placed from the band around the window, on the wall
+
+
+def test_one_failing_view_is_flagged_and_skipped(tmp_path):
+    plan = make_plan(rect_room())
+    scene = _scene_with_images(tmp_path, [(2.0, 1.0, 1.2), (1.8, 0.9, 1.2)])
+    stain = rect_on_wall_y(3.0, 1.6, 2.4, 0.9, 1.5)
+    script = {"v0": {"damage": [(_working_box(stain, scene.views[0]), "water stain", 0.6)]}}
+    res = analyze([scene], plan, None, detector=ScriptedDetector(script), segmenter=FakeSegmenter())
+    assert "semantics_view_failed:v1:KeyError" in res.flags  # the script has nothing for v1
+    assert [d.view_ids for d in res.damage] == [["v0"]]
+
+
+def test_all_views_failing_fails_the_stage(tmp_path):
+    plan = make_plan(rect_room())
+    scene = _scene_with_images(tmp_path, [(2.0, 1.0, 1.2)])
+    with pytest.raises(RuntimeError, match="all 1 views"):
+        analyze([scene], plan, None, detector=ScriptedDetector({}), segmenter=FakeSegmenter())
+
+
+def test_replay_cache_miss_is_not_swallowed(tmp_path):
+    class CacheMiss(KeyError):
+        pass
+
+    class ReplayCache:
+        def compute(self, key, fn):
+            raise CacheMiss(str(key))
+
+    plan = make_plan(rect_room())
+    scene = _scene_with_images(tmp_path, [(2.0, 1.0, 1.2), (1.8, 0.9, 1.2)])
+    with pytest.raises(CacheMiss):
+        analyze([scene], plan, None, cache=ReplayCache(), detector=ScriptedDetector({}), segmenter=FakeSegmenter())

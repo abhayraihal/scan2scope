@@ -19,8 +19,8 @@ from typing import Any, Callable
 
 import numpy as np
 
-from scan2scope.semantics.detector import (Detection, DetectorConfig, GroundingDinoDetector, box_iou_matrix,
-                                           decode, working_size)
+from scan2scope.semantics.detector import (Detection, DetectorConfig, GroundingDinoDetector, ModelUnavailable,
+                                           box_iou_matrix, decode, working_size)
 from scan2scope.semantics.lift import (LiftConfig, assign_surface, lift_mask, measure_on_surface, place_object,
                                        pointmap_jacobian, view_valid)
 from scan2scope.semantics.merge import (DamageObservation, MergeConfig, ObjectObservation, merge_damage,
@@ -185,8 +185,9 @@ def analyze(scenes: list[Scene], plan: Plan, work_dir: str | Path | None, *, cac
             config: SemanticsConfig | None = None, detector: Any = None, segmenter: Any = None) -> SemanticsResult:
     """Detect, segment, lift and merge damage and context objects for all scenes of one capture.
 
-    Raises RuntimeError when a model is needed and its weights are missing; the pipeline records that as a
-    flag. Odd views (no image, no point map, unreadable file) are skipped and counted instead.
+    Raises ModelUnavailable (a RuntimeError) when a model is needed and its weights are missing, re-raises a
+    replay CacheMiss, and raises when every view fails; the pipeline records these as a flag. Odd views (no
+    image, no point map, unreadable file, a model error on one image) are skipped and flagged instead.
     """
     cfg = config or SemanticsConfig()
     res = SemanticsResult([], [])
@@ -213,14 +214,20 @@ def analyze(scenes: list[Scene], plan: Plan, work_dir: str | Path | None, *, cac
     damage_obs: list[DamageObservation] = []
     object_obs: list[ObjectObservation] = []
     records: list[dict[str, Any]] = []
+    failed: list[Exception] = []
     for view in views:
         try:
             _process_view(view, plan, cfg, det, seg, cache, damage_obs, object_obs, records, res)
-        except RuntimeError:
-            raise  # missing weights or a replay cache miss: the whole stage fails, the pipeline flags it
-        except Exception as exc:  # unreadable image or odd geometry in one view: skip it
+        except ModelUnavailable:
+            raise
+        except Exception as exc:
+            if any(c.__name__ == "CacheMiss" for c in type(exc).__mro__):
+                raise  # replay must reproduce the full result or fail
             log.warning("semantics skipped view %s: %s", view.id, exc)
             res.flags.append(f"semantics_view_failed:{view.id}:{type(exc).__name__}")
+            failed.append(exc)
+    if failed and len(failed) == len(views):
+        raise RuntimeError(f"semantics failed on all {len(views)} views: {failed[-1]}") from failed[-1]
     merged, dropped = merge_damage(damage_obs, cfg.merge)
     res.dropped += [r for r in records if r.get("status") == "dropped"] + dropped
     order = _surface_order(plan)
@@ -356,5 +363,5 @@ def _write_debug(work_dir: Path, records: list[dict[str, Any]], res: SemanticsRe
         log.warning("could not write semantics debug file: %s", exc)
 
 
-__all__ = ["DAMAGE_CLASSES", "OBJECT_CLASSES", "WET_FIXTURES", "SceneObject", "SemanticsConfig",
-           "SemanticsResult", "analyze"]
+__all__ = ["DAMAGE_CLASSES", "OBJECT_CLASSES", "WET_FIXTURES", "ModelUnavailable", "SceneObject",
+           "SemanticsConfig", "SemanticsResult", "analyze"]

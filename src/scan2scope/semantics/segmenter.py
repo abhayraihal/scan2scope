@@ -13,6 +13,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from scan2scope.config import MODELS, torch_device
+from scan2scope.semantics.detector import ModelUnavailable
 
 log = logging.getLogger("scan2scope.semantics")
 
@@ -73,11 +74,11 @@ class Sam2Segmenter:
             return
         d = self.spec.local_dir
         if not (d / "config.json").exists() or not (d / "model.safetensors").exists():
-            raise RuntimeError(f"SAM 2.1 weights not found in {d}; run `scan2scope fetch-weights`")
+            raise ModelUnavailable(f"SAM 2.1 weights not found in {d}; run `scan2scope fetch-weights`")
         try:
             from transformers import Sam2Model, Sam2Processor
         except ImportError as exc:
-            raise RuntimeError("semantics needs torch and transformers (install the ml extra)") from exc
+            raise ModelUnavailable("semantics needs torch and transformers (install the ml extra)") from exc
         self.device = self.device or torch_device()
         self.processor = Sam2Processor.from_pretrained(d, local_files_only=True)
         model = Sam2Model.from_pretrained(d, local_files_only=True).eval()
