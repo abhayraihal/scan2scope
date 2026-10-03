@@ -623,6 +623,10 @@ def write_capture(apt: Apartment, out_dir: str | Path, *, seed: int, config: Cap
                   scene: RenderScene | None = None) -> CaptureResult:
     """Render one capture of `apt` into `out_dir` in the Stray Scanner layout."""
     cfg = config or CaptureConfig()
+    if cfg.max_frames is not None and cfg.max_frames < 1:
+        raise ValueError(f"max_frames must be at least 1, got {cfg.max_frames}")
+    if cfg.fps <= 0:
+        raise ValueError(f"fps must be positive, got {cfg.fps}")
     out = Path(out_dir)
     t_start = time.perf_counter()
     rng_traj, rng_noise, rng_drift, rng_misc, rng_imu = (np.random.default_rng(s)
