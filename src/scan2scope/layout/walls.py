@@ -23,6 +23,8 @@ Z_RES = 0.10
 MIN_LINE_AREA = 0.2  # m2 of observed face
 MIN_LINE_COLS = 5  # contiguous profile bins (25 cm) with at least 40 cm of observed height
 MAX_PEAKS_PER_DIR = 80
+SLANT_REACH = 0.25  # points within this of a peak are tested for one slightly rotated wall
+SLANT_MIN, SLANT_MAX = float(np.tan(np.radians(0.3))), float(np.tan(np.radians(8.0)))
 
 
 @dataclass
@@ -62,6 +64,9 @@ class WallLine:
     r_pts: np.ndarray | None = None  # inlier offsets from coord
     w_pts: np.ndarray | None = None
     synthetic: bool = False
+    slope: float = 0.0  # d(offset)/d(t) of a wall a few degrees off the Manhattan axis
+    t_mid: float = 0.0  # along-line position where the line sits exactly at coord
+    half_span: float = 0.0
 
 
 def manhattan_frame(nxy: np.ndarray, w: np.ndarray) -> tuple[float, float]:
@@ -69,10 +74,17 @@ def manhattan_frame(nxy: np.ndarray, w: np.ndarray) -> tuple[float, float]:
     if len(nxy) < 10 or w.sum() <= 0:
         return 0.0, 0.0
     th = manhattan_angle(nxy, w)
-    if th >= np.pi / 4:
-        th -= np.pi / 2
     n = nxy / np.maximum(np.linalg.norm(nxy, axis=1, keepdims=True), 1e-12)
     ang = np.arctan2(n[:, 1], n[:, 0])
+    # the circular mean is pulled by walls a few degrees off square; re-estimate from normals near the mode
+    for tol in (np.radians(8.0), np.radians(4.0)):
+        dev = np.angle(np.exp(4j * (ang - th))) / 4.0
+        near = np.abs(dev) < tol
+        if near.sum() < 10:
+            break
+        th = manhattan_angle(nxy[near], w[near])
+    if th >= np.pi / 4:
+        th -= np.pi / 2
     conc = float(np.abs((w * np.exp(4j * ang)).sum()) / w.sum())
     return float(th), conc
 
@@ -131,6 +143,37 @@ def _refine_sorted(v: np.ndarray, w: np.ndarray, c0: float, win0: float, win_min
     return c, s, rms, int(i0), int(i1), win
 
 
+def _slant_fit(t: np.ndarray, v: np.ndarray, w: np.ndarray, c0: float, scale: float,
+               iters: int = 8) -> tuple[float, float, float]:
+    """Tukey-weighted line v = a + b (t - tm) started from the flat line at c0. Returns a, b, tm.
+
+    The scale starts wide so a wall several degrees off the flat start line is captured, then shrinks.
+    """
+    tm = float(np.median(t))
+    a, b = float(c0), 0.0
+    A = np.column_stack([np.ones_like(t), t - tm])
+    for it in range(iters):
+        sc = max(scale, 0.10 * 0.6 ** it)
+        u = (v - a - b * (t - tm)) / (4.685 * sc)
+        wt = w * np.where(np.abs(u) < 1, (1 - u ** 2) ** 2, 0.0)
+        if (wt > 0).sum() < 20:
+            break
+        sw = np.sqrt(wt)
+        (a, b), *_ = np.linalg.lstsq(A * sw[:, None], v * sw, rcond=None)
+    return float(a), float(b), tm
+
+
+def _near(x: float, kept: list[WallLine], tol: float) -> bool:
+    """True when x falls on an accepted line of the same direction, along its whole slanted extent."""
+    return _near_range(x, x, kept, tol)
+
+
+def _near_range(lo: float, hi: float, kept: list[WallLine], tol: float) -> bool:
+    """True when the offsets [lo, hi] spanned by a line overlap an accepted line's span (plus tol)."""
+    return any(lo < q.coord + tol + abs(q.slope) * q.half_span and hi > q.coord - tol - abs(q.slope) * q.half_span
+               for q in kept)
+
+
 def detect_lines(P: np.ndarray, N: np.ndarray, w_peak: np.ndarray, w_fit: np.ndarray, floor_z: float,
                  ceil_z: float, sigma0: float, grids: tuple[TGrid, TGrid]) -> tuple[list[WallLine], float]:
     """Wall lines for the four face directions. Returns the lines and the area-weighted wall noise estimate."""
@@ -152,17 +195,39 @@ def detect_lines(P: np.ndarray, N: np.ndarray, w_peak: np.ndarray, w_fit: np.nda
         best = max(p.support for p in peaks)
         peaks = sorted((p for p in peaks if p.support >= max(20.0, 0.005 * best)), key=lambda p: -p.support)
         kept: list[WallLine] = []
+        used = np.zeros(len(v), bool)  # points already explained by an accepted line of this direction
         for p in peaks[:MAX_PEAKS_PER_DIR]:
-            if any(abs(p.center - q.coord) < merge_tol for q in kept):
+            if _near(p.center, kept, merge_tol):
                 continue
             c, s, rms, i0, i1, win = _refine_sorted(v, wf, p.center, max(0.03, 3 * sigma0), 0.015, 0.12)
-            if i1 - i0 < 30 or any(abs(c - q.coord) < merge_tol for q in kept):
+            idx = np.arange(i0, i1)[~used[i0:i1]]
+            if len(idx) < 30 or _near(c, kept, merge_tol):
                 continue
-            solid, upper, area, cols = band_profiles(t[i0:i1], z[i0:i1], grids[axis], floor_z, ceil_z)
+            slope, tm = 0.0, float(np.median(t[idx]))
+            j0, j1 = (int(x) for x in np.searchsorted(v, [c - SLANT_REACH, c + SLANT_REACH]))
+            free = np.arange(j0, j1)[~used[j0:j1]]
+            if len(free) > 1.15 * len(idx) or s > 1.5 * sigma0:
+                # a wall a few degrees off axis spreads over several histogram bins: fit it as one rotated line
+                a_, b_, tm_ = _slant_fit(t[free], v[free], wf[free], c, max(2.5 * sigma0, 0.02))
+                r_all = v[free] - (a_ + b_ * (t[free] - tm_))
+                inl = np.abs(r_all) < max(win, 2.5 * sigma0)
+                hs = 0.5 * float(np.ptp(t[free][inl])) if inl.any() else 0.0
+                log.debug("slant fit at %.3f: slope %.2f deg, %d inliers vs %d flat", c,
+                          np.degrees(np.arctan(b_)), int(inl.sum()), len(idx))
+                s_slant = robust_sigma(r_all[inl], wf[free][inl]) if inl.sum() > 10 else s
+                better = inl.sum() >= 1.15 * len(idx) or s_slant < 0.7 * s
+                if (SLANT_MIN < abs(b_) <= SLANT_MAX and better
+                        and not _near_range(a_ - abs(b_) * hs, a_ + abs(b_) * hs, kept, merge_tol)):
+                    idx = free[inl]
+                    c, slope, tm, s = a_, b_, tm_, s_slant
+                    rms = float(np.sqrt(np.average((v[idx] - c) ** 2, weights=wf[idx])))
+            solid, upper, area, cols = band_profiles(t[idx], z[idx], grids[axis], floor_z, ceil_z)
             if area < MIN_LINE_AREA or cols < MIN_LINE_COLS:
                 continue
-            kept.append(WallLine(axis, sign, c, s, rms, i1 - i0, win, area, solid, upper,
-                                 t[i0:i1].copy(), v[i0:i1] - c, wf[i0:i1].copy()))
+            kept.append(WallLine(axis, sign, c, s, rms, len(idx), win, area, solid, upper, t[idx].copy(),
+                                 v[idx] - c, wf[idx].copy(), slope=slope, t_mid=tm,
+                                 half_span=0.5 * float(t[idx].max() - t[idx].min())))
+            used[idx] = True
         lines += kept
     if not lines:
         return lines, sigma0

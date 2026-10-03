@@ -290,6 +290,8 @@ class _Face:
     rms: float = 0.0
     sigma: float = 0.0
     flags: tuple[str, ...] = ()
+    slope: float = 0.0
+    t_mid: float = 0.0
 
 
 def _face_evidence(lines: list[W.WallLine], axis: int, coord: float, n_sign: int, ta: float, tb: float) -> _Face:
@@ -303,11 +305,12 @@ def _face_evidence(lines: list[W.WallLine], axis: int, coord: float, n_sign: int
     q = min(match, key=lambda q: abs(q.coord - coord))
     m = (q.t_pts >= ta) & (q.t_pts <= tb)
     if m.sum() < 5:
-        return _Face(int(m.sum()), q.rms, q.sigma, ("wall_face_sparse",))
+        return _Face(int(m.sum()), q.rms, q.sigma, ("wall_face_sparse",), q.slope, q.t_mid)
     r = q.r_pts[m] + (q.coord - coord)
     w = q.w_pts[m]
     rms = float(np.sqrt(np.average(r ** 2, weights=w)))
-    return _Face(int(m.sum()), rms, FC.robust_sigma(r - np.average(r, weights=w), w))
+    flags = (f"wall_slanted:{np.degrees(np.arctan(q.slope)):.1f}deg",) if abs(q.slope) > np.tan(np.radians(1.0)) else ()
+    return _Face(int(m.sum()), rms, q.sigma, flags, q.slope, q.t_mid)
 
 
 def _cell_of(cx: C.Complex, xy: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -370,7 +373,7 @@ def _assemble(scene: Scene, d: _Data, lines: list[W.WallLine], cx: C.Complex, ro
             n_sign = int(np.sign(nin[axis])) or 1
             face = _face_evidence(lines, axis, coord, n_sign, min(t0, t1), max(t0, t1))
             frame = OP.WallFrame(axis, float(coord), n_sign, float(t0), 1 if t1 > t0 else -1, float(abs(t1 - t0)),
-                                 fl.z, ce.z)
+                                 fl.z, ce.z, face.slope, face.t_mid)
             wa = OP.analyze_wall(frame, d.P, d.N, d.wp, d.wn, d.O, d.E, face.sigma if face.n >= 30 else sigma)
             if face.n < 30 and wa.openings:
                 # without the room's own wall face there is no gap to measure, only rays into the unknown

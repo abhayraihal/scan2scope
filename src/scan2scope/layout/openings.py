@@ -36,6 +36,13 @@ class WallFrame:
     length: float
     floor_z: float
     ceil_z: float
+    slope: float = 0.0  # the face sits at coord + slope * (t - t_mid) for walls slightly off axis
+    t_mid: float = 0.0
+
+    def offset(self, X: np.ndarray) -> np.ndarray:
+        """Signed distance from the wall face, positive into the room."""
+        a, b = self.axis, 1 - self.axis
+        return (X[:, a] - self.coord - self.slope * (X[:, b] - self.t_mid)) * self.n_sign
 
 
 @dataclass
@@ -126,7 +133,7 @@ def analyze_wall(wf: WallFrame, P: np.ndarray, N: np.ndarray, w_occ: np.ndarray,
     win = float(np.clip(2.5 * sigma, 0.03, 0.10))
     nu, nz = max(int(np.ceil(L / RES)), 1), max(int(np.ceil((cz - fz) / RES)), 1)
 
-    d = (P[:, a] - wf.coord) * wf.n_sign
+    d = wf.offset(P)
     u = (P[:, b] - wf.t_start) * wf.t_dir
     sel = ((np.abs(d) < win) & (u >= 0) & (u < L) & (P[:, 2] > fz + 0.03) & (P[:, 2] < cz - 0.03)
            & (np.abs(N[:, a]) >= 0.3) & (np.abs(N[:, 2]) < 0.9))
@@ -138,8 +145,7 @@ def analyze_wall(wf: WallFrame, P: np.ndarray, N: np.ndarray, w_occ: np.ndarray,
     cnt = np.bincount(iu * nz + iz, weights=face_mass, minlength=nu * nz).reshape(nu, nz)
     n_pts = int(sel.sum())
 
-    dO = (O[:, a] - wf.coord) * wf.n_sign
-    dE = (E[:, a] - wf.coord) * wf.n_sign
+    dO, dE = wf.offset(O), wf.offset(E)
     uE = (E[:, b] - wf.t_start) * wf.t_dir
     hit = (np.abs(dE) < win) & (uE >= 0) & (uE < L) & (E[:, 2] > fz) & (E[:, 2] < cz)
     hits = np.bincount(np.minimum((uE[hit] / RES).astype(np.int64), nu - 1) * nz
