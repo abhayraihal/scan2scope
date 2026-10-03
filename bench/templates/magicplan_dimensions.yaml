@@ -1,0 +1,17 @@
+# magicplan numbers for the head-to-head, transcribed from the Sketch PDF. Copy to
+# bench/data/<property>/magicplan/dimensions.yaml next to the Statistics export (statistics.csv).
+# Keys are the GT room ids and wall/opening ids of ground_truth.yaml, so W1 here is the same wall as W1 there.
+# Metres; "3.41 m" and "341 cm" are also accepted. Leave out what the PDF does not show.
+app: magicplan
+version: ""                       # from the app's settings or About screen
+mode: "AR camera, no LiDAR"       # iPhone 17
+
+rooms:
+  "01 hallway":
+    name: "Hallway"               # the room's name in statistics.csv (area, perimeter, wall height come from there)
+    walls: {W1: 0.000, W2: 0.000, W3: 0.000, W4: 0.000}
+    openings: {D1: 0.000}         # clear widths
+  "02 kitchen":
+    name: "Kitchen"
+    walls: {W1: 0.000, W2: 0.000, W3: 0.000, W4: 0.000}
+    openings: {D1: 0.000}
