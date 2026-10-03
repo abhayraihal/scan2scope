@@ -21,6 +21,8 @@ VOXEL = 0.02
 MAX_RAYS = 300_000
 MAX_FREE_RAYS = 100_000
 FAR_LIMIT = 60.0
+MAX_REACH = 10.0  # plan domain: camera bounding box plus this margin
+MAX_EXTENT = 60.0
 
 
 @dataclass
@@ -124,6 +126,11 @@ def _grids(P: np.ndarray, cams: np.ndarray, pad: float = 1.0) -> tuple[tuple[W.T
     pts = np.concatenate([P[:, :2], cams[:, :2]]) if len(cams) else P[:, :2]
     lo = np.percentile(pts, 0.1, axis=0) - pad
     hi = np.percentile(pts, 99.9, axis=0) + pad
+    if len(cams):
+        # rooms lie within a few metres of some camera; distant outdoor surfaces must not blow up the grids
+        lo = np.maximum(lo, cams[:, :2].min(0) - MAX_REACH)
+        hi = np.minimum(hi, cams[:, :2].max(0) + MAX_REACH)
+    hi = np.minimum(hi, lo + MAX_EXTENT)
     ty = W.TGrid(float(lo[1]), max(int(np.ceil((hi[1] - lo[1]) / W.T_RES)), 1))
     tx = W.TGrid(float(lo[0]), max(int(np.ceil((hi[0] - lo[0]) / W.T_RES)), 1))
     return (ty, tx), (lo, hi)
@@ -181,6 +188,9 @@ def build_plan(scene: Scene, *, single_room: bool = False) -> Plan:
     n_min = max(2.0, 0.03 * float(np.median(pos))) if len(pos) else 2.0
     free = counts >= n_min
     floor = _floor_mask(d, fc, sigma, g2)
+    if free.sum() * C.FREE_RES ** 2 < 0.5 and floor.any():
+        free |= floor
+        flags.append("free_space_from_floor")
     lines += _closure_lines(lines, free, g2, grids, flags)
     gx, gy = C.group_lines(lines, 0), C.group_lines(lines, 1)
     t_thin = max(0.2, 2 * margin + 0.05)

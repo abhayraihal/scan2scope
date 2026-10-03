@@ -58,8 +58,10 @@ def occupancy(P: np.ndarray, lo: np.ndarray, hi: np.ndarray, res: float = 0.05, 
     dims = np.maximum(np.ceil((hi - lo) / res).astype(np.int64), 1)
     idx = np.floor((P - lo) / res).astype(np.int64)
     ok = ((idx >= 0) & (idx < dims)).all(1)
-    cnt = np.bincount(np.ravel_multi_index(idx[ok].T, dims), minlength=int(np.prod(dims)))
-    return Occupancy(np.asarray(lo, float), res, (cnt >= min_count).reshape(tuple(dims)))
+    keys, cnt = np.unique(np.ravel_multi_index(idx[ok].T, dims), return_counts=True)
+    grid = np.zeros(int(np.prod(dims)), bool)
+    grid[keys[cnt >= min_count]] = True
+    return Occupancy(np.asarray(lo, float), res, grid.reshape(tuple(dims)))
 
 
 def free_space(o3: np.ndarray, e3: np.ndarray, n2: np.ndarray, grid: Grid2D, margin: float,
