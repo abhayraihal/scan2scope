@@ -25,6 +25,7 @@ MIN_SIZE = 0.25  # smallest window width or height
 SEE_MASK = 0.15  # see-through density relative to the wall's hit density, per cell
 SEE_ACCEPT = 0.25  # same, averaged over a candidate
 EMPTY = 0.15  # occupancy below this share of the wall level counts as empty
+SEE_DEPTH = 0.25  # a ray end must lie this far past the wall face to count as seen through it
 
 
 @dataclass
@@ -151,7 +152,10 @@ def analyze_wall(wf: WallFrame, P: np.ndarray, N: np.ndarray, w_occ: np.ndarray,
     hit = (np.abs(dE) < win) & (uE >= 0) & (uE < L) & (E[:, 2] > fz) & (E[:, 2] < cz)
     hits = np.bincount(np.minimum((uE[hit] / RES).astype(np.int64), nu - 1) * nz
                        + np.clip(((E[hit, 2] - fz) / RES).astype(np.int64), 0, nz - 1), minlength=nu * nz)
-    cross = ((dO > 0.05) & (dE < -win)) | ((dO < -0.05) & (dE > win))
+    # see-through needs the point well past the face: wall points pushed behind it by depth noise or a
+    # misregistered view would otherwise look like a hole
+    deep = max(SEE_DEPTH, 3 * sigma)
+    cross = ((dO > 0.05) & (dE < -deep)) | ((dO < -0.05) & (dE > deep))
     lam = dO[cross] / (dO[cross] - dE[cross])
     Q = O[cross] + lam[:, None] * (E[cross] - O[cross])
     uQ = (Q[:, b] - wf.t_start) * wf.t_dir
