@@ -84,7 +84,8 @@ def _centroid(room: Room) -> np.ndarray:
     return np.zeros(2)
 
 
-def _pair_inputs(scenes: list[Scene], plans: list[Plan], flags: list[str]) -> list[tuple[int | None, Plan | None]]:
+def _pair_inputs(scenes: list[Scene], plans: list[Plan],
+                 flags: list[str]) -> list[tuple[int | None, Plan | None]]:
     if len(scenes) == len(plans):
         return list(zip(range(len(scenes)), plans))
     flags.append("stitch_input_mismatch")
@@ -103,7 +104,8 @@ def _pair_inputs(scenes: list[Scene], plans: list[Plan], flags: list[str]) -> li
     return pairs
 
 
-def _prepare(scenes: list[Scene], plans: list[Plan], flags: list[str]) -> tuple[list[StitchRoom], list[int | None]]:
+def _prepare(scenes: list[Scene], plans: list[Plan],
+             flags: list[str]) -> tuple[list[StitchRoom], list[int | None]]:
     entries = []
     for k, (si, plan) in enumerate(_pair_inputs(scenes, plans, flags)):
         scene = scenes[si] if si is not None else None
@@ -237,7 +239,8 @@ def _facing_adjacency(rooms: list[StitchRoom], sol: Solution, out: dict[int, Roo
                     used.update({(p, dp.id), (q, dq.id)})
                     _connect(out[p], dp.id, rooms[q].id)
                     _connect(out[q], dq.id, rooms[p].id)
-                    adj.append(Adjacency(rooms[p].id, rooms[q].id, dp.id, dq.id, round(float(conf), 3), "door_match"))
+                    adj.append(Adjacency(rooms[p].id, rooms[q].id, dp.id, dq.id, round(float(conf), 3),
+                                         "door_match"))
     return adj
 
 
@@ -309,13 +312,14 @@ def _assemble(rooms: list[StitchRoom], sol: Solution, hyps: list[Hypothesis], re
     room_list = [out[sr.index] for sr in rooms]
     areas = [float(r.floor_area.value) for r in room_list
              if r.floor_area is not None and np.isfinite(r.floor_area.value)]
-    footprint = Measurement(float(sum(areas)), unit="m2", kind="area",
-                            evidence={"method": "sum_of_room_floor_areas", "rooms": [r.id for r in room_list]})
+    footprint = Measurement(float(sum(areas)), unit="m2", kind="area", evidence={
+        "method": "sum_of_room_floor_areas", "rooms": [r.id for r in room_list]})
     extent_x, extent_y = _extents(rooms, room_list, sol)
 
     pairs = {frozenset((rooms[h.a].id, rooms[h.b].id)) for h in hyps}
     pairs |= {frozenset((rec["room_a"], rec["room_b"])) for rec in records}
-    pairs |= {frozenset((a.id, b.id)) for a in rooms for b in rooms if a.index < b.index and a.doors and b.doors}
+    pairs |= {frozenset((a.id, b.id)) for a in rooms for b in rooms
+              if a.index < b.index and a.doors and b.doors}
     status = {}
     for k, e in enumerate(sol.edges):
         for m in e.members:
@@ -323,8 +327,8 @@ def _assemble(rooms: list[StitchRoom], sol: Solution, hyps: list[Hypothesis], re
     hyp_meta = []
     for m, h in enumerate(hyps):
         hyp_meta.append({"room_a": rooms[h.a].id, "room_b": rooms[h.b].id, "source": h.source,
-                         "opening_a": h.opening_a, "opening_b": h.opening_b, "score": round(float(h.score), 4),
-                         "status": status.get(m, "discarded"),
+                         "opening_a": h.opening_a, "opening_b": h.opening_b,
+                         "score": round(float(h.score), 4), "status": status.get(m, "discarded"),
                          "relative_scale": None if h.scale_ba is None else round(float(h.scale_ba), 4)})
     best: dict[str, float] = {}
     for e in sol.edges:
@@ -358,7 +362,8 @@ def _assemble(rooms: list[StitchRoom], sol: Solution, hyps: list[Hypothesis], re
                 meta={"stitch": _plain(meta), "layout_per_room": room_meta})
 
 
-def _extents(rooms: list[StitchRoom], room_list: list[Room], sol: Solution) -> tuple[Measurement, Measurement]:
+def _extents(rooms: list[StitchRoom], room_list: list[Room],
+             sol: Solution) -> tuple[Measurement, Measurement]:
     spans = []
     for sr, r in zip(rooms, room_list):
         P = np.asarray(r.polygon, float)
@@ -367,7 +372,8 @@ def _extents(rooms: list[StitchRoom], room_list: list[Room], sol: Solution) -> t
     out = []
     for axis in (0, 1):
         if not spans:
-            out.append(Measurement(0.0, unit="m", kind="length", evidence={"method": "bbox_of_stitched_rooms"}))
+            out.append(Measurement(0.0, unit="m", kind="length",
+                                   evidence={"method": "bbox_of_stitched_rooms"}))
             continue
         lo = min(spans, key=lambda s: s[1 + axis])
         hi = max(spans, key=lambda s: s[3 + axis])
@@ -379,7 +385,8 @@ def _extents(rooms: list[StitchRoom], room_list: list[Room], sol: Solution) -> t
     return out[0], out[1]
 
 
-def _door_hints(rooms: list[StitchRoom], hyps: list[Hypothesis], params: Params | None) -> dict[tuple[int, str], int]:
+def _door_hints(rooms: list[StitchRoom], hyps: list[Hypothesis],
+                params: Params | None) -> dict[tuple[int, str], int]:
     """The room that door matching alone puts behind each door; doorway photos try that room first."""
     sol = solve(rooms, hyps, params)
     hints: dict[tuple[int, str], int] = {}
@@ -425,7 +432,8 @@ def stitch_rooms(room_scenes: list[Scene], room_plans: list[Plan], work_dir: str
                  max_registrations: int = 24, params: Params | None = None) -> tuple[Plan, list[Scene]]:
     """Place photo-tier rooms in one property frame and transform their scenes into it.
 
-    runner(views, key, cache) replaces the MapAnything call for doorway-photo registration (tests pass a fake).
+    runner(views, key, cache) replaces the MapAnything call for doorway-photo registration; tests pass a
+    fake one.
     """
     flags: list[str] = []
     scenes = list(room_scenes or [])

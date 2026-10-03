@@ -23,7 +23,7 @@ log = logging.getLogger("scan2scope.stitch")
 DOOR_TYPES = ("door", "opening")
 
 
-# --- 2-D rigid transforms (3x3 homogeneous, plan coordinates) ---------------------------------------------------
+# --- 2-D rigid transforms (3x3 homogeneous, plan coordinates) -----------------------------------------
 
 def rigid2(theta: float, t: Any = (0.0, 0.0)) -> np.ndarray:
     c, s = np.cos(theta), np.sin(theta)
@@ -56,14 +56,14 @@ def wrap_angle(a: float, period: float = 2 * np.pi) -> float:
 
 
 def snap_yaw(theta: float, m_a: float, m_b: float, tol: float = np.radians(5.0)) -> tuple[float, float, bool]:
-    """Snap the rotation of b into a so b's Manhattan frame lands on a's modulo 90 degrees, when within tol."""
+    """Snap the rotation of b into a so b's Manhattan frame lands on a's (modulo 90 degrees) within tol."""
     delta = wrap_angle(m_b + theta - m_a, np.pi / 2)
     if abs(delta) <= tol:
         return theta - delta, delta, True
     return theta, delta, False
 
 
-# --- rooms and hypotheses --------------------------------------------------------------------------------------
+# --- rooms and hypotheses ----------------------------------------------------------------------------
 
 @dataclass
 class Door:
@@ -200,7 +200,7 @@ def cluster_hypotheses(rooms: list[StitchRoom], hyps: list[Hypothesis], params: 
     return edges
 
 
-# --- geometry checks -------------------------------------------------------------------------------------------
+# --- geometry checks ---------------------------------------------------------------------------------
 
 def shrunk_polygon(room: StitchRoom, T: np.ndarray, shrink: float):
     P = np.asarray(room.room.polygon, float)
@@ -306,7 +306,8 @@ def grow(rooms: list[StitchRoom], edges: list[Edge], root: int, members: set[int
         T[child] = Tc
         polys[child] = poly
         tree.parent[child] = (placed, k)
-        tree.eff_score[child] = float(e.score * np.exp(-0.5 * (np.linalg.norm(shift) / params.nudge_sigma) ** 2))
+        penalty = np.exp(-0.5 * (np.linalg.norm(shift) / params.nudge_sigma) ** 2)
+        tree.eff_score[child] = float(e.score * penalty)
         if np.linalg.norm(shift) > 0:
             tree.shift[child] = shift
         tree.order.append(child)
@@ -350,7 +351,8 @@ def _improve_and_flag(rooms: list[StitchRoom], edges: list[Edge], tree: Tree, me
                 break
         if better is None:
             break
-        log.info("stitch: local search improved placement (%d rooms, score %.3f)", len(better.T), better.total)
+        log.info("stitch: local search improved placement (%d rooms, score %.3f)", len(better.T),
+                 better.total)
         tree = better
     ambiguous: dict[int, str] = {}
     for x, k in _forcings(rooms, edges, tree, members, params, 1.0 - params.margin):
@@ -399,7 +401,8 @@ def _separate(rooms: list[StitchRoom], T: dict[int, np.ndarray], tree: Tree, par
         if raw[r] is None or not _blockers(raw[r], earlier, params.max_overlap_m2):
             continue
         for s in _SEPARATIONS:
-            if not _blockers(shrunk_polygon(rooms[r], rigid2(0.0, s) @ T[r], 0.0), earlier, params.max_overlap_m2):
+            moved_poly = shrunk_polygon(rooms[r], rigid2(0.0, s) @ T[r], 0.0)
+            if not _blockers(moved_poly, earlier, params.max_overlap_m2):
                 stack = [r]
                 while stack:
                     q = stack.pop()
@@ -433,8 +436,8 @@ class Solution:
     edge_status: dict[int, str]
     components: list[list[int]]
     root: int | None
-    separated: dict[int, np.ndarray] = field(default_factory=dict)  # final few-centimetre moves, property frame
-    overlaps: list[tuple[int, int]] = field(default_factory=list)  # raw overlaps the separation could not remove
+    separated: dict[int, np.ndarray] = field(default_factory=dict)  # final few-cm moves, property frame
+    overlaps: list[tuple[int, int]] = field(default_factory=list)  # raw overlaps left after separation
 
 
 def _bbox(rooms: list[StitchRoom], T: dict[int, np.ndarray], ids: list[int]) -> np.ndarray | None:
@@ -521,5 +524,6 @@ def solve(rooms: list[StitchRoom], hyps: list[Hypothesis], params: Params | None
             del sol.uncertain[r]
     rejected = {k for tree, _ in trees for k in tree.rejected}
     for k in range(len(edges)):
-        sol.edge_status[k] = "used" if k in used_edges else ("rejected_overlap" if k in rejected else "unused")
+        status = "rejected_overlap" if k in rejected else "unused"
+        sol.edge_status[k] = "used" if k in used_edges else status
     return sol

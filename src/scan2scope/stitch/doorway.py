@@ -1,9 +1,9 @@
 """Doorway-photo registration.
 
-A photo taken in room A through an open door also shows part of room B. MapAnything runs on that photo plus B's
-photos; the run is aligned to B's existing frame on B's own cameras, which gives the photo's pose in B's frame,
-and with its pose in A that yields the A-to-B transform, restricted to yaw, translation and scale because both
-room frames are gravity aligned.
+A photo taken in room A through an open door also shows part of room B. MapAnything runs on that photo plus
+B's photos; the run is aligned to B's existing frame on B's own cameras, which gives the photo's pose in B's
+frame, and with its pose in A that yields the A-to-B transform, restricted to yaw, translation and scale
+because both room frames are gravity aligned.
 """
 
 from __future__ import annotations
@@ -77,7 +77,7 @@ class DoorHit:
     angle_deg: float = float("nan")
 
 
-# --- the model call --------------------------------------------------------------------------------------------
+# --- the model call ----------------------------------------------------------------------------------
 
 def _load_rgb(path: Path) -> np.ndarray:
     try:
@@ -208,7 +208,7 @@ def run_key(views: list[CameraView]) -> dict:
             "views": items}
 
 
-# --- doorway photos ------------------------------------------------------------------------------------------
+# --- doorway photos ----------------------------------------------------------------------------------
 
 def _pose_ok(view: CameraView) -> bool:
     T = np.asarray(view.T_wc, float)
@@ -228,14 +228,15 @@ def _project(view: CameraView, P: np.ndarray) -> tuple[np.ndarray, np.ndarray, n
 
 
 def _through_factor(view: CameraView, door: Door, z0: float, h: float) -> float:
-    """Share of point-map pixels inside the door's image box that lie beyond the wall (seen through the door)."""
+    """Share of point-map pixels in the door's image box that lie beyond the wall, i.e. seen through it."""
     if view.pointmap is None:
         return 1.0
     pm = np.asarray(view.pointmap, float)
     if pm.ndim != 3 or pm.shape[2] != 3:
         return 1.0
     half = 0.5 * door.width * door.tangent
-    corners = np.array([[*(door.center + sx * half), z] for sx in (-1, 1) for z in (z0 + 0.1, z0 + min(h, 2.0) - 0.1)])
+    corners = np.array([[*(door.center + sx * half), z] for sx in (-1, 1)
+                        for z in (z0 + 0.1, z0 + min(h, 2.0) - 0.1)])
     u, v, z = _project(view, corners)
     if (z <= 0.05).any():
         return 1.0
@@ -292,7 +293,8 @@ def view_door_score(view: CameraView, door: Door, floor_z: float) -> float:
     hit_f = 1.0 if abs((hit - door.center) @ door.tangent) <= 0.5 * door.width + 0.1 else 0.6
     dist = float(np.linalg.norm(rel))
     dist_f = 1.0 if dist <= 4.0 else float(np.exp(-(dist - 4.0) / 2.0))
-    return float(facing * (0.5 + 0.5 * centrality) * vis * hit_f * dist_f * _through_factor(view, door, z0, h))
+    through = _through_factor(view, door, z0, h)
+    return float(facing * (0.5 + 0.5 * centrality) * vis * hit_f * dist_f * through)
 
 
 def find_doorway_photos(room: StitchRoom, *, min_score: float = 0.3, per_door: int = 1) -> list[DoorwayPhoto]:
@@ -301,8 +303,8 @@ def find_doorway_photos(room: StitchRoom, *, min_score: float = 0.3, per_door: i
         return []
     out = []
     for door in room.doors:
-        scored = sorted(((view_door_score(v, door, room.room.floor_z), k) for k, v in enumerate(room.scene.views)),
-                        key=lambda s: (-s[0], s[1]))
+        scored = sorted(((view_door_score(v, door, room.room.floor_z), k)
+                         for k, v in enumerate(room.scene.views)), key=lambda s: (-s[0], s[1]))
         for s, k in scored[:per_door]:
             if s >= min_score:
                 out.append(DoorwayPhoto(room.index, room.scene.views[k], door, s))
@@ -344,7 +346,7 @@ def select_views(room: StitchRoom, door_a: Door) -> list[CameraView]:
     return [views[k] for k in keep]
 
 
-# --- registration geometry -------------------------------------------------------------------------------------
+# --- registration geometry ---------------------------------------------------------------------------
 
 def _orth(M: np.ndarray) -> np.ndarray:
     U, _, Vt = np.linalg.svd(M)
@@ -489,8 +491,8 @@ def match_door(room_b: StitchRoom, door_a: Door, oa_b: np.ndarray, na_b: np.ndar
 def register_photo(room_a: StitchRoom, photo: DoorwayPhoto, room_b: StitchRoom, b_views: list[CameraView],
                    preds: list[Pred]) -> tuple[Hypothesis | None, dict]:
     door_a = photo.door
-    rec: dict[str, Any] = {"room_a": room_a.id, "room_b": room_b.id, "view": photo.view.id, "opening_a": door_a.id,
-                           "source": "doorway_photo", "n_views": len(b_views)}
+    rec: dict[str, Any] = {"room_a": room_a.id, "room_b": room_b.id, "view": photo.view.id,
+                           "opening_a": door_a.id, "source": "doorway_photo", "n_views": len(b_views)}
     al = align_run_to_room([v.T_wc for v in b_views], [p.T_wc for p in preds[1:]])
     Td = np.asarray(preds[0].T_wc, float)
     if al is None or Td.shape != (4, 4) or not np.isfinite(Td).all():
@@ -536,11 +538,13 @@ def register_photo(room_a: StitchRoom, photo: DoorwayPhoto, room_b: StitchRoom, 
     rec.update({
         "status": "ok", "opening_b": hit.door.id if hit.door else None, "score": round(score, 4),
         "factors": {k: round(v, 4) for k, v in factors.items()}, "align_method": al.method,
-        "center_rms_m": round(al.rms, 4), "rotation_err_deg": round(al.rot_err_deg, 3), "tilt_deg": round(tilt, 3),
+        "center_rms_m": round(al.rms, 4), "rotation_err_deg": round(al.rot_err_deg, 3),
+        "tilt_deg": round(tilt, 3),
         "relative_scale": round(float(s_ba), 4), "scale_from_depth": s_a is not None,
         "door_along_m": None if not np.isfinite(hit.along) else round(hit.along, 4),
         "door_across_m": None if not np.isfinite(hit.across) else round(hit.across, 4),
-        "thickness_m": None if thick is None else round(thick, 4), "yaw_snap_deg": round(float(np.degrees(delta)), 3),
+        "thickness_m": None if thick is None else round(thick, 4),
+        "yaw_snap_deg": round(float(np.degrees(delta)), 3),
         "snapped": bool(snapped), **pinfo,
     })
     if not np.isfinite(score) or score <= 0.0:
@@ -568,7 +572,8 @@ def _run(runner: RunnerFn, view: CameraView, room_b: StitchRoom, door_a: Door, c
         return "unavailable"
     preds = as_predictions(out, len(views))
     if preds is None:
-        log.warning("stitch: runner returned %s, expected %d view predictions", type(out).__name__, len(views))
+        log.warning("stitch: runner returned %s, expected %d view predictions", type(out).__name__,
+                    len(views))
     return (b_views, preds) if preds is not None else None
 
 

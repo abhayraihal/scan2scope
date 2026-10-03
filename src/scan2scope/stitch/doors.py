@@ -101,7 +101,8 @@ def opening_door(room: Room, o: Opening) -> Door | None:
         if s is not None and e is not None and np.linalg.norm(e - s) > 1e-6:
             u = (e - s) / np.linalg.norm(e - s)
             n = _vec2(wall.normal_in)
-            normal = n / np.linalg.norm(n) if n is not None and np.linalg.norm(n) > 1e-6 else np.array([-u[1], u[0]])
+            ok = n is not None and np.linalg.norm(n) > 1e-6
+            normal = n / np.linalg.norm(n) if ok else np.array([-u[1], u[0]])
             offset = _value(o.offset)
             if center is None and offset is not None:
                 center = s + u * (offset + width / 2)
@@ -123,7 +124,8 @@ def room_doors(room: Room) -> list[Door]:
 
 def facing_yaw(door_a: Door, door_b: Door) -> float:
     """Rotation of b's frame into a's that makes the two inward normals opposite."""
-    return float(np.arctan2(-door_a.normal[1], -door_a.normal[0]) - np.arctan2(door_b.normal[1], door_b.normal[0]))
+    na, nb = door_a.normal, door_b.normal
+    return float(np.arctan2(-na[1], -na[0]) - np.arctan2(nb[1], nb[0]))
 
 
 def door_pair_transform(door_a: Door, door_b: Door, theta: float, thickness: float) -> np.ndarray:
@@ -140,14 +142,17 @@ def door_match_score(door_a: Door, door_b: Door, ratio: float, snapped: bool) ->
     f_conf = 0.5 + 0.5 * np.sqrt(door_a.confidence * door_b.confidence)
     f_height = 1.0
     if door_a.height and door_b.height:
-        f_height = np.exp(-0.5 * ((1.0 - min(door_a.height, door_b.height) / max(door_a.height, door_b.height))
-                                  / 0.1) ** 2)
+        h_ratio = min(door_a.height, door_b.height) / max(door_a.height, door_b.height)
+        f_height = np.exp(-0.5 * ((1.0 - h_ratio) / 0.1) ** 2)
     return float(BASE_SCORE * f_width * f_type * f_manhattan * f_conf * f_height)
 
 
 def door_match_hypotheses(rooms: list[StitchRoom], *, min_ratio: float = MIN_WIDTH_RATIO,
                           thickness: float = WALL_THICKNESS_PRIOR) -> tuple[list[Hypothesis], int]:
-    """Every door pair (a in A, b in B) with width ratio >= min_ratio. Returns hypotheses and pairs compared."""
+    """Every door pair (a in A, b in B) with width ratio >= min_ratio.
+
+    Returns the hypotheses and the number of door pairs compared.
+    """
     out: list[Hypothesis] = []
     compared = 0
     for ia, A in enumerate(rooms):
@@ -163,7 +168,8 @@ def door_match_hypotheses(rooms: list[StitchRoom], *, min_ratio: float = MIN_WID
                         A.index, B.index, door_pair_transform(da, db, theta, thickness),
                         door_match_score(da, db, ratio, snapped), "door_match", da.id, db.id,
                         evidence={"width_a": round(da.width, 3), "width_b": round(db.width, 3),
-                                  "width_ratio": round(ratio, 3), "yaw_snap_deg": round(float(np.degrees(delta)), 2),
+                                  "width_ratio": round(ratio, 3),
+                                  "yaw_snap_deg": round(float(np.degrees(delta)), 2),
                                   "snapped": snapped, "thickness": thickness},
                     ))
     log.debug("stitch: %d door-match hypotheses from %d door pairs", len(out), compared)
