@@ -1,10 +1,16 @@
+import json
 import math
 
 import numpy as np
 import pytest
+from stray_fixture import ROOM, cached_dataset, cached_drifted
 
 from scan2scope.geometry import drift as dr
+from scan2scope.geometry.lidar import C_ZUP, arkit_to_zup, build_scene, camera_cloud, select_keyframes
 from scan2scope.geometry.se3 import apply, make_T, rot_z, rotvec_to_R
+from scan2scope.ingest.stray import load_stray, scale_intrinsics
+
+DRIFT = {"yaw_deg": 3.0, "trans": (0.05, -0.04, 0.015)}
 
 
 def _plane(origin, u, v, n, su, sv, step=0.04):
@@ -138,3 +144,121 @@ def test_voxel_accumulator_weights_and_tags():
     np.testing.assert_allclose(p[0], (1.0 * np.array([0.01, 0.01, 0.01]) + 0.25 * np.array([0.03, 0.01, 0.01])
                                       + 2.0 * np.array([0.05, 0.05, 0.05])) / 3.25)
     assert w[0] == pytest.approx(3.25 / 3) and tag[0] == 9 and tag[1] == 9
+
+
+# ------------------------------------------------------------------------------- fixture: drifted capture
+
+@pytest.fixture(scope="module")
+def ds(tmp_path_factory):
+    return cached_dataset(tmp_path_factory, "stray_v14")
+
+
+@pytest.fixture(scope="module")
+def drifted(tmp_path_factory, ds):
+    return cached_drifted(tmp_path_factory, ds, **DRIFT)
+
+
+@pytest.fixture(scope="module")
+def drift_scenes(tmp_path_factory, drifted):
+    work = tmp_path_factory.mktemp("drift_work")
+    return {on: build_scene(drifted.root, work / str(on), drift_correction=on) for on in (False, True)}
+
+
+def wall_misalignment(scene, fx):
+    """Mean RMS distance of each wall's points to their own best-fit plane, and the room's two spans."""
+    M = np.linalg.inv(fx.room_to_zup)
+    p = scene.points @ M[:3, :3].T + M[:3, 3]
+    n = scene.normals @ M[:3, :3].T
+    rms, planes = [], []
+    for ax, v in ((0, 0.0), (0, ROOM[0]), (1, 0.0), (1, ROOM[1])):
+        m = (np.abs(p[:, ax] - v) < 0.25) & (np.abs(n[:, ax]) > 0.9) & (p[:, 2] > 0.2) & (p[:, 2] < 2.3)
+        if ax == 1 and v == 0.0:
+            m &= (p[:, 0] < 1.4) | (p[:, 0] > 2.5)  # skip the door jambs
+        q = p[m]
+        c = q.mean(0)
+        normal = np.linalg.svd(q - c, full_matrices=False)[2][2]
+        rms.append(float(np.sqrt(np.mean(((q - c) @ normal) ** 2))))
+        planes.append((c, normal))
+    span_x = abs((planes[1][0] - planes[0][0]) @ planes[0][1])
+    span_y = abs((planes[3][0] - planes[2][0]) @ planes[2][1])
+    return float(np.mean(rms)), span_x, span_y
+
+
+def test_drift_correction_reduces_wall_misalignment(drift_scenes, drifted):
+    off, sx_off, sy_off = wall_misalignment(drift_scenes[False], drifted)
+    on, sx_on, sy_on = wall_misalignment(drift_scenes[True], drifted)
+    assert on < 0.65 * off
+    err_off = max(abs(sx_off - ROOM[0]), abs(sy_off - ROOM[1]))
+    err_on = max(abs(sx_on - ROOM[0]), abs(sy_on - ROOM[1]))
+    assert err_on < 0.01 and err_on < err_off
+
+
+def test_drift_record(drift_scenes):
+    rec = drift_scenes[True].meta["drift"]
+    json.dumps(rec)
+    for key in ("enabled", "segments", "loop_closures_tried", "loop_closures_accepted",
+                "max_translation_correction_m", "max_yaw_correction_deg", "floor_z_spread_before_m",
+                "floor_z_spread_after_m"):
+        assert key in rec
+    assert rec["enabled"] is True and rec["segments"] >= 8
+    assert rec["loop_closures_accepted"] >= 1
+    first_last = [lc for lc in rec["loop_closures"] if lc["segments"] == [0, rec["segments"] - 1]]
+    assert first_last and first_last[0]["accepted"]
+    assert 1.5 < rec["max_yaw_correction_deg"] < 4.0
+    assert rec["floor_z_spread_after_m"] < rec["floor_z_spread_before_m"]
+    assert drift_scenes[False].meta["drift"] == {"enabled": False}
+
+
+def test_corrected_poses_are_closer_to_truth(drift_scenes, drifted):
+    cap = load_stray(drifted.root)
+
+    def pose_error(scene):
+        rows = [cap.row_of_frame(v.meta["frame_id"]) for v in scene.views]
+        truth = C_ZUP @ drifted.T_wc_true[rows]
+        est = np.stack([v.T_wc for v in scene.views])
+        R = np.einsum("nij,nkj->nik", est[:, :3, :3], truth[:, :3, :3])  # world-frame error
+        yaw = np.degrees(np.abs(dr._yaw_of(R)))
+        # positions after removing the best global shift (the gauge is fixed near the first frame)
+        d = est[:, :3, 3] - truth[:, :3, 3]
+        return float(yaw.max()), float(np.linalg.norm(d - d.mean(0), axis=1).max())
+
+    yaw_off, pos_off = pose_error(drift_scenes[False])
+    yaw_on, pos_on = pose_error(drift_scenes[True])
+    assert yaw_off > 2.0 and yaw_on < 0.5
+    assert pos_on < 0.5 * pos_off
+
+
+def test_clean_capture_barely_moves(tmp_path_factory, ds):
+    cap = load_stray(ds.root)
+    T = arkit_to_zup(cap.T_wc)
+    kf = select_keyframes(T, cap.has_depth)
+    K_d = scale_intrinsics(cap.K, cap.rgb_size, cap.depth_size)
+
+    def reader(k):
+        return camera_cloud(cap.read_depth(kf[k]), cap.read_conf(kf[k]), K_d[kf[k]])
+
+    frames = [dr.KeyFrame(int(cap.frame_ids[i]), float(cap.timestamps[i])) for i in kf]
+    out, rec = dr.correct_lidar_poses(frames, T[kf], reader)
+    assert np.linalg.norm(out[:, :3, 3] - T[kf][:, :3, 3], axis=1).max() < 0.01
+    assert rec["max_yaw_correction_deg"] < 0.2
+    assert rec["loop_closures_accepted"] >= 1
+
+
+def test_plane_anchoring_alone_levels_a_vertical_drift(tmp_path_factory, ds):
+    fx = cached_drifted(tmp_path_factory, ds, yaw_deg=0.0, trans=(0.0, 0.0, 0.06))
+    cap = load_stray(fx.root)
+    T = arkit_to_zup(cap.T_wc)
+    kf = select_keyframes(T, cap.has_depth)
+    K_d = scale_intrinsics(cap.K, cap.rgb_size, cap.depth_size)
+
+    def reader(k):
+        return camera_cloud(cap.read_depth(kf[k]), cap.read_conf(kf[k]), K_d[kf[k]])
+
+    frames = [dr.KeyFrame(int(cap.frame_ids[i]), float(cap.timestamps[i])) for i in kf]
+    out, rec = dr.correct_lidar_poses(frames, T[kf], reader, loop_closure=False, manhattan_anchoring=False)
+    assert rec["floor_z_spread_before_m"] > 0.04
+    assert rec["floor_z_spread_after_m"] < 0.01
+    truth = arkit_to_zup(fx.T_wc_true)[kf]
+    dz_raw = T[kf][:, 2, 3] - truth[:, 2, 3]
+    dz = out[:, 2, 3] - truth[:, 2, 3]
+    assert np.ptp(dz) < 0.3 * np.ptp(dz_raw)
