@@ -217,8 +217,8 @@ class _Writer:
         pts = pts or starts or [[0.0, 0.0]]
         return (pts * 3)[:3]
 
-    def room(self, room: Room, rid: str, room_ids: set[str], wall_seen: set[str],
-             opening_seen: set[str]) -> dict[str, Any]:
+    def room(self, room: Room, rid: str, room_ids: set[str], wall_seen: set[str], opening_seen: set[str],
+             widened: list[str]) -> dict[str, Any]:
         walls = []
         for w in room.walls or []:
             wid = self.unique(w.id, wall_seen, "wall")
@@ -258,7 +258,7 @@ class _Writer:
             "perimeter": self.meas(room.perimeter, "m", f"{rid}.perimeter"),
             "ceiling_height": self.meas(room.ceiling_height, "m", f"{rid}.ceiling_height"),
             "walls": walls, "openings": openings, "surfaces": self.surfaces(rid, walls, openings, floor_area),
-            "flags": _strs(room.flags),
+            "flags": _strs(room.flags) + [f"intervals_widened:{r}" for r in widened],
         }
 
     def surfaces(self, rid: str, walls: list[dict], openings: list[dict], floor_area: dict) -> list[dict[str, Any]]:
@@ -442,7 +442,10 @@ def build_result(info: CaptureInfo, plan: Plan, damage: list[DamageRegion], flag
     room_ids = [w.unique(r.id, room_seen, "room") for r in plan_rooms]
     wall_seen: set[str] = set()
     opening_seen: set[str] = set()
-    rooms = [w.room(r, rid, room_seen, wall_seen, opening_seen) for r, rid in zip(plan_rooms, room_ids)]
+    unc = plan.meta.get("uncertainty") if isinstance(plan.meta, dict) else None
+    factors = unc.get("room_factors") if isinstance(unc, dict) and isinstance(unc.get("room_factors"), dict) else {}
+    rooms = [w.room(r, rid, room_seen, wall_seen, opening_seen, _strs((factors.get(r.id) or {}).get("reasons")))
+             for r, rid in zip(plan_rooms, room_ids)]
     surfaces = {s["id"]: room["id"] for room in rooms for s in room["surfaces"]}
     opening_ids = {o["id"] for room in rooms for o in room["openings"]}
 

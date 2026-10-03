@@ -175,6 +175,16 @@ def test_writer_repairs_odd_input_and_stays_valid():
     assert prov["device"] == "unknown" and prov["git_commit"] is None
 
 
+def test_widened_intervals_are_flagged_on_the_room():
+    plan, damage = make_plan(), make_damage()
+    annotate(plan, damage, tier="photo", quality={"scenes": [{"room_hint": "01 living", "n_photos": 3}]},
+             calibration={"tiers": {}})
+    res = writer.build_result(make_info("photo"), plan, damage, make_flags(), make_scope(), TIMING, PROVENANCE)
+    schema.validate(res)
+    assert res["rooms"][0]["flags"] == ["intervals_widened:few_photos"]
+    assert res["rooms"][1]["flags"] == []
+
+
 def test_polygon_with_a_z_column_keeps_plan_coordinates():
     plan = make_plan()
     plan.rooms[0].polygon = np.c_[plan.rooms[0].polygon, np.full(4, 0.05)]
