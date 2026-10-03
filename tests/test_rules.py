@@ -130,6 +130,9 @@ def test_peeling_paint_and_hole(plan):
     assert [f.damage_ids for f in fired(flags, "R-HOLE-CAVITY")] == [["D2"]]
     quiet = evaluate(plan, [region("D1", "water_stain", "R1-W2", (0.5, 1.0), (1.0, 1.5))], [])
     assert not fired(quiet, "R-PEEL-MOISTURE") and not fired(quiet, "R-HOLE-CAVITY")
+    # paint film is on walls and ceilings; "peeling paint" on a floor is a mat or a rug, not a moisture sign
+    floor = evaluate(plan, [region("D1", "peeling_paint", "R1-FLOOR", (1.0, 1.5), (1.0, 1.4))], [])
+    assert not fired(floor, "R-PEEL-MOISTURE")
 
 
 def test_stain_near_window(plan):

@@ -17,6 +17,7 @@ from scan2scope.semantics.detector import (
     Detection,
     DetectorConfig,
     GroundingDinoDetector,
+    PromptSet,
     decode,
     nms,
 )
@@ -219,8 +220,57 @@ def test_merge_two_views_of_one_stain():
 def test_merge_needs_matching_class_and_surface_and_overlap():
     obs = [_obs("v1", score=0.6), _obs("v2", cls="mold", score=0.6), _obs("v3", surface="R1-W2", score=0.6),
            _obs("v4", u=(3.0, 3.5), score=0.6)]
-    merged, _ = merge_damage(obs)
+    merged, _ = merge_damage(obs, MergeConfig(soft_class=False))
     assert len(merged) == 4
+
+
+def test_soft_class_merge_takes_the_class_with_the_most_evidence():
+    # the same region is a crack in two views and a hole in a third: one region, class crack
+    a = _obs("v1", cls="crack", score=0.4)
+    a.class_scores = {"crack": 0.4, "hole": 0.2}
+    b = _obs("v2", cls="crack", u=(1.62, 2.42), score=0.35)
+    b.class_scores = {"crack": 0.35, "hole": 0.1}
+    c = _obs("v3", cls="hole", u=(1.65, 2.4), score=0.45)
+    c.class_scores = {"crack": 0.3, "hole": 0.45}
+    other = _obs("v4", cls="mold", u=(3.0, 3.5), score=0.6)  # different place: stays its own region
+    merged, dropped = merge_damage([a, b, c, other])
+    assert len(merged) == 2 and not dropped
+    m = next(x for x in merged if x.cls != "mold")
+    assert m.cls == "crack" and sorted(m.view_ids) == ["v1", "v2", "v3"]
+    assert m.evidence["class_votes"]["crack"] == pytest.approx(1.05)
+    assert m.score == pytest.approx(1 - 0.6 * 0.65 * 0.7)  # noisy-OR of the crack scores of the three views
+
+
+def test_pieces_of_one_long_crack_merge_into_its_whole_length():
+    # three views each see part of a 1.6 m crack under the ceiling; the thin boxes barely overlap by area
+    pieces = [((0.5, 1.1), (2.40, 2.46)), ((1.08, 1.6), (2.42, 2.47)), ((1.62, 2.1), (2.41, 2.45))]
+    obs = []
+    for k, (u, v) in enumerate(pieces):
+        o = _obs(f"v{k}", cls="crack", u=u, v=v, score=0.3)
+        o.length = u[1] - u[0]
+        obs.append(o)
+    merged, _ = merge_damage(obs)
+    assert len(merged) == 1 and merged[0].evidence["n_views"] == 3
+    assert merged[0].length == pytest.approx(1.6, abs=1e-6) and merged[0].u_range == pytest.approx((0.5, 2.1))
+    far = _obs("v3", cls="crack", u=(3.0, 3.4), v=(2.4, 2.45), score=0.6)  # 0.9 m further along: another crack
+    assert sorted(m.u_range[0] for m in merge_damage(obs + [far])[0]) == pytest.approx([0.5, 3.0])
+
+
+def test_whole_views_of_a_short_crack_keep_the_single_view_length():
+    # two photos see the whole 0.17 m crack, registered 6 cm apart: the union would overstate it
+    a = _obs("v1", cls="crack", u=(2.10, 2.17), v=(1.60, 1.76), score=0.3)
+    b = _obs("v2", cls="crack", u=(2.16, 2.23), v=(1.62, 1.78), score=0.3)
+    a.length, b.length = 0.17, 0.18
+    m = merge_damage([a, b])[0][0]
+    assert m.length == pytest.approx(0.175) and m.u_range == pytest.approx((2.10, 2.23))
+
+
+def test_soft_class_merge_needs_more_overlap_across_classes():
+    # a crack and a stain next to each other on one wall (centres 0.25 m apart, IoU 0) stay apart
+    a = _obs("v1", cls="crack", u=(1.0, 1.1), v=(1.0, 1.3), score=0.6)
+    b = _obs("v2", cls="water_stain", u=(1.2, 1.5), v=(1.0, 1.3), score=0.6)
+    merged, _ = merge_damage([a, b])
+    assert sorted(m.cls for m in merged) == ["crack", "water_stain"]
 
 
 def test_merge_by_centre_distance_without_overlap():
@@ -262,9 +312,14 @@ def test_decode_thresholds_nms_and_class_mapping():
            "phrase_scores": np.array([[0.50, 0.1, 0.1, 0.1, 0.1], [0.45, 0.1, 0.1, 0.1, 0.1],
                                       [0.1, 0.1, 0.1, 0.1, 0.40], [0.9, 0.1, 0.1, 0.1, 0.1],
                                       [0.48, 0.1, 0.1, 0.1, 0.1], [0.30, 0.1, 0.1, 0.1, 0.1]], np.float32)}
-    dets = decode(raw, DAMAGE_PROMPTS, 1000, 800, DetectorConfig())
+    prompt = PromptSet("damage", DAMAGE_PROMPTS.phrases, DAMAGE_PROMPTS.classes, box_threshold=0.35)
+    dets = decode(raw, prompt, 1000, 800, DetectorConfig())
     assert [(d.cls, round(d.score, 2)) for d in dets] == [("water_stain", 0.5), ("peeling_paint", 0.4)]
     assert dets[0].box == pytest.approx([100, 80, 300, 240])
+    assert dets[0].class_scores == pytest.approx({"water_stain": 0.5, "mold": 0.1, "crack": 0.1, "hole": 0.1,
+                                                  "peeling_paint": 0.1})
+    low = decode(raw, DAMAGE_PROMPTS, 1000, 800, DetectorConfig())  # the damage floor keeps the 0.30 box too
+    assert [round(d.score, 2) for d in low] == [0.5, 0.4, 0.3]
     objs = decode({"boxes": raw["boxes"][:1], "phrase_scores": np.array([[0.1] * 9 + [0.33]], np.float32)},
                   OBJECT_PROMPTS, 1000, 800, DetectorConfig())
     assert objs[0].cls == "washing_machine" and objs[0].kind == "object"
@@ -281,7 +336,55 @@ def test_nms_drops_contained_boxes():
 def test_prompt_text_format():
     assert DAMAGE_PROMPTS.text == "water stain. mold. crack. hole. peeling paint."
     assert OBJECT_PROMPTS.text.endswith("refrigerator. washing machine.")
-    assert DAMAGE_PROMPTS.box_threshold == 0.35 and OBJECT_PROMPTS.box_threshold == 0.30
+    assert DAMAGE_PROMPTS.box_threshold == 0.2 and OBJECT_PROMPTS.box_threshold == 0.30
+
+
+def test_synonym_phrases_score_their_class_and_class_thresholds_apply():
+    prompt = PromptSet("damage", ("crack", "hairline crack", "hole"), ("crack", "crack", "hole"), 0.35,
+                       class_thresholds=(("crack", 0.25),))
+    assert prompt.class_names == ("crack", "hole") and prompt.threshold("crack") == 0.25
+    raw = {"boxes": np.array([[0.1, 0.1, 0.2, 0.4], [0.5, 0.5, 0.6, 0.6]], np.float32),
+           "phrase_scores": np.array([[0.1, 0.3, 0.05], [0.05, 0.1, 0.3]], np.float32)}
+    dets = decode(raw, prompt, 100, 100, DetectorConfig())
+    assert [(d.cls, round(d.score, 2)) for d in dets] == [("crack", 0.3)]  # the hole at 0.30 is under 0.35
+
+
+def test_tiles_cover_the_image_and_map_boxes_back():
+    from scan2scope.semantics.detector import concat_raw, tile_rects, tile_to_image
+
+    rects = tile_rects(1280, 960, 2, 0.2)
+    assert rects == [(0, 0, 768, 576), (512, 0, 1280, 576), (0, 384, 768, 960), (512, 384, 1280, 960)]
+    assert tile_rects(1280, 960, 1, 0.2) == []
+    raw = {"boxes": np.array([[0.5, 0.5, 1.0, 1.0]], np.float32), "phrase_scores": np.full((1, 5), 0.3, np.float32)}
+    full = tile_to_image(raw, rects[3], 1280, 960)
+    assert full["boxes"][0] == pytest.approx([(512 + 384) / 1280, (384 + 288) / 960, 1.0, 1.0])
+    both = concat_raw([raw, full], 5)
+    assert both["boxes"].shape == (2, 4) and both["phrase_scores"].shape == (2, 5)
+
+
+def test_tile_detections_add_only_what_the_full_view_missed():
+    from scan2scope.semantics.detector import merge_tile_detections
+
+    full = [Detection("crack", "damage", np.array([100, 100, 200, 120.0]), 0.3)]
+    tiles = [Detection("crack", "damage", np.array([102, 101, 198, 121.0]), 0.35),  # the same crack again
+             Detection("crack", "damage", np.array([400, 300, 440, 380.0]), 0.25),  # a small crack only a tile saw
+             Detection("hole", "damage", np.array([105, 100, 195, 118.0]), 0.3)]  # other class: kept
+    out = merge_tile_detections(full, tiles, 0.5, 0.85)
+    assert [(d.cls, d.source) for d in out] == [("crack", "full"), ("crack", "tile"), ("hole", "tile")]
+
+
+def test_area_classes_from_tiles_need_a_line():
+    from scan2scope.semantics import SemanticsConfig, resolve_class
+
+    L = np.full((200, 200), 80.0, np.float32)
+    mask = np.zeros((200, 200), bool)
+    mask[50:150, 50:150] = True
+    L[mask] = 55.0  # a dark stain, well above its class minimum
+    d = Detection("water_stain", "damage", np.array([50, 50, 150, 150.0]), 0.5, class_scores={"water_stain": 0.5})
+    assert resolve_class(d, mask, lambda: L, DAMAGE_PROMPTS, SemanticsConfig())[0] == "water_stain"
+    d.source = "tile"
+    cls, _, _, info = resolve_class(d, mask, lambda: L, DAMAGE_PROMPTS, SemanticsConfig())
+    assert cls is None and info["reason"] == "tile_area_without_line"
 
 
 def test_damage_inside_window_box_is_suppressed():
@@ -316,6 +419,8 @@ class FakeDetector:
     def predict(self, image, prompt):
         self.calls += 1
         h, w = image.shape[:2]
+        if prompt.kind == "distractor":
+            return {"boxes": np.zeros((0, 4), np.float32), "phrase_scores": np.zeros((0, len(prompt.phrases)))}
         dmg, obj = self.boxes_by_view[f"v{(int(image[0, 0, 0]) - 50) // 10}"]
         b = dmg if prompt.kind == "damage" else obj
         ps = np.full((1, len(prompt.phrases)), 0.05, np.float32)
