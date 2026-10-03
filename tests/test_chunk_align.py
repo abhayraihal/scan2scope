@@ -74,7 +74,6 @@ def test_pose_graph_is_exact_on_consistent_edges():
 
 
 def test_pose_graph_distributes_loop_error():
-    rng = np.random.default_rng(4)
     truth = _trajectory(12)
     truth = [se3.invert(truth[0]) @ T for T in truth]
     # every sequential edge carries the same small yaw and scale bias, so the chain drifts steadily
@@ -91,7 +90,7 @@ def test_pose_graph_distributes_loop_error():
     before, after = pos_err(chained), pos_err(res.nodes)
     assert before[-1] > 0.5
     assert after.max() < 0.35 * before.max()
-    loop_res = [e for e in res.edge_residuals if e["kind"] == "loop"][0]
+    loop_res = next(e for e in res.edge_residuals if e["kind"] == "loop")
     assert loop_res["trans"] < 0.2 * ca.sim3_error(loop.T_ij, chained[11])["trans"]
     seq_rot = [e["rot_deg"] for e in res.edge_residuals if e["kind"] == "seq"]
     assert max(seq_rot) - min(seq_rot) < 0.5  # the error is spread, not dumped on one edge
