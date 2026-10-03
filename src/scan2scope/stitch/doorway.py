@@ -437,7 +437,8 @@ def points_factor(pred: Pred, al: Alignment, room: StitchRoom) -> tuple[float, d
     poly_xy = room_polygon(room.room)
     if poly_xy is None or len(P) == 0:
         return 1.0, {"points_check": "unavailable"}
-    inner = Polygon(poly_xy).buffer(-0.1)
+    # the room's own walls count; the far face of a shared wall is a wall thickness away and does not
+    inner = Polygon(poly_xy).buffer(0.05)
     if inner.is_empty:
         return 1.0, {"points_check": "unavailable"}
     keep = shapely.contains_xy(inner, P[:, 0], P[:, 1])
@@ -455,7 +456,7 @@ def points_factor(pred: Pred, al: Alignment, room: StitchRoom) -> tuple[float, d
             pts = pts[np.linspace(0, len(pts) - 1, 30000).astype(int)]
         tree = room.aux["kdtree"] = cKDTree(pts)
     med = float(np.median(tree.query(Q, k=1)[0]))
-    return float(np.clip(np.exp(-0.5 * (med / 0.12) ** 2), 0.05, 1.0)), {"points_median_m": round(med, 4),
+    return float(np.clip(np.exp(-0.5 * (med / 0.2) ** 2), 0.05, 1.0)), {"points_median_m": round(med, 4),
                                                                           "points_n": len(Q)}
 
 
