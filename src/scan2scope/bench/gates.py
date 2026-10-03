@@ -9,7 +9,8 @@ Failing rows are ranked for the fix loop by a normalised shortfall `score`:
   error gates        worst |err| / allowance - 1 (a missing item counts as twice its allowance)
   rate gates         (target - measured) / target
   calibration        miss rate at the near end of the coverage CI over the nominal miss rate, minus 1
-                     (under-coverage), or the CI's distance above nominal over the nominal miss rate (over-coverage)
+                     (under-coverage), or the CI's distance above nominal over the nominal miss rate
+                     (over-coverage)
   confident garbage  the number of confident misses
   checks             share of failing items
 """
@@ -116,9 +117,10 @@ def calibration(records: list[dict[str, Any]], *, level: float = 0.9, ci: float 
         garbage = [r for r in rs if is_garbage(r, ratio)]
         rel_hw = [r["half_width"] / abs(r["gt"]) for r in rs if r["gt"]]
         out[tier] = {
-            "n": len(rs), "covered": k, "coverage": k / len(rs) if rs else None, "ci": [lo, hi], "ci_level": ci,
-            "mean_rel_half_width": sum(rel_hw) / len(rel_hw) if rel_hw else None,
-            "level": level, "contains_nominal": lo <= level <= hi, "rooms": len({r["room"] for r in rs if r["room"]}),
+            "n": len(rs), "covered": k, "coverage": k / len(rs) if rs else None, "ci": [lo, hi],
+            "ci_level": ci, "mean_rel_half_width": sum(rel_hw) / len(rel_hw) if rel_hw else None,
+            "level": level, "contains_nominal": lo <= level <= hi,
+            "rooms": len({r["room"] for r in rs if r["room"]}),
             "confident_garbage": len(garbage), "garbage_items": [_rec_ref(r) for r in garbage],
             "by_kind": {kd: {"n": len(v), "covered": sum(bool(r["covered"]) for r in v),
                              "coverage": sum(bool(r["covered"]) for r in v) / len(v),
@@ -134,6 +136,11 @@ def _rec_ref(r: dict[str, Any]) -> dict[str, Any]:
     return {"item": r["item"], "capture": r["capture"], "property": r["property"], "kind": r["kind"],
             "gt": r["gt"], "pred": r["pred"], "lo": r["lo"], "hi": r["hi"], "err": r["err"],
             "miss_ratio": abs(r["err"]) / hw if hw > 0 else (math.inf if r["err"] else 0.0)}
+
+
+def _ref(x: dict[str, Any], **extra: Any) -> dict[str, Any]:
+    """Item reference for worst-item lists: item, capture and property of x, plus extra fields."""
+    return {"item": x.get("item"), "capture": x.get("capture"), "property": x.get("property"), **extra}
 
 
 def _row(gate: str, tier: str, threshold: str, *, kind: str, assumed: bool = False) -> dict[str, Any]:
@@ -156,12 +163,12 @@ def error_gate(gate: str, tier: str, spec: dict[str, Any], records: list[dict[st
         if thr is None:
             continue
         ratio = abs(r["err"]) / thr if thr > 0 else (0.0 if r["err"] == 0 else math.inf)
-        items.append({"item": r["item"], "capture": r["capture"], "property": r["property"], "gt": r["gt"],
-                      "err": r["err"], "rel_err": r["rel_err"], "allowed": thr, "ratio": ratio, "pass": ratio <= 1.0})
+        items.append(_ref(r, gt=r["gt"], err=r["err"], rel_err=r["rel_err"], allowed=thr, ratio=ratio,
+                          **{"pass": ratio <= 1.0}))
     for m in missing:
-        items.append({"item": m["item"], "capture": m.get("capture"), "property": m.get("property"), "gt": m.get("gt"),
-                      "err": None, "rel_err": None, "allowed": item_threshold(spec, m.get("gt")), "ratio": None,
-                      "pass": False, "reason": m.get("reason")})
+        items.append(_ref(m, gt=m.get("gt"), err=None, rel_err=None,
+                          allowed=item_threshold(spec, m.get("gt")), ratio=None, reason=m.get("reason"),
+                          **{"pass": False}))
     if not items:
         return row
     n_pass = sum(i["pass"] for i in items)
@@ -195,8 +202,8 @@ def error_gate(gate: str, tier: str, spec: dict[str, Any], records: list[dict[st
     return row
 
 
-def opening_gate(tier: str, spec: dict[str, Any], records: list[dict[str, Any]], missing: list[dict[str, Any]],
-                 phantoms: list[dict[str, Any]]) -> dict[str, Any]:
+def opening_gate(tier: str, spec: dict[str, Any], records: list[dict[str, Any]],
+                 missing: list[dict[str, Any]], phantoms: list[dict[str, Any]]) -> dict[str, Any]:
     target = num(spec.get("min_pass_rate")) or 0.85
     width = threshold_text(spec)
     row = _row("opening_width", tier, f"{width} on >= {_pct(target)} of openings (misses and phantoms fail)",
@@ -209,17 +216,16 @@ def opening_gate(tier: str, spec: dict[str, Any], records: list[dict[str, Any]],
         passed += ok
         if not ok:
             failed += 1
-            worst.append({"item": r["item"], "capture": r["capture"], "property": r["property"], "gt": r["gt"],
-                          "err": r["err"], "allowed": thr, "ratio": abs(r["err"]) / thr if thr else None,
-                          "pass": False})
+            worst.append(_ref(r, gt=r["gt"], err=r["err"], allowed=thr,
+                              ratio=abs(r["err"]) / thr if thr else None, **{"pass": False}))
     for m in missing:
         failed += 1
-        worst.append({"item": m["item"], "capture": m.get("capture"), "property": m.get("property"), "gt": m.get("gt"),
-                      "err": None, "allowed": None, "ratio": None, "pass": False, "reason": m.get("reason")})
+        worst.append(_ref(m, gt=m.get("gt"), err=None, allowed=None, ratio=None, reason=m.get("reason"),
+                          **{"pass": False}))
     for p in phantoms:
         failed += 1
-        worst.append({"item": p["item"], "capture": p.get("capture"), "property": p.get("property"), "gt": None,
-                      "err": None, "allowed": None, "ratio": None, "pass": False, "reason": "phantom"})
+        worst.append(_ref(p, gt=None, err=None, allowed=None, ratio=None, reason="phantom",
+                          **{"pass": False}))
     n = passed + failed
     if n == 0:
         return row
@@ -233,7 +239,8 @@ def opening_gate(tier: str, spec: dict[str, Any], records: list[dict[str, Any]],
     return row
 
 
-def calibration_rows(tier: str, cal: dict[str, Any] | None, cfg: dict[str, Any], level: float) -> list[dict[str, Any]]:
+def calibration_rows(tier: str, cal: dict[str, Any] | None, cfg: dict[str, Any],
+                     level: float) -> list[dict[str, Any]]:
     ci = num(cfg.get("ci")) or 0.95
     ratio = num(cfg.get("confident_garbage_ratio")) or 2.0
     assumed = bool(cfg.get("assumed"))
@@ -252,17 +259,17 @@ def calibration_rows(tier: str, cal: dict[str, Any] | None, cfg: dict[str, Any],
     else:
         gap, score = 0.0, 0.0
     thin = cal["rooms"] < MIN_ROOMS
-    cov.update(measured=cal["coverage"], n=cal["n"], status="pass" if ok else "fail", pass_share=cal["coverage"],
-               shortfall=gap, score=score if not ok else 0.0, thin_evidence=thin,
+    cov.update(measured=cal["coverage"], n=cal["n"], status="pass" if ok else "fail",
+               pass_share=cal["coverage"], shortfall=gap, score=score if not ok else 0.0, thin_evidence=thin,
                measured_text=f"{cal['covered']}/{cal['n']} covered ({_pct(cal['coverage'])}), CI "
                              f"[{_pct(lo)}, {_pct(hi)}], {cal['rooms']} rooms"
                              + (f" (fewer than {MIN_ROOMS}: too few to show calibration)" if thin else ""))
     g = cal["confident_garbage"]
     items = sorted(cal["garbage_items"], key=lambda x: -x["miss_ratio"])
+    worst = f", worst {items[0]['miss_ratio']:.1f}x half-width ({_where(items[0])})" if items else ""
     gar.update(measured=g, n=cal["n"], status="pass" if g == 0 else "fail", pass_share=1.0 - g / cal["n"],
                shortfall=float(g), score=float(g), worst=items[:WORST_N],
-               measured_text=f"{g} of {cal['n']} values" + (f", worst {items[0]['miss_ratio']:.1f}x half-width "
-                                                            f"({_where(items[0])})" if items else ""))
+               measured_text=f"{g} of {cal['n']} values{worst}")
     return [cov, gar]
 
 
@@ -276,7 +283,9 @@ def check_gate(gate: str, tier: str, threshold: str, items: list[dict[str, Any]]
     status = "pass" if n_pass == len(items) else "fail"
     fails = [i for i in items if not i["pass"]]
     shown = fails or (items if pass_details else [])
-    text = "; ".join(i["detail"] for i in shown[:3]) + (f" (+{len(shown) - 3} more)" if len(shown) > 3 else "")
+    text = "; ".join(i["detail"] for i in shown[:3])
+    if len(shown) > 3:
+        text += f" (+{len(shown) - 3} more)"
     share = n_pass / len(items)
     row.update(measured=share, n=len(items), status=status, pass_share=share, shortfall=1.0 - share,
                score=1.0 - share, worst=fails[:WORST_N],
@@ -294,8 +303,77 @@ def _collect(ms: list[dict[str, Any]], kind: str, multi_only: bool = False) -> t
         if multi_only and not m.get("multi_room"):
             continue
         recs += [r for r in m["records"] if r["kind"] == kind]
-        miss += [{**x, "capture": m["capture"], "property": m["property"]} for x in m["missing"] if x["kind"] == kind]
+        miss += [{**x, "capture": m["capture"], "property": m["property"]} for x in m["missing"]
+                 if x["kind"] == kind]
     return recs, miss
+
+
+def _ceiling_rows(tier: str, spec: dict[str, Any], ms: list[dict[str, Any]], repeat: dict[str, Any] | None
+                  ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Ceiling accuracy (every room) and spread across repeat captures (every repeated room)."""
+    acc = error_gate("ceiling_height", tier, spec, *_collect(ms, "ceiling_height"), "in every room")
+    lim = num(spec.get("repeat_spread_abs"))
+    items = [_ref({"item": c["room"], "capture": ",".join(c["captures"]), "property": c["property"]},
+                  spread=c["spread"], detail=f"{c['property']}/{c['room']}: spread {_cm(c['spread'])} over "
+                                             f"{len(c['values'])} captures",
+                  **{"pass": lim is None or c["spread"] <= lim + 1e-12})
+             for c in (repeat or {}).get("ceiling", []) if c["tier"] == tier]
+    sp = check_gate("ceiling_spread", tier, f"max - min across captures <= {_cm(lim or 0.0)} per room", items)
+    if items:
+        worst = max(items, key=lambda i: i["spread"])
+        sp["measured"] = worst["spread"]
+        if sp["status"] == "fail" and lim:
+            sp["shortfall"] = worst["spread"] / lim
+            sp["score"] = worst["spread"] / lim - 1.0
+    acc["mode"] = ceiling_mode(acc["status"], sp["status"])
+    return acc, sp
+
+
+def _repeat_rows(tier: str, spec: dict[str, Any], repeat: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Wall agreement between repeat captures, and whether they found the same walls and openings."""
+    items = []
+    for w in (repeat or {}).get("walls", []):
+        if w["tier"] != tier:
+            continue
+        pair = " vs ".join(w["captures"])
+        items.append(_ref({"item": f"{w['room']}/{w['wall']}", "capture": pair, "property": w["property"]},
+                          delta=w["delta"], allowed=w["allowed"], strict_pass=w["strict_pass"],
+                          detail=f"{w['property']}/{w['room']}/{w['wall']} {pair}: |delta| {_cm(w['delta'])} "
+                                 f"(allowed {_cm(w['allowed'])})", **{"pass": w["pass"]}))
+    limit = f"{spec.get('rule', 'max')}({_cm(num(spec.get('abs')) or 0.0)}, {_pct(num(spec.get('rel')))})"
+    row = check_gate("repeatability", tier, f"|delta| <= {limit} per wall between captures", items,
+                     assumed=bool(spec.get("assumed")))
+    if items:
+        worst = max(items, key=lambda i: i["delta"] / i["allowed"] if i["allowed"] else math.inf)
+        strict = sum(i["strict_pass"] for i in items)
+        row["measured"] = worst["delta"] / worst["allowed"] if worst["allowed"] else None
+        row["measured_text"] = (f"{sum(i['pass'] for i in items)}/{len(items)} walls pass, strict reading "
+                                f"{strict}/{len(items)}; worst {worst['detail']}")
+        row["strict_pass_share"] = strict / len(items)
+        if row["status"] == "fail" and row["measured"] is not None:
+            row["shortfall"] = row["measured"]
+            row["score"] = row["measured"] - 1.0
+    same = []
+    for st in (repeat or {}).get("structure", []):
+        if st["tier"] != tier:
+            continue
+        pair = " vs ".join(st["captures"])
+        counts = f"walls {'/'.join(map(str, st['n_walls']))}, openings {'/'.join(map(str, st['n_openings']))}"
+        same.append(_ref({"item": st["room"], "capture": pair, "property": st["property"]},
+                         detail=f"{st['property']}/{st['room']} {pair}: {counts}",
+                         **{"pass": st["same_walls"] and st["same_openings"]}))
+    structure = check_gate("repeat_structure", tier, "repeat captures find the same walls and openings "
+                           "in each room", same, pass_details=False)
+    return [row, structure]
+
+
+def _produced_row(tier: str, ms: list[dict[str, Any]]) -> dict[str, Any]:
+    items = [_ref({"item": m["capture"], "capture": m["capture"], "property": m["property"]},
+                  detail=f"{m['property']}/{m['capture']}: {m['status']}"
+                         + (f" ({m['error']})" if m.get("error") else ""), **{"pass": m["status"] == "ok"})
+             for m in ms]
+    return check_gate("result_produced", tier, "every capture returns a scored result", items,
+                      pass_details=False)
 
 
 def evaluate(metrics: list[dict[str, Any]], repeat: dict[str, Any] | None, ablation: dict[str, Any] | None,
@@ -303,88 +381,37 @@ def evaluate(metrics: list[dict[str, Any]], repeat: dict[str, Any] | None, ablat
     """All gate rows per tier, the calibration table, the ceiling failure mode and the ranked failures."""
     level = num(cfg.get("interval_level")) or 0.9
     cal_cfg = cfg.get("calibration") or {}
-    all_records = [r for m in metrics for r in m["records"]]
-    cal = calibration(all_records, level=level, ci=num(cal_cfg.get("ci")) or 0.95,
+    cal = calibration([r for m in metrics for r in m["records"]], level=level,
+                      ci=num(cal_cfg.get("ci")) or 0.95,
                       ratio=num(cal_cfg.get("confident_garbage_ratio")) or 2.0)
     rows: list[dict[str, Any]] = []
     modes: dict[str, str] = {}
-    tiers = [t for t in TIERS if t in (cfg.get("tiers") or {})] + sorted(
-        t for t in (cfg.get("tiers") or {}) if t not in TIERS)
-    for tier in tiers:
-        tcfg = (cfg.get("tiers") or {}).get(tier) or {}
+    tier_cfg = cfg.get("tiers") or {}
+    for tier in [t for t in TIERS if t in tier_cfg] + sorted(t for t in tier_cfg if t not in TIERS):
+        tcfg = tier_cfg.get(tier) or {}
         ms = _tier_metrics(metrics, tier)
-        rows.append(check_gate("result_produced", tier, "every capture returns a scored result",
-                               [{"item": m["capture"], "capture": m["capture"], "property": m["property"],
-                                 "pass": m["status"] == "ok",
-                                 "detail": f"{m['property']}/{m['capture']}: {m['status']}"
-                                           + (f" ({m['error']})" if m.get("error") else "")} for m in ms],
-                               pass_details=False))
+        rows.append(_produced_row(tier, ms))
         if "wall_length" in tcfg:
             rows.append(error_gate("wall_length", tier, tcfg["wall_length"], *_collect(ms, "wall_length"),
                                    "on every wall"))
         if "ceiling_height" in tcfg:
-            spec = tcfg["ceiling_height"]
-            acc = error_gate("ceiling_height", tier, spec, *_collect(ms, "ceiling_height"), "in every room")
-            rows.append(acc)
-            lim = num(spec.get("repeat_spread_abs"))
-            spread_items = [{"item": c["room"], "capture": ",".join(c["captures"]), "property": c["property"],
-                             "spread": c["spread"], "pass": lim is None or c["spread"] <= lim + 1e-12,
-                             "detail": f"{c['property']}/{c['room']}: spread {_cm(c['spread'])} over "
-                                       f"{len(c['values'])} captures"}
-                            for c in (repeat or {}).get("ceiling", []) if c["tier"] == tier]
-            sp = check_gate("ceiling_spread", tier, f"max - min across captures <= {_cm(lim or 0.0)} per room",
-                            spread_items)
-            if spread_items:
-                worst = max(spread_items, key=lambda i: i["spread"])
-                sp["measured"] = worst["spread"]
-                if sp["status"] == "fail" and lim:
-                    sp["shortfall"] = worst["spread"] / lim
-                    sp["score"] = worst["spread"] / lim - 1.0
-            rows.append(sp)
-            modes[tier] = ceiling_mode(acc["status"], sp["status"])
-            acc["mode"] = modes[tier]
+            acc, spread = _ceiling_rows(tier, tcfg["ceiling_height"], ms, repeat)
+            rows += [acc, spread]
+            modes[tier] = acc["mode"]
         if "opening_width" in tcfg:
-            recs, miss = _collect(ms, "opening_width")
             phantoms = [{"item": f"{i['pred']}", "capture": m["capture"], "property": m["property"]}
                         for m in ms for i in m["openings"]["items"] if i["status"] == "phantom"]
-            rows.append(opening_gate(tier, tcfg["opening_width"], recs, miss, phantoms))
+            rows.append(opening_gate(tier, tcfg["opening_width"], *_collect(ms, "opening_width"), phantoms))
         if "floor_area" in tcfg:
             rows.append(error_gate("floor_area", tier, tcfg["floor_area"], *_collect(ms, "floor_area"),
                                    "in every room"))
         if "footprint" in tcfg:
-            rows.append(error_gate("footprint", tier, tcfg["footprint"], *_collect(ms, "footprint", multi_only=True),
-                                   "per multi-room capture"))
+            rows.append(error_gate("footprint", tier, tcfg["footprint"],
+                                   *_collect(ms, "footprint", multi_only=True), "per multi-room capture"))
         if "stitch" in tcfg:
             rows.append(stitch_gate(tier, tcfg["stitch"], (tcfg.get("footprint") or {}), ms))
         if "repeatability" in tcfg:
-            spec = tcfg["repeatability"]
-            items = [{"item": f"{w['room']}/{w['wall']}", "capture": " vs ".join(w["captures"]),
-                      "property": w["property"], "delta": w["delta"], "allowed": w["allowed"], "pass": w["pass"],
-                      "strict_pass": w["strict_pass"],
-                      "detail": f"{w['property']}/{w['room']}/{w['wall']} {' vs '.join(w['captures'])}: "
-                                f"|delta| {_cm(w['delta'])} (allowed {_cm(w['allowed'])})"}
-                     for w in (repeat or {}).get("walls", []) if w["tier"] == tier]
-            row = check_gate("repeatability", tier, f"|delta| <= {spec.get('rule', 'max')}("
-                             f"{_cm(num(spec.get('abs')) or 0.0)}, {_pct(num(spec.get('rel')))}) per wall between "
-                             "captures", items, assumed=bool(spec.get("assumed")))
-            if items:
-                worst = max(items, key=lambda i: i["delta"] / i["allowed"] if i["allowed"] else math.inf)
-                strict = sum(i["strict_pass"] for i in items)
-                row["measured"] = worst["delta"] / worst["allowed"] if worst["allowed"] else None
-                row["measured_text"] = (f"{sum(i['pass'] for i in items)}/{len(items)} walls pass, strict reading "
-                                        f"{strict}/{len(items)}; worst {worst['detail']}")
-                row["strict_pass_share"] = strict / len(items)
-                if row["status"] == "fail" and row["measured"] is not None:
-                    row["shortfall"] = row["measured"]
-                    row["score"] = row["measured"] - 1.0
-            rows.append(row)
-            same = [{"item": s["room"], "capture": " vs ".join(s["captures"]), "property": s["property"],
-                     "pass": s["same_walls"] and s["same_openings"],
-                     "detail": f"{s['property']}/{s['room']} {' vs '.join(s['captures'])}: walls "
-                               f"{'/'.join(map(str, s['n_walls']))}, openings {'/'.join(map(str, s['n_openings']))}"}
-                    for s in (repeat or {}).get("structure", []) if s["tier"] == tier]
-            rows.append(check_gate("repeat_structure", tier, "repeat captures find the same walls and openings "
-                                   "in each room", same, pass_details=False))
+            rows += _repeat_rows(tier, tcfg["repeatability"], repeat)
         if "drift_ablation" in tcfg:
             rows.append(drift_gate(tier, tcfg["drift_ablation"], ms, ablation))
         rows += calibration_rows(tier, cal.get(tier), cal_cfg, level)
@@ -398,10 +425,9 @@ def evaluate(metrics: list[dict[str, Any]], repeat: dict[str, Any] | None, ablat
         if not ms and row["status"] == "n.a.":
             row["measured_text"] = "no captures in this tier"
     ranked = sorted((r for r in rows if r["status"] == "fail"), key=lambda r: -r["score"])
-    return {"rows": rows, "ranked_failures": [{"gate": r["gate"], "tier": r["tier"], "score": r["score"],
-                                               "shortfall": r["shortfall"], "measured_text": r["measured_text"],
-                                               "threshold": r["threshold"]} for r in ranked],
-            "calibration": cal, "ceiling_mode": modes, "config": cfg.get("_path")}
+    keys = ("gate", "tier", "score", "shortfall", "measured_text", "threshold")
+    return {"rows": rows, "ranked_failures": [{k: r[k] for k in keys} for r in ranked], "calibration": cal,
+            "ceiling_mode": modes, "config": cfg.get("_path")}
 
 
 def _synthetic_label(ms: list[dict[str, Any]]) -> str:
@@ -421,7 +447,8 @@ def ceiling_mode(accuracy: str, spread: str) -> str:
     return "bias" if bad_bias else ("spread" if bad_spread else "none")
 
 
-def stitch_gate(tier: str, spec: dict[str, Any], fp_spec: dict[str, Any], ms: list[dict[str, Any]]) -> dict[str, Any]:
+def stitch_gate(tier: str, spec: dict[str, Any], fp_spec: dict[str, Any],
+                ms: list[dict[str, Any]]) -> dict[str, Any]:
     max_ov = num(spec.get("max_overlap_m2"))
     fp_rel = num(fp_spec.get("rel")) or FOOTPRINT_DEFAULT
     items = []
@@ -430,8 +457,8 @@ def stitch_gate(tier: str, spec: dict[str, Any], fp_spec: dict[str, Any], ms: li
             continue
         name = f"{m['property']}/{m['capture']}"
         if m["status"] != "ok":
-            items.append({"item": m["capture"], "capture": m["capture"], "property": m["property"], "pass": False,
-                          "detail": f"{name}: {m['status']}"})
+            items.append(_ref({"item": m["capture"], **m}, detail=f"{name}: {m['status']}",
+                              **{"pass": False}))
             continue
         adj = m.get("adjacency") or {}
         ov = (m.get("overlap") or {}).get("max_m2", 0.0)
@@ -443,8 +470,8 @@ def stitch_gate(tier: str, spec: dict[str, Any], fp_spec: dict[str, Any], ms: li
                 parts.append("GT adjacency unknown")
             elif not adj["exact"]:
                 ok = False
-                parts.append(f"adjacency missing {adj.get('missing')} extra {adj.get('extra')}"
-                             + (f" unmatched {adj.get('unmatched_rooms')}" if adj.get("unmatched_rooms") else ""))
+                unmatched = f" unmatched {adj['unmatched_rooms']}" if adj.get("unmatched_rooms") else ""
+                parts.append(f"adjacency missing {adj.get('missing')} extra {adj.get('extra')}{unmatched}")
             else:
                 k = len(adj.get("gt") or [])
                 parts.append(f"adjacency exact ({k} pair{'' if k == 1 else 's'})")
@@ -486,10 +513,9 @@ def drift_gate(tier: str, spec: dict[str, Any], ms: list[dict[str, Any]], ablati
         else:
             on, off = e["on"]["footprint_rel_err"], e["off"]["footprint_rel_err"]
             detail = f"{name}: footprint err on {_pct(on)}, off {_pct(off)}"
-        items.append({"item": m["capture"], "capture": m["capture"], "property": m["property"], "pass": ok,
-                      "detail": detail})
-    row = check_gate("drift_ablation", tier, "drift correction on for every multi-room capture, with an off run "
-                     "for the ablation", items, assumed=bool(spec.get("assumed")))
+        items.append(_ref({"item": m["capture"], **m}, detail=detail, **{"pass": ok}))
+    row = check_gate("drift_ablation", tier, "drift correction on for every multi-room capture, with an off "
+                     "run for the ablation", items, assumed=bool(spec.get("assumed")))
     if not spec.get("required", True) and row["status"] == "fail":
         row["status"] = "n.a."
     return row
@@ -512,7 +538,8 @@ def h2h_gate(tier: str, h2h: dict[str, Any], cfg: dict[str, Any]) -> dict[str, A
                "pass": False, "ours_err": d["ours_err"], "theirs_err": d["theirs_err"],
                **({"reason": "not reported by our capture"} if d["ours_err"] is None else {})}
               for d in dims if not d["beat_or_tie"]]
-    row.update(measured=share, n=len(dims), status=status, pass_share=share, shortfall=max(target - share, 0.0),
+    row.update(measured=share, n=len(dims), status=status, pass_share=share,
+               shortfall=max(target - share, 0.0),
                score=(target - share) / target if status == "fail" else 0.0, worst=losses[:WORST_N],
                measured_text=f"{k}/{len(dims)} dimensions beat or tie ({_pct(share)}) over "
                              f"{', '.join(sorted({c['capture'] for c in comps}))}")

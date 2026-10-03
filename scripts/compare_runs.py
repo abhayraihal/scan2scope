@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Before/after gate table for the fix loop, and a diff.md with the gate changes and the git diff between refs.
+"""Before/after gate table for the fix loop, and a diff.md with the gate changes and the git diff.
 
 usage: scripts/compare_runs.py BEFORE_DIR AFTER_DIR [--before-ref REF] [--after-ref REF] [--repo PATH]
                                [--out PATH] [--rescored]
@@ -17,8 +17,8 @@ import sys
 from pathlib import Path
 
 TIER_ORDER = {"photo": 0, "video": 1, "lidar": 2}
-RESCORED_NOTE = ("The harness or gates differ between the refs, so both runs were scored with the after ref's "
-                 "harness and gates; only the pipeline differs between the two columns.")
+RESCORED_NOTE = ("The harness or gates differ between the refs, so both runs were scored with the after "
+                 "ref's harness and gates; only the pipeline differs between the two columns.")
 
 
 def load(run_dir: Path) -> dict:
@@ -53,7 +53,8 @@ def rows(before: dict, after: dict) -> list[dict]:
         rb, ra = b.get(key), a.get(key)
         out.append({"tier": key[0], "gate": key[1], "before": rb["status"] if rb else "absent",
                     "after": ra["status"] if ra else "absent", "change": change(rb, ra),
-                    "before_measured": rb["measured_text"] if rb else "", "after_measured": ra["measured_text"] if ra else "",
+                    "before_measured": rb["measured_text"] if rb else "",
+                    "after_measured": ra["measured_text"] if ra else "",
                     "threshold": (ra or rb)["threshold"]})
     return out
 
@@ -72,7 +73,7 @@ def esc(s: str) -> str:
 
 def text_table(table: list[dict]) -> str:
     cols = ["tier", "gate", "before", "after", "change"]
-    width = {c: max(len(c), *(len(str(r[c])) for r in table)) for c in cols} if table else {c: len(c) for c in cols}
+    width = {c: max([len(c)] + [len(str(r[c])) for r in table]) for c in cols}
     lines = ["  ".join(c.ljust(width[c]) for c in cols), "  ".join("-" * width[c] for c in cols)]
     lines += ["  ".join(str(r[c]).ljust(width[c]) for c in cols) for r in table]
     return "\n".join(lines)
@@ -89,9 +90,8 @@ def markdown(table: list[dict], before: dict, after: dict, args: argparse.Namesp
     worst = (before.get("ranked_failures") or [None])[0]
     if worst:
         a = next((r for r in table if r["tier"] == worst["tier"] and r["gate"] == worst["gate"]), None)
-        out += ["## Worst gate before the fix", "",
-                f"{worst['tier']} {worst['gate']}: {worst['measured_text']} (threshold: {worst['threshold']}).",
-                ""]
+        line = f"{worst['tier']} {worst['gate']}: {worst['measured_text']} (threshold: {worst['threshold']})."
+        out += ["## Worst gate before the fix", "", line, ""]
         if a:
             out += [f"After: {a['after']}, {a['after_measured']} ({a['change']}).", ""]
     counts: dict[str, int] = {}
@@ -100,12 +100,13 @@ def markdown(table: list[dict], before: dict, after: dict, args: argparse.Namesp
     out += ["## Gates", "", ", ".join(f"{k}: {v}" for k, v in sorted(counts.items())), ""]
     out += ["| Tier | Gate | Before | After | Change | Measured before | Measured after | Threshold |",
             "|---|---|---|---|---|---|---|---|"]
-    out += [f"| {r['tier']} | {r['gate']} | {r['before']} | {r['after']} | {r['change']} | {esc(r['before_measured'])} "
-            f"| {esc(r['after_measured'])} | {esc(r['threshold'])} |" for r in table]
+    out += [f"| {r['tier']} | {r['gate']} | {r['before']} | {r['after']} | {r['change']} | "
+            f"{esc(r['before_measured'])} | {esc(r['after_measured'])} | {esc(r['threshold'])} |"
+            for r in table]
     out.append("")
     if args.before_ref and args.after_ref:
-        out += ["## Changed files", "", "```", git(repo, "diff", "--stat", args.before_ref, args.after_ref).rstrip(),
-                "```", "", "## Source diff (src/)", "", "```diff",
+        stat = git(repo, "diff", "--stat", args.before_ref, args.after_ref).rstrip()
+        out += ["## Changed files", "", "```", stat, "```", "", "## Source diff (src/)", "", "```diff",
                 git(repo, "diff", args.before_ref, args.after_ref, "--", "src").rstrip(), "```", ""]
     return "\n".join(out)
 
@@ -118,7 +119,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--after-ref")
     p.add_argument("--repo", default=".")
     p.add_argument("--out", type=Path)
-    p.add_argument("--rescored", action="store_true", help="both runs were scored with the after ref's harness")
+    p.add_argument("--rescored", action="store_true",
+                   help="both runs were scored with the after ref's harness")
     args = p.parse_args(argv)
     before, after = load(args.before), load(args.after)
     table = rows(before, after)

@@ -2,9 +2,10 @@
 
 Inputs under bench/data/<property>/magicplan/:
 
-  statistics.csv   the magicplan Statistics export: one row per room with floor area, perimeter and wall height.
-                   Parsed defensively: delimiter sniffed, header row searched, units read from the header or the
-                   cells (m, cm, m2, ft, sq ft, feet-inches), decimal commas accepted; the columns found are reported.
+  statistics.csv   the magicplan Statistics export: one row per room with floor area, perimeter and wall
+                   height. Parsed defensively: header row searched, delimiter taken from it, units read
+                   from the header or the cells (m, cm, m2, ft, sq ft, feet-inches), decimal commas
+                   accepted; the columns found are reported.
   dimensions.yaml  wall lengths and opening widths transcribed from the magicplan Sketch PDF, keyed to GT ids:
 
       app: magicplan
@@ -17,8 +18,8 @@ Inputs under bench/data/<property>/magicplan/:
           openings: {D1: 0.80}
           ceiling_height: 2.40          # optional; otherwise the CSV wall height is used
 
-Tie rule: ours beats or ties when |ours - gt| <= |theirs - gt| + 0.003 m for lengths, or when our relative error
-is within 0.2 percentage points of theirs for areas.
+Tie rule: ours beats or ties when |ours - gt| <= |theirs - gt| + 0.003 m for lengths, or when our relative
+error is within 0.2 percentage points of theirs for areas.
 """
 
 from __future__ import annotations
@@ -90,7 +91,10 @@ def parse_quantity(cell: Any, kind: str, header_unit: str | None = None) -> floa
     if raw.count(",") == 1 and raw.count(".") == 0:
         raw = raw.replace(",", ".")
     elif raw.count(",") and raw.count("."):
-        raw = raw.replace(",", "") if raw.rfind(".") > raw.rfind(",") else raw.replace(".", "").replace(",", ".")
+        if raw.rfind(".") > raw.rfind(","):
+            raw = raw.replace(",", "")
+        else:
+            raw = raw.replace(".", "").replace(",", ".")
     v = num(raw)
     if v is None:
         return None
@@ -117,9 +121,10 @@ def _pick(headers: list[str], include: list[str], exclude: list[str], prefer: li
 
 
 def parse_statistics(path: str | Path) -> dict[str, Any]:
-    """Rows {name, floor_area, perimeter, wall_height} from a magicplan Statistics CSV, with what was found."""
+    """Rows {name, floor_area, perimeter, wall_height} from a magicplan Statistics CSV and what was found."""
     path = Path(path)
-    out: dict[str, Any] = {"path": str(path), "columns": [], "mapping": {}, "units": {}, "rows": [], "flags": []}
+    out: dict[str, Any] = {"path": str(path), "columns": [], "mapping": {}, "units": {}, "rows": [],
+                           "flags": []}
     try:
         text = path.read_text(encoding="utf-8-sig", errors="replace")
     except OSError as exc:
@@ -134,8 +139,9 @@ def parse_statistics(path: str | Path) -> dict[str, Any]:
     header_at = None
     for k, r in enumerate(rows):
         cells = [_clean_header(c) for c in r]
-        if any(c in ("room", "name", "room name", "space", "label") or c.startswith("room") for c in cells) and \
-                any("area" in c or "surface" in c for c in cells):
+        has_name = any(c in ("room", "name", "room name", "space", "label") or c.startswith("room")
+                       for c in cells)
+        if has_name and any("area" in c or "surface" in c for c in cells):
             header_at = k
             break
     if header_at is None:
@@ -176,7 +182,8 @@ def _value_map(x: Any, kind: str = "length") -> dict[str, float]:
     if isinstance(x, dict):
         items = x.items()
     elif isinstance(x, list):
-        items = [(str(e.get("id")), e.get("length", e.get("width", e.get("value")))) for e in x if isinstance(e, dict)]
+        items = [(str(e.get("id")), e.get("length", e.get("width", e.get("value"))))
+                 for e in x if isinstance(e, dict)]
     else:
         return {}
     out = {}
@@ -226,7 +233,7 @@ def beat_or_tie(ours: float, theirs: float, gt: float, kind: str) -> bool:
 
 def _their_rooms(gt: GroundTruth, stats: dict[str, Any] | None, dims: dict[str, Any] | None
                  ) -> tuple[dict[str, dict[str, Any]], list[str]]:
-    """GT room id -> magicplan numbers, from dimensions.yaml and the CSV rows it names (or that match by name)."""
+    """GT room id -> magicplan numbers from dimensions.yaml and the CSV rows it names or matches."""
     flags: list[str] = []
     rooms: dict[str, dict[str, Any]] = {}
     gt_ids = {r.id for r in gt.rooms}
@@ -260,7 +267,8 @@ def _their_rooms(gt: GroundTruth, stats: dict[str, Any] | None, dims: dict[str, 
         e = rooms.setdefault(rid, {"name": row["name"], "walls": {}, "openings": {}, "ceiling_height": None,
                                    "floor_area": None, "perimeter": None})
         e["csv_row"] = row["name"]
-        for key, src in (("floor_area", "floor_area"), ("perimeter", "perimeter"), ("ceiling_height", "wall_height")):
+        for key, src in (("floor_area", "floor_area"), ("perimeter", "perimeter"),
+                         ("ceiling_height", "wall_height")):
             if e.get(key) is None and row.get(src) is not None:
                 e[key] = row[src]
     return rooms, flags
@@ -269,12 +277,13 @@ def _their_rooms(gt: GroundTruth, stats: dict[str, Any] | None, dims: dict[str, 
 def compare_capture(gt: GroundTruth, m: dict[str, Any], theirs: dict[str, dict[str, Any]]) -> dict[str, Any]:
     """Dimension-by-dimension table for one of our captures against magicplan.
 
-    A dimension counts when the GT and magicplan both have it. If our capture covers the room but did not report
-    the dimension (room, wall or opening not found), it counts as a loss.
+    A dimension counts when the GT and magicplan both have it. If our capture covers the room but did not
+    report the dimension (room, wall or opening not found), it counts as a loss.
     """
     dims = []
 
-    def add(room: str, dimension: str, kind: str, g: float | None, ours: float | None, th: float | None) -> None:
+    def add(room: str, dimension: str, kind: str, g: float | None, ours: float | None,
+            th: float | None) -> None:
         if g is None or th is None or g <= 0:
             return
         dims.append({"property": gt.property, "capture": m["capture"], "tier": m["tier"], "room": room,
@@ -295,18 +304,19 @@ def compare_capture(gt: GroundTruth, m: dict[str, Any], theirs: dict[str, dict[s
         for o in room.openings:
             ours_w = ((idx["openings"].get(o.id) or {}).get("width") or {}).get("pred")
             add(rid, f"{o.id} width", "length", o.width, ours_w, t["openings"].get(o.id))
-        add(rid, "floor area", "area", room.floor_area, (idx.get("floor_area") or {}).get("pred"), t.get("floor_area"))
-        add(rid, "perimeter", "length", room.perimeter, (idx.get("perimeter") or {}).get("pred"), t.get("perimeter"))
-        add(rid, "ceiling height", "length", room.ceiling_height, (idx.get("ceiling_height") or {}).get("pred"),
-            t.get("ceiling_height"))
+        for dim, kind, key, g in (("floor area", "area", "floor_area", room.floor_area),
+                                  ("perimeter", "length", "perimeter", room.perimeter),
+                                  ("ceiling height", "length", "ceiling_height", room.ceiling_height)):
+            add(rid, dim, kind, g, (idx.get(key) or {}).get("pred"), t.get(key))
     k = sum(d["beat_or_tie"] for d in dims)
-    return {"property": gt.property, "capture": m["capture"], "tier": m["tier"], "synthetic": m.get("synthetic"),
-            "dimensions": dims, "n": len(dims), "beat_or_tie": k, "share": k / len(dims) if dims else None}
+    return {"property": gt.property, "capture": m["capture"], "tier": m["tier"],
+            "synthetic": m.get("synthetic"), "dimensions": dims, "n": len(dims), "beat_or_tie": k,
+            "share": k / len(dims) if dims else None}
 
 
 def head_to_head(gt: GroundTruth, metrics: list[dict[str, Any]], folder: str | Path | None = None
                  ) -> dict[str, Any] | None:
-    """Comparisons of every scored capture of this property that covers a magicplan room, or None without data."""
+    """Comparisons for each scored capture of this property covering a magicplan room; None without data."""
     folder = Path(folder) if folder is not None else gt.root / "magicplan"
     csv_path, dims_path = folder / "statistics.csv", folder / "dimensions.yaml"
     if not csv_path.is_file() and not dims_path.is_file():
@@ -322,8 +332,9 @@ def head_to_head(gt: GroundTruth, metrics: list[dict[str, Any]], folder: str | P
     comps = [compare_capture(gt, m, theirs) for m in metrics
              if m["property"] == gt.property and m["status"] == "ok"]
     comps = [c for c in comps if c["n"]]
-    return {"property": gt.property, "app": (dims or {}).get("app", "magicplan"), "version": (dims or {}).get("version"),
-            "mode": (dims or {}).get("mode"), "columns_found": (stats or {}).get("columns", []),
+    d = dims or {}
+    return {"property": gt.property, "app": d.get("app", "magicplan"), "version": d.get("version"),
+            "mode": d.get("mode"), "columns_found": (stats or {}).get("columns", []),
             "column_mapping": (stats or {}).get("mapping", {}), "units": (stats or {}).get("units", {}),
             "rooms": theirs, "comparisons": comps, "flags": flags}
 
@@ -334,4 +345,5 @@ def merge(results: list[dict[str, Any] | None]) -> dict[str, Any] | None:
     if not results:
         return None
     return {"comparisons": [c for r in results for c in r["comparisons"]],
-            "by_property": {r["property"]: {k: v for k, v in r.items() if k != "comparisons"} for r in results}}
+            "by_property": {r["property"]: {k: v for k, v in r.items() if k != "comparisons"}
+                            for r in results}}

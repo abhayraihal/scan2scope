@@ -133,8 +133,8 @@ class WallAlignment:
     extra: list[int]  # predicted wall indices without a GT wall
     cost: float
     ties: int = 1  # candidates within the length tolerance of the best
-    ambiguous: bool = False  # another tied candidate with a different assignment lines the openings up as well
-    mirrored: bool = False  # GT offsets read from the right end (a measuring slip); set only when it matches more
+    ambiguous: bool = False  # another tied candidate with a different assignment fits the openings as well
+    mirrored: bool = False  # GT offsets read from the right end (a measuring slip), used when it matches more
 
 
 @dataclass
@@ -211,7 +211,8 @@ def _from_end(orientation: str, mirrored: bool) -> bool:
     return (orientation == "reversed") != mirrored
 
 
-def gt_center_ours(op: GTOpening, gt_len: float | None, orientation: str, mirrored: bool = False) -> float | None:
+def gt_center_ours(op: GTOpening, gt_len: float | None, orientation: str,
+                   mirrored: bool = False) -> float | None:
     """GT opening centre as a distance from the start of our wall."""
     c = op.center
     if c is None:
@@ -223,7 +224,7 @@ def gt_center_ours(op: GTOpening, gt_len: float | None, orientation: str, mirror
 
 def gt_span_ours(start: float | None, width: float | None, gt_len: float | None, orientation: str,
                  mirrored: bool = False) -> tuple[float, float] | None:
-    """GT span [start, start + width] measured from the wall's left end, as a range from the start of our wall."""
+    """GT span [start, start + width] from the wall's left end, as a range from the start of our wall."""
     if start is None or width is None:
         return None
     if _from_end(orientation, mirrored):
@@ -242,7 +243,7 @@ def pred_center(op: dict[str, Any]) -> float | None:
 
 def _dp_align(g: list[float | None], q: list[float | None], skip_g: list[float], skip_q: list[float]
               ) -> tuple[float, list[tuple[int, int]]]:
-    """Order-preserving alignment of two wall sequences with gaps; cost = summed |length difference| + gaps."""
+    """Order-preserving alignment of two wall sequences with gaps; cost = sum |length difference| + gaps."""
     m, n = len(g), len(q)
     D = np.full((m + 1, n + 1), np.inf)
     back = np.zeros((m + 1, n + 1), dtype=int)
@@ -337,8 +338,9 @@ def match_openings(gt_room: GTRoom, pred: PredRoom, walls: WallAlignment) -> lis
                 g, p = gops[a], cands[b]
                 cg = gt_center_ours(g, gt_len, walls.orientation, walls.mirrored)
                 cp = pred_center(p)
-                out.append(OpeningMatch("matched", g.id, str(p.get("id")), g.wall, str(p.get("wall_id")), g.type,
-                                        str(p.get("type")), None if cg is None or cp is None else cp - cg))
+                err = None if cg is None or cp is None else cp - cg
+                out.append(OpeningMatch("matched", g.id, str(p.get("id")), g.wall, str(p.get("wall_id")),
+                                        g.type, str(p.get("type")), err))
                 used.add(id(p))
                 done.add(a)
         for a, g in enumerate(gops):
@@ -367,11 +369,13 @@ def align_walls(gt_room: GTRoom, pred: PredRoom) -> tuple[WallAlignment, list[Op
     scored = []
     for c in tied:
         ops = match_openings(gt_room, pred, c)
-        scored.append(((*_opening_score(ops), round(c.cost, 6), c.orientation != "reversed", c.shift), c, ops))
+        key = (*_opening_score(ops), round(c.cost, 6), c.orientation != "reversed", c.shift)
+        scored.append((key, c, ops))
     scored.sort(key=lambda t: t[0])
     _, best, ops = scored[0]
     best.ties = len(tied)
-    best.ambiguous = any(k[:2] == scored[0][0][:2] and set(c.pairs) != set(best.pairs) for k, c, _ in scored[1:])
+    best.ambiguous = any(k[:2] == scored[0][0][:2] and set(c.pairs) != set(best.pairs)
+                         for k, c, _ in scored[1:])
     if any(o.status == "missed" for o in ops):
         alt = dataclasses.replace(best, mirrored=True)
         alt_ops = match_openings(gt_room, pred, alt)
@@ -397,7 +401,8 @@ def _unary(p: PredRoom, g: GTRoom) -> float:
     return cost + (ASPECT_WEIGHT * aspect if aspect is not None else 0.0)
 
 
-def _inconsistency(p: int, g: int, assign: dict[int, int], pred_nb: list[set[int]], gt_nb: list[set[int]]) -> float:
+def _inconsistency(p: int, g: int, assign: dict[int, int], pred_nb: list[set[int]],
+                   gt_nb: list[set[int]]) -> float:
     """Share of p's matched neighbours that do not land on g's GT neighbours, and the converse."""
     inv = {gg: pp for pp, gg in assign.items() if pp != p and gg != g}
     others = {pp: gg for pp, gg in assign.items() if pp != p and gg != g}
@@ -442,7 +447,8 @@ def shape_assignment(preds: list[PredRoom], gts: list[GTRoom], pred_pairs: set[f
             gt_nb[gid[b]].add(gid[a])
 
     def objective(assign: dict[int, int]) -> float:
-        return sum(U[p, g] + ADJ_WEIGHT * _inconsistency(p, g, assign, pred_nb, gt_nb) for p, g in assign.items())
+        return sum(U[p, g] + ADJ_WEIGHT * _inconsistency(p, g, assign, pred_nb, gt_nb)
+                   for p, g in assign.items())
 
     assign = _hungarian(U)
     best, best_j = assign, objective(assign)
@@ -467,7 +473,8 @@ def _area_ratio_ok(p: PredRoom, g: GTRoom) -> bool:
 
 
 def match_rooms(gts: list[GTRoom], preds: list[PredRoom], tier: str, gt_pairs: set[frozenset[str]],
-                pred_pairs: set[frozenset[str]]) -> tuple[dict[str, tuple[str, str, float | None]], list[str]]:
+                pred_pairs: set[frozenset[str]]
+                ) -> tuple[dict[str, tuple[str, str, float | None]], list[str]]:
     """GT room id -> (pred room id, method, cost), plus flags."""
     flags: list[str] = []
     out: dict[str, tuple[str, str, float | None]] = {}
@@ -532,7 +539,8 @@ def _box_gap(a: tuple[float, float], b: tuple[float, float]) -> float:
     return max(0.0, max(a[0], b[0]) - min(a[1], b[1]))
 
 
-def match_damage(gt_room: GTRoom, rm: RoomMatch, pred: PredRoom, damage: list[dict[str, Any]]) -> list[DamageMatch]:
+def match_damage(gt_room: GTRoom, rm: RoomMatch, pred: PredRoom,
+                 damage: list[dict[str, Any]]) -> list[DamageMatch]:
     """GT damage of one matched room against the predicted damage on that room's surfaces."""
     mine = [d for d in damage if str(d.get("room_id")) == pred.id]
     gt_len = {w.id: w.length for w in gt_room.walls}
@@ -542,7 +550,8 @@ def match_damage(gt_room: GTRoom, rm: RoomMatch, pred: PredRoom, damage: list[di
     for a, g in enumerate(gt_room.damage):
         sid = gt_surface_ours(gt_room, rm, pred, g.surface)
         on_wall = g.surface not in ("ceiling", "floor")
-        u_gt = gt_span_ours(g.offset, g.width, gt_len.get(g.surface), orientation, mirrored) if on_wall else None
+        u_gt = (gt_span_ours(g.offset, g.width, gt_len.get(g.surface), orientation, mirrored)
+                if on_wall else None)
         v_gt = None if g.bottom is None or g.height is None else (g.bottom, g.bottom + g.height)
         for b, d in enumerate(mine):
             if sid is None or str(d.get("surface_id")) != sid:
@@ -603,8 +612,8 @@ def match_capture(gt: GroundTruth, capture: GTCapture | None, result: dict[str, 
     for g in gts:
         if g.id not in pairs:
             rooms.append(RoomMatch(g.id, None, "unmatched",
-                                   damage=[DamageMatch("missed", d.id, None, g.id, None, d.surface, None, d.cls)
-                                           for d in g.damage]))
+                                   damage=[DamageMatch("missed", d.id, None, g.id, None, d.surface, None,
+                                                       d.cls) for d in g.damage]))
             continue
         pid, method, cost = pairs[g.id]
         walls, ops = align_walls(g, by_id[pid])
@@ -619,8 +628,8 @@ def match_capture(gt: GroundTruth, capture: GTCapture | None, result: dict[str, 
         rooms.append(rm)
     room_map = {r.pred_room: r.gt_room for r in rooms if r.pred_room is not None}
     extra = [p.id for p in preds if p.id not in room_map]
-    extra_ops = [OpeningMatch("phantom", None, str(o.get("id")), None, str(o.get("wall_id")), None, str(o.get("type")))
-                 for p in preds if p.id in extra for o in p.openings]
+    extra_ops = [OpeningMatch("phantom", None, str(o.get("id")), None, str(o.get("wall_id")), None,
+                              str(o.get("type"))) for p in preds if p.id in extra for o in p.openings]
     extra_damage = [DamageMatch("phantom", None, str(d.get("id")), None, str(d.get("room_id")), None,
                                 str(d.get("surface_id")), None, str(d.get("class")))
                     for d in damage if str(d.get("room_id")) not in room_map]

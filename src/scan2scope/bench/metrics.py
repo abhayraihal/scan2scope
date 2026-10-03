@@ -1,9 +1,10 @@
 """Per-capture scores against ground truth, and repeatability across captures of the same property and tier.
 
-A record is one reported number scored against its GT value: kind (wall_length, ceiling_height, opening_width,
-opening_height, floor_area, footprint, damage_area, damage_length), gt, pred, lo, hi, err = pred - gt, rel_err,
-covered (gt inside [lo, hi]), half_width = (hi - lo) / 2, room (a "property/room" unit shared by repeat
-captures, None for the footprint), tier and q (the interval multiplier in force, when the result states it).
+A record is one reported number scored against its GT value: kind (wall_length, ceiling_height,
+opening_width, opening_height, floor_area, footprint, damage_area, damage_length), gt, pred, lo, hi,
+err = pred - gt, rel_err, covered (gt inside [lo, hi]), half_width = (hi - lo) / 2, room (a "property/room"
+unit shared by repeat captures, None for the footprint), tier and q (the interval multiplier in force, when
+the result states it).
 These are the fields scan2scope.uncertainty.calibrate reads.
 
 GT items the capture should have reported but did not (room or wall not found, opening missed, capture failed)
@@ -31,7 +32,8 @@ REPEAT_DEFAULT = {"abs": 0.01, "rel": 0.005, "rule": "max"}
 
 
 def record(kind: str, item: str, gt_value: float, m: Any, *, tier: str, room: str | None, capture: str,
-           prop: str, pred_id: str | None = None, q: float | None = None, **extra: Any) -> dict[str, Any] | None:
+           prop: str, pred_id: str | None = None, q: float | None = None,
+           **extra: Any) -> dict[str, Any] | None:
     t = meas(m)
     if t is None:
         return None
@@ -46,7 +48,8 @@ def record(kind: str, item: str, gt_value: float, m: Any, *, tier: str, room: st
     return rec
 
 
-def _missing(kind: str, item: str, gt_value: float | None, *, room: str | None, reason: str) -> dict[str, Any]:
+def _missing(kind: str, item: str, gt_value: float | None, *, room: str | None,
+             reason: str) -> dict[str, Any]:
     return {"kind": kind, "item": item, "gt": gt_value, "room": room, "reason": reason}
 
 
@@ -62,7 +65,8 @@ def _room_missing(gt: GroundTruth, room: GTRoom, reason: str) -> list[dict[str, 
         out.append(_missing("ceiling_height", room.id, room.ceiling_height, room=u, reason=reason))
     if room.floor_area is not None:
         out.append(_missing("floor_area", room.id, room.floor_area, room=u, reason=reason))
-    out += [_missing("opening_width", f"{room.id}/{o.id}", o.width, room=u, reason=reason) for o in room.openings]
+    out += [_missing("opening_width", f"{room.id}/{o.id}", o.width, room=u, reason=reason)
+            for o in room.openings]
     out += [_missing("damage", f"{room.id}/{d.id}", None, room=u, reason=reason) for d in room.damage]
     return out
 
@@ -77,10 +81,10 @@ def _empty(gt: GroundTruth, capture: GTCapture) -> dict[str, Any]:
         "walls": {"gt": sum(len(r.walls) for r in rooms), "matched": 0, "missed": 0, "extra": 0},
         "openings": {"gt": sum(len(r.openings) for r in rooms), "matched": 0, "missed": 0, "phantom": 0,
                      "phantom_unscored": 0, "type_swaps": 0, "items": []},
-        "damage": {"gt": sum(len(r.damage) for r in rooms), "matched": 0, "class_ok": 0, "missed": 0, "phantom": 0,
-                   "phantom_unscored": 0, "items": []},
-        "adjacency": None, "overlap": None, "drift": None, "timing": None, "q": None, "calibration_status": None,
-        "by_gt": {}, "match": None,
+        "damage": {"gt": sum(len(r.damage) for r in rooms), "matched": 0, "class_ok": 0, "missed": 0,
+                   "phantom": 0, "phantom_unscored": 0, "items": []},
+        "adjacency": None, "overlap": None, "drift": None, "timing": None, "q": None,
+        "calibration_status": None, "by_gt": {}, "match": None,
     }
 
 
@@ -179,7 +183,8 @@ def capture_metrics(gt: GroundTruth, capture: GTCapture, result: dict[str, Any] 
     except Exception as exc:  # a malformed result must not stop the benchmark
         log.exception("scoring %s/%s failed", gt.property, capture.id)
         fresh = _empty(gt, capture)
-        fresh.update(status="failed", error=f"scoring failed: {type(exc).__name__}: {exc}", timing={"run_s": run_s})
+        fresh.update(status="failed", error=f"scoring failed: {type(exc).__name__}: {exc}",
+                     timing={"run_s": run_s})
         return _fail_all(fresh, gt, capture, "scoring_failed")
 
 
@@ -216,7 +221,8 @@ def _score(out: dict[str, Any], gt: GroundTruth, capture: GTCapture, result: dic
             continue
         p: PredRoom = preds[rm.pred_room]
         idx: dict[str, Any] = {"pred_room": p.id, "walls": {}, "openings": {}, "n_walls": len(p.walls),
-                               "n_openings": len(p.openings), "gt_wall_lengths": {w.id: w.length for w in g.walls}}
+                               "n_openings": len(p.openings),
+                               "gt_wall_lengths": {w.id: w.length for w in g.walls}}
         out["rooms"]["matched"] += 1
         for gi, pj in rm.walls.pairs:
             w, pw = g.walls[gi], p.walls[pj]
@@ -228,7 +234,8 @@ def _score(out: dict[str, Any], gt: GroundTruth, capture: GTCapture, result: dic
         for gi in rm.walls.missed:
             w = g.walls[gi]
             if w.length is not None:
-                missing.append(_missing("wall_length", f"{g.id}/{w.id}", w.length, room=unit, reason="wall_not_found"))
+                missing.append(_missing("wall_length", f"{g.id}/{w.id}", w.length, room=unit,
+                                        reason="wall_not_found"))
         out["walls"]["matched"] += len(rm.walls.pairs)
         out["walls"]["missed"] += len(rm.walls.missed)
         out["walls"]["extra"] += len(rm.walls.extra)
@@ -243,13 +250,14 @@ def _score(out: dict[str, Any], gt: GroundTruth, capture: GTCapture, result: dic
         ops_by_id = {str(o.get("id")): o for o in p.openings}
         gt_ops = {o.id: o for o in g.openings}
         for om in rm.openings:
-            item = {"room": g.id, **{k: getattr(om, k) for k in ("status", "gt", "pred", "gt_wall", "pred_wall",
-                                                                 "gt_type", "pred_type", "center_err")}}
+            keys = ("status", "gt", "pred", "gt_wall", "pred_wall", "gt_type", "pred_type", "center_err")
+            item = {"room": g.id, **{k: getattr(om, k) for k in keys}}
             out["openings"]["items"].append(item)
             if om.status == "missed":
                 out["openings"]["missed"] += 1
                 o = gt_ops[om.gt]
-                missing.append(_missing("opening_width", f"{g.id}/{o.id}", o.width, room=unit, reason="opening_missed"))
+                missing.append(_missing("opening_width", f"{g.id}/{o.id}", o.width, room=unit,
+                                        reason="opening_missed"))
                 continue
             if om.status == "phantom":
                 out["openings"]["phantom"] += 1
@@ -260,7 +268,8 @@ def _score(out: dict[str, Any], gt: GroundTruth, capture: GTCapture, result: dic
             o, po = gt_ops[om.gt], ops_by_id[om.pred]
             idx["openings"][o.id] = {"pred_id": om.pred, "width": _mdict(po.get("width")),
                                      "height": _mdict(po.get("height"))}
-            for kind, gval, key in (("opening_width", o.width, "width"), ("opening_height", o.height, "height")):
+            for kind, gval, key in (("opening_width", o.width, "width"),
+                                    ("opening_height", o.height, "height")):
                 if gval is not None:
                     add(record(kind, f"{g.id}/{o.id}", gval, po.get(key), room=unit, pred_id=om.pred,
                                opening_type=o.type, **kw),
@@ -275,12 +284,14 @@ def _score(out: dict[str, Any], gt: GroundTruth, capture: GTCapture, result: dic
     for om in match.extra_openings:
         out["openings"]["phantom" if full else "phantom_unscored"] += 1
         out["openings"]["items"].append({"room": None, "status": "phantom" if full else "phantom_unscored",
-                                         "gt": None, "pred": om.pred, "gt_wall": None, "pred_wall": om.pred_wall,
-                                         "gt_type": None, "pred_type": om.pred_type, "center_err": None})
+                                         "gt": None, "pred": om.pred, "gt_wall": None,
+                                         "pred_wall": om.pred_wall, "gt_type": None,
+                                         "pred_type": om.pred_type, "center_err": None})
     for dm in match.extra_damage:
         out["damage"]["phantom" if full else "phantom_unscored"] += 1
         out["damage"]["items"].append({"room": None, "status": "phantom" if full else "phantom_unscored",
-                                       "gt": None, "pred": dm.pred, "gt_class": None, "pred_class": dm.pred_class})
+                                       "gt": None, "pred": dm.pred, "gt_class": None,
+                                       "pred_class": dm.pred_class})
     fp = gt.footprint(capture)
     prop_d = result.get("property") if isinstance(result.get("property"), dict) else {}
     if fp is not None:
@@ -314,8 +325,8 @@ def _score_damage(out: dict[str, Any], g: GTRoom, rm: Any, result: dict[str, Any
         extra = {"damage_class": d.cls, "class_ok": dm.class_ok}
         if d.cls == "crack":
             if d.length is not None and isinstance(pd.get("length"), dict):
-                rec = record("damage_length", f"{g.id}/{d.id}", d.length, pd["length"], room=unit, pred_id=dm.pred,
-                             **kw, **extra)
+                rec = record("damage_length", f"{g.id}/{d.id}", d.length, pd["length"], room=unit,
+                             pred_id=dm.pred, **kw, **extra)
                 if rec is not None:
                     out["records"].append(rec)
             continue
@@ -345,7 +356,8 @@ def _repeat_threshold(spec: dict[str, Any], length: float, strict: bool = False)
 
 
 def repeatability(metrics: list[dict[str, Any]], cfg: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Wall-by-wall agreement, ceiling spread and structural sameness between captures of one property and tier.
+    """Wall-by-wall agreement, ceiling spread and structural sameness across captures of one property and
+    tier.
 
     Rooms and walls are matched through the GT, so W2 of a room in one capture is compared with W2 of the same
     room in the other. Allowed |delta| is max(1 cm, 0.5% of the GT length) per gates.yaml, and the strict
@@ -378,17 +390,20 @@ def repeatability(metrics: list[dict[str, Any]], cfg: dict[str, Any] | None = No
                                   "captures": [a["capture"], b["capture"]], "values": [va, vb], "gt": L,
                                   "delta": delta, "allowed": allowed, "pass": delta <= allowed + 1e-9,
                                   "strict_allowed": strict, "strict_pass": delta <= strict + 1e-9})
-                structure.append({"property": prop, "tier": tier, "room": rid, "captures": [a["capture"], b["capture"]],
-                                  "n_walls": [A["n_walls"], B["n_walls"]], "n_openings": [A["n_openings"], B["n_openings"]],
-                                  "same_walls": A["n_walls"] == B["n_walls"] and A["matched_walls"] == B["matched_walls"],
-                                  "same_openings": (A["n_openings"] == B["n_openings"]
-                                                    and A["matched_openings"] == B["matched_openings"])})
+                same_walls = A["n_walls"] == B["n_walls"] and A["matched_walls"] == B["matched_walls"]
+                same_ops = (A["n_openings"] == B["n_openings"]
+                            and A["matched_openings"] == B["matched_openings"])
+                structure.append({"property": prop, "tier": tier, "room": rid,
+                                  "captures": [a["capture"], b["capture"]],
+                                  "n_walls": [A["n_walls"], B["n_walls"]],
+                                  "n_openings": [A["n_openings"], B["n_openings"]], "same_walls": same_walls,
+                                  "same_openings": same_ops})
             vals = [(m["capture"], m["by_gt"][rid]["ceiling_height"]["pred"]) for m in have
                     if m["by_gt"][rid].get("ceiling_height")]
             if len(vals) >= 2:
                 hs = [v for _, v in vals]
-                ceilings.append({"property": prop, "tier": tier, "room": rid, "captures": [c for c, _ in vals],
-                                 "values": hs, "spread": max(hs) - min(hs)})
+                ceilings.append({"property": prop, "tier": tier, "room": rid,
+                                 "captures": [c for c, _ in vals], "values": hs, "spread": max(hs) - min(hs)})
     by_tier: dict[str, dict[str, Any]] = {}
     for tier in sorted({w["tier"] for w in walls} | {c["tier"] for c in ceilings}):
         tw = [w for w in walls if w["tier"] == tier]
@@ -397,7 +412,8 @@ def repeatability(metrics: list[dict[str, Any]], cfg: dict[str, Any] | None = No
         by_tier[tier] = {"wall_pairs": len(tw), "pass": sum(w["pass"] for w in tw),
                          "strict_pass": sum(w["strict_pass"] for w in tw),
                          "max_delta": max((w["delta"] for w in tw), default=None),
-                         "ceiling_rooms": len(tc), "max_ceiling_spread": max((c["spread"] for c in tc), default=None),
+                         "ceiling_rooms": len(tc),
+                         "max_ceiling_spread": max((c["spread"] for c in tc), default=None),
                          "structure_pairs": len(ts),
                          "structure_same": sum(s["same_walls"] and s["same_openings"] for s in ts)}
     return {"walls": walls, "ceiling": ceilings, "structure": structure, "by_tier": by_tier}

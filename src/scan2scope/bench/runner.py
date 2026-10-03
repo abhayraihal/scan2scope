@@ -1,8 +1,9 @@
 """Runs every capture listed in each property's ground_truth.yaml, scores the results and writes the report.
 
 Layout: <data_root>/<property>/ground_truth.yaml (or ground_truth.yaml directly in data_root), results in
-<out_dir>/<property>/<capture>/result.json, and for multi-room video and LiDAR captures a second run with drift
-correction off in <out_dir>/<property>/<capture>__nodrift (semantics skipped there, it does not change the plan).
+<out_dir>/<property>/<capture>/result.json, and for multi-room video and LiDAR captures a second run with
+drift correction off in <out_dir>/<property>/<capture>__nodrift (semantics skipped there, it does not change
+the plan).
 Each run also writes bench_run.json (status, error, runner seconds) and, on a crash, error.txt with the
 traceback, so a later skip_run rescoring keeps failures as failures.
 """
@@ -93,8 +94,8 @@ def run_one(gt: GroundTruth, cap: GTCapture, dest: Path, *, cache_mode: str, ski
 
             run_fn = run_capture
         try:
-            run["result"] = run_fn(cap.path, dest, tier=cap.tier, cache_mode=cache_mode, drift_correction=drift,
-                                   semantics=drift, quiet=True)
+            run["result"] = run_fn(cap.path, dest, tier=cap.tier, cache_mode=cache_mode,
+                                   drift_correction=drift, semantics=drift, quiet=True)
         except Exception as exc:  # noqa: BLE001  one broken capture must not stop the benchmark
             tb = traceback.format_exc(limit=12)
             log.error("%s/%s%s failed: %s", gt.property, cap.id, "" if drift else NODRIFT_SUFFIX, exc)
@@ -102,7 +103,8 @@ def run_one(gt: GroundTruth, cap: GTCapture, dest: Path, *, cache_mode: str, ski
             run.update(status="failed", error=f"{type(exc).__name__}: {exc}", traceback=tb)
             (dest / "error.txt").write_text(tb)
     run["run_s"] = round(time.perf_counter() - t0, 3)
-    (dest / RUN_RECORD).write_text(json.dumps({k: run[k] for k in ("status", "error", "run_s", "variant")}, indent=1))
+    record = {k: run[k] for k in ("status", "error", "run_s", "variant")}
+    (dest / RUN_RECORD).write_text(json.dumps(record, indent=1))
     return run
 
 
@@ -116,7 +118,8 @@ def score_runs(gts: list[GroundTruth], runs: list[dict[str, Any]], cfg: dict[str
         gt = by_prop[run["property"]]
         cap = gt.capture(run["capture"])
         res = run.get("result")
-        m = capture_metrics(gt, cap, res, status=run["status"], error=run.get("error"), run_s=run.get("run_s"))
+        m = capture_metrics(gt, cap, res, status=run["status"], error=run.get("error"),
+                            run_s=run.get("run_s"))
         m["variant"], m["out_dir"] = run["variant"], run.get("out_dir")
         (main if run["variant"] == "main" else nodrift).append(m)
         prov = (res or {}).get("provenance") if isinstance((res or {}).get("provenance"), dict) else {}
@@ -164,8 +167,8 @@ def run_benchmark(data_root: str | Path, out_dir: str | Path, *, cache_mode: str
             if not _selected(only, gt.property, cap.id):
                 continue
             log.info("benchmark: %s/%s (%s)", gt.property, cap.id, cap.tier)
-            runs.append(run_one(gt, cap, out_dir / gt.property / cap.id, cache_mode=cache_mode, skip_run=skip_run,
-                                drift=True, run_fn=run_fn))
+            runs.append(run_one(gt, cap, out_dir / gt.property / cap.id, cache_mode=cache_mode,
+                                skip_run=skip_run, drift=True, run_fn=run_fn))
             if needs_ablation(gt, cap):
                 runs.append(run_one(gt, cap, out_dir / gt.property / f"{cap.id}{NODRIFT_SUFFIX}",
                                     cache_mode=cache_mode, skip_run=skip_run, drift=False, run_fn=run_fn))

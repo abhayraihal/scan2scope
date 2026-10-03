@@ -1,10 +1,10 @@
 """Loads bench/data/<property>/ground_truth.yaml (format: bench/templates/ground_truth.yaml).
 
-Conventions from docs/ground_truth_protocol.md: walls are listed starting at the wall with the entry door, then
-the next wall on the right seen from inside, so the order is clockwise seen from above. Opening and damage
-offsets run from the wall's left end seen from inside, which is the start of the clockwise traversal. The
-synthetic generator writes the same format plus a per-room `polygon` (vertex k is the left end of wall W(k+1))
-and a property-level `adjacency` list.
+Conventions from docs/ground_truth_protocol.md: walls are listed starting at the wall with the entry door,
+then the next wall on the right seen from inside, so the order is clockwise seen from above. Opening and
+damage offsets run from the wall's left end seen from inside, which is the start of the clockwise traversal.
+The synthetic generator writes the same format plus a per-room `polygon` (vertex k is the left end of wall
+W(k+1)) and a property-level `adjacency` list.
 
 Zero or negative lengths are template placeholders and load as missing values with a flag.
 """
@@ -245,9 +245,9 @@ def rectilinear_polygon(lengths: list[float | None], diagonal: float | None = No
                         ) -> tuple[np.ndarray, float] | None:
     """Corners of a clockwise rectilinear room from its wall lengths in protocol order, or None.
 
-    Every corner is 90 degrees, so walls alternate between the two axes; each corner turns right (convex) or
-    left (reflex) with four more right turns than left. The turn pattern that closes the outline best and gives
-    a simple polygon wins; the measured diagonal (start of W1 to the farthest corner) breaks ties.
+    Every corner is 90 degrees, so walls alternate between the two axes; each corner turns right (convex)
+    or left (reflex) with four more right turns than left. The turn pattern that closes the outline best and
+    gives a simple polygon wins; the measured diagonal (start of W1 to the farthest corner) breaks ties.
     Returns (corners (n, 2) starting at the left end of W1, closure error in metres).
     """
     n = len(lengths)
@@ -385,8 +385,9 @@ def _parse_room(raw: dict[str, Any], index: int, flags: list[str]) -> GTRoom | N
         wall = str(o.get("wall") or "")
         if wall not in wall_ids:
             rflags.append(f"opening_unknown_wall:{oid}:{wall}")
-        op = GTOpening(oid, kind, wall, num(o.get("offset")), positive(o.get("width")), positive(o.get("height")),
-                       num(o.get("sill")), None if o.get("leads_to") in (None, "") else str(o.get("leads_to")),
+        leads_to = None if o.get("leads_to") in (None, "") else str(o.get("leads_to"))
+        op = GTOpening(oid, kind, wall, num(o.get("offset")), positive(o.get("width")),
+                       positive(o.get("height")), num(o.get("sill")), leads_to,
                        positive(o.get("wall_thickness")))
         if op.width is None:
             rflags.append(f"missing:{oid}.width")
@@ -447,8 +448,9 @@ def _parse_adjacency(raw: Any, rooms: list[GTRoom], flags: list[str]) -> list[di
             flags.append(f"adjacency_contradicts_leads_to:{ra}|{rb}")
             continue
         kind = str(a.get("type") or "door") if isinstance(a, dict) else "door"
-        out[frozenset((ra, rb))] = {"rooms": tuple(sorted((ra, rb))), "openings": (oa, ob) if ra <= rb else (ob, oa),
-                                    "type": kind, "source": "adjacency"}
+        out[frozenset((ra, rb))] = {"rooms": tuple(sorted((ra, rb))),
+                                    "openings": (oa, ob) if ra <= rb else (ob, oa), "type": kind,
+                                    "source": "adjacency"}
     for room in rooms:
         for op in room.openings:
             if op.type == "window" or op.leads_to is None or op.leads_to == room.id:
@@ -504,12 +506,14 @@ def load_ground_truth(path: str | Path) -> GroundTruth:
             if dropped:
                 flags.append(f"capture_unknown_rooms:{c['id']}:{','.join(dropped)}")
         meta = {key: v for key, v in c.items() if key not in ("id", "tier", "path", "rooms")}
-        captures.append(GTCapture(str(c["id"]), tier, p if p.is_absolute() else path.parent / p, cap_rooms, meta))
+        captures.append(GTCapture(str(c["id"]), tier, p if p.is_absolute() else path.parent / p, cap_rooms,
+                                  meta))
     adjacency = _parse_adjacency(doc.get("adjacency"), rooms, flags)
     measured_by = str(doc.get("measured_by") or "")
     synthetic = bool(doc.get("synthetic")) or measured_by.strip().lower() == "synthetic"
-    gt = GroundTruth(str(doc.get("property") or path.parent.name), path, rooms, captures, adjacency, measured_by,
-                     str(doc.get("instrument") or ""), str(doc.get("date") or ""), synthetic, flags)
+    gt = GroundTruth(str(doc.get("property") or path.parent.name), path, rooms, captures, adjacency,
+                     measured_by, str(doc.get("instrument") or ""), str(doc.get("date") or ""), synthetic,
+                     flags)
     if flags:
         log.info("%s: %d ground-truth flags (%s%s)", gt.property, len(flags), ", ".join(flags[:4]),
                  ", ..." if len(flags) > 4 else "")
