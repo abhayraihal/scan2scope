@@ -144,6 +144,7 @@ class ViewPrediction:
     resized_size: tuple[int, int]  # (width, height) after resizing, before the centre crop
     crop: tuple[int, int]  # (ox, oy) crop offset in resized pixels
     intrinsics_given: bool = False
+    pose_ok: bool = True  # False when MapAnything returned a non-finite pose; T_wc is then a placeholder
     meta: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -263,18 +264,20 @@ class MapAnythingRunner:
         if n_heavy:
             flags.append(f"aspect_crop:{n_heavy}/{n}")
 
-        full_key = {
-            "model": self.spec.repo, "revision": self.spec.revision, "resolution": RESOLUTION_SET,
-            "target_size": list(target), "norm": NORM_TYPE, "args": INFER_ARGS,
-            "images": [array_sha256(im) for im in imgs],
-            "intrinsics": [None if K is None else np.round(K, 3).tolist() for K in Km],
-            "caller": key or {},
-        }
-
         def run() -> dict[str, np.ndarray]:
             return self._run(imgs, Km, target)
 
-        arrays = cache.compute(full_key, run) if cache is not None else run()
+        if cache is None:
+            arrays = run()
+        else:
+            full_key = {
+                "model": self.spec.repo, "revision": self.spec.revision, "resolution": RESOLUTION_SET,
+                "target_size": list(target), "norm": NORM_TYPE, "args": INFER_ARGS,
+                "images": [array_sha256(im) for im in imgs],
+                "intrinsics": [None if K is None else np.round(K, 3).tolist() for K in Km],
+                "caller": key or {},
+            }
+            arrays = cache.compute(full_key, run)
         bad = [i for i in range(n) if not (np.isfinite(arrays["T_wc"][i]).all() and np.isfinite(arrays["K"][i]).all())]
         if bad:  # fp16 overflow can leave a view without a usable pose; keep it, empty
             flags.append("invalid_view:" + ",".join(map(str, bad)))
@@ -295,7 +298,7 @@ class MapAnythingRunner:
                 conf=np.nan_to_num(np.asarray(arrays["conf"][i], np.float32), nan=1.0, posinf=1.0, neginf=1.0),
                 mask=mask, T_wc=T_wc, K=K,
                 metric_scale=float(ms[i]) if np.isfinite(ms[i]) else 1.0, image_size=sizes[i],
-                resized_size=(w2, h2), crop=crop, intrinsics_given=Km[i] is not None,
+                resized_size=(w2, h2), crop=crop, intrinsics_given=Km[i] is not None, pose_ok=i not in bad,
                 meta={"flags": list(flags), "crop_fraction": round(cropped[i], 4)},
             ))
         return preds
@@ -318,11 +321,14 @@ class MapAnythingRunner:
             views.append(view)
         t0 = time.perf_counter()
         try:
+            preds, oom = None, False
             try:
                 preds = model.infer(views, **INFER_ARGS)
-            except RuntimeError as exc:  # MPS out-of-memory is often fragmentation; one retry after freeing
+            except RuntimeError as exc:
                 if "out of memory" not in str(exc).lower():
                     raise
+                oom = True
+            if oom:  # retry outside the except block: the live traceback would pin the failed call's tensors
                 log.warning("MapAnything ran out of memory on %d views, retrying once", len(imgs))
                 _free_memory()
                 preds = model.infer(views, **INFER_ARGS)

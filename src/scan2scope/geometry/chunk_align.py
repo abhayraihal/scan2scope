@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 from scipy.optimize import least_squares
+from scipy.spatial.transform import Rotation
 
 from scan2scope.geometry.se3 import apply, decompose_sim3, invert, make_T, umeyama
 
@@ -31,40 +32,13 @@ class Sim3Fit:
 
 
 def _so3_exp(v: np.ndarray) -> np.ndarray:
-    """Batched Rodrigues: (N, 3) rotation vectors -> (N, 3, 3)."""
-    v = np.atleast_2d(v)
-    th = np.linalg.norm(v, axis=1)
-    small = th < 1e-8
-    k = v / np.where(small, 1.0, th)[:, None]
-    K = np.zeros((len(v), 3, 3))
-    K[:, 0, 1], K[:, 0, 2], K[:, 1, 2] = -k[:, 2], k[:, 1], -k[:, 0]
-    K[:, 1, 0], K[:, 2, 0], K[:, 2, 1] = k[:, 2], -k[:, 1], k[:, 0]
-    s, c = np.sin(th)[:, None, None], np.cos(th)[:, None, None]
-    R = np.eye(3) + s * K + (1 - c) * (K @ K)
-    if small.any():  # first order for tiny angles
-        vx = np.zeros((small.sum(), 3, 3))
-        vs = v[small]
-        vx[:, 0, 1], vx[:, 0, 2], vx[:, 1, 2] = -vs[:, 2], vs[:, 1], -vs[:, 0]
-        vx[:, 1, 0], vx[:, 2, 0], vx[:, 2, 1] = vs[:, 2], -vs[:, 1], vs[:, 0]
-        R[small] = np.eye(3) + vx
-    return R
+    """Batched rotation vectors (N, 3) -> matrices (N, 3, 3)."""
+    return Rotation.from_rotvec(np.atleast_2d(v)).as_matrix()
 
 
 def _so3_log(R: np.ndarray) -> np.ndarray:
-    """Batched rotation log: (N, 3, 3) -> (N, 3) rotation vectors."""
-    R = np.asarray(R).reshape(-1, 3, 3)
-    tr = np.clip((np.trace(R, axis1=1, axis2=2) - 1.0) / 2.0, -1.0, 1.0)
-    th = np.arccos(tr)
-    w = np.stack([R[:, 2, 1] - R[:, 1, 2], R[:, 0, 2] - R[:, 2, 0], R[:, 1, 0] - R[:, 0, 1]], 1)
-    sin_th = np.sin(th)
-    factor = np.where(th < 1e-6, 0.5 + th ** 2 / 12.0, th / (2.0 * np.maximum(sin_th, 1e-12)))
-    out = w * factor[:, None]
-    near_pi = th > np.pi - 1e-3
-    if near_pi.any():
-        from scipy.spatial.transform import Rotation
-
-        out[near_pi] = Rotation.from_matrix(R[near_pi]).as_rotvec()
-    return out
+    """Batched matrices (N, 3, 3) -> rotation vectors (N, 3)."""
+    return Rotation.from_matrix(np.asarray(R).reshape(-1, 3, 3)).as_rotvec()
 
 
 def rotation_angle_deg(R: np.ndarray) -> float:

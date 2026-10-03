@@ -47,6 +47,7 @@ class PhotoExif:
     exposure_s: float | None = None
     make: str | None = None
     model: str | None = None
+    orientation: int | None = None  # EXIF Orientation of the file; 1 or None means stored upright
 
     @property
     def low_light(self) -> bool:
@@ -95,8 +96,9 @@ def read_exif(im: Image.Image) -> PhotoExif:
         v = exif.get(t)
         return str(v).strip("\x00 ") if v else None
 
+    orient = _number(exif.get(0x0112))
     return PhotoExif(focal_35mm=_number(tag(0xA405)), iso=_number(tag(0x8827)), exposure_s=_number(tag(0x829A)),
-                     make=text(0x010F), model=text(0x0110))
+                     make=text(0x010F), model=text(0x0110), orientation=None if orient is None else int(orient))
 
 
 def load_photo(path: Path, max_side: int = MAX_IMAGE_SIDE) -> tuple[np.ndarray, PhotoExif, tuple[int, int]]:
@@ -142,9 +144,13 @@ def list_room_folders(root: Path) -> list[tuple[str, list[Path]]]:
                      key=lambda d: natural_key(d.name))
     rooms = [(d.name, _images_in(d)) for d in subdirs]
     rooms = [r for r in rooms if r[1]]
+    loose = _images_in(root)
+    if rooms and loose:  # photos left next to the room folders become a room of their own
+        log.warning("%d photos sit directly in %s next to room folders; treating them as room %r", len(loose),
+                    root, root.name)
+        return rooms + [(root.name, loose)]
     if rooms:
         return rooms
-    loose = _images_in(root)
     if loose:
         return [(root.name, loose)]
     if len(subdirs) == 1:
@@ -276,8 +282,20 @@ def rotate_pose(R: np.ndarray, T_wc: np.ndarray) -> np.ndarray:
     return G @ T_wc
 
 
+def _upright_copy(path: Path, img: np.ndarray, work_dir: Path | None, room: str) -> Path:
+    """The file itself when its stored pixels are upright, else an upright JPEG in work_dir, so that
+    image_path always opens with the size, K and point map of its view."""
+    if work_dir is None:
+        return Path(path)
+    out = Path(work_dir) / "upright" / room / (Path(path).stem + ".jpg")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    Image.fromarray(img).save(out, quality=95)
+    return out
+
+
 def build_room_scene(name: str, paths: list[Path], *, cache: OutputCacheLike | None = None,
-                     runner: MapAnythingRunner | None = None, max_photos: int = MAX_PHOTOS) -> Scene | None:
+                     runner: MapAnythingRunner | None = None, max_photos: int = MAX_PHOTOS,
+                     work_dir: Path | None = None) -> Scene | None:
     """Scene of one room folder, or None when no photo in it can be read."""
     flags: list[str] = []
     loaded = []
@@ -301,10 +319,19 @@ def build_room_scene(name: str, paths: list[Path], *, cache: OutputCacheLike | N
     imgs = [im for _, im, _, _ in loaded]
     Ks = [intrinsics_from_exif(ex, im.shape[1], im.shape[0]) for _, im, ex, _ in loaded]
     runner = runner or MapAnythingRunner.get()
-    key = {"tier": "photo", "room": name, "files": [file_sha256(p) for p, *_ in loaded]}
+    key = {"tier": "photo", "room": name}
+    if cache is not None:
+        key["files"] = [file_sha256(p) for p, *_ in loaded]
     preds = runner.infer(imgs, Ks, key=key, cache=cache)
     for pr in preds:
         flags.extend(f for f in pr.meta.get("flags", []) if f not in flags)
+    keep = [i for i, pr in enumerate(preds) if pr.pose_ok]
+    if not keep:
+        log.warning("room %s: MapAnything gave no usable camera pose", name)
+        return None
+    if len(keep) < len(preds):
+        flags.extend(f"view_dropped:{loaded[i][0].name}" for i in range(len(preds)) if i not in keep)
+        loaded, preds, Ks = [loaded[i] for i in keep], [preds[i] for i in keep], [Ks[i] for i in keep]
 
     weights = [pr.weight for pr in preds]
     samples = [view_samples(pr.pts3d, pr.mask, w, pr.T_wc[:3, 3]) for pr, w in zip(preds, weights)]
@@ -318,14 +345,19 @@ def build_room_scene(name: str, paths: list[Path], *, cache: OutputCacheLike | N
         T_wc = rotate_pose(R, pr.T_wc)
         pm = (pr.pts3d @ R.T).astype(np.float32)
         pm[~pr.mask] = 0.0
-        K_exif = intrinsics_from_exif(exif, size[0], size[1])
+        image_path = Path(path)
+        if exif.orientation not in (None, 1):
+            image_path = _upright_copy(path, img, work_dir, name)
+        vw, vh = (img.shape[1], img.shape[0]) if image_path != Path(path) else size
+        K_exif = intrinsics_from_exif(exif, vw, vh)
         views.append(CameraView(
-            id=f"{name}/{path.name}", image_path=Path(path), width=int(size[0]), height=int(size[1]),
-            K=pr.K_image(size[0], size[1]), T_wc=T_wc, pointmap=pr.uncrop(pm, 0.0),
+            id=f"{name}/{path.name}", image_path=image_path, width=int(vw), height=int(vh),
+            K=pr.K_image(vw, vh), T_wc=T_wc, pointmap=pr.uncrop(pm, 0.0),
             valid=pr.uncrop(pr.mask, False), conf=pr.uncrop(weights[i], 0.0), room_hint=name,
             meta={"exif": asdict(exif), "K_exif": None if K_exif is None else K_exif.tolist(),
                   "intrinsics_given": pr.intrinsics_given, "metric_scale": pr.metric_scale,
-                  "conf_kind": "normalised"},
+                  "conf_kind": "normalised", "source_path": str(path),
+                  "upright_copy": image_path != Path(path)},
         ))
         pts.append(p @ R.T)
         nrms.append(nr @ R.T)
@@ -364,12 +396,14 @@ def build_room_scenes(root: Path, work_dir: Path, *, cache: OutputCacheLike | No
     scenes: list[Scene] = []
     skipped: list[str] = []
     for name, paths in rooms:
-        scene = build_room_scene(name, paths, cache=cache, runner=runner, max_photos=max_photos)
+        scene = build_room_scene(name, paths, cache=cache, runner=runner, max_photos=max_photos, work_dir=work_dir)
         if scene is None:
-            log.warning("room %s skipped: no readable photo", name)
+            log.warning("room %s skipped: no usable photo", name)
             skipped.append(name)
-        else:
-            scenes.append(scene)
+            continue
+        if len(rooms) > 1 and paths[0].parent == Path(root):
+            scene.meta["flags"].append("loose_photos_room")
+        scenes.append(scene)
     if not scenes:
         raise ValueError(f"none of the photos under {root} could be read")
     if skipped:

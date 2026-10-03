@@ -88,7 +88,8 @@ class ChunkRun:
         """Normals of frame f in the chunk frame and their validity, computed on first use."""
         if f not in self._normals:
             p = self.pred(f)
-            self._normals[f] = normals_from_pointmap(p.pts3d, p.mask, p.T_wc[:3, 3], step=2)
+            n, ok = normals_from_pointmap(p.pts3d, p.mask, p.T_wc[:3, 3], step=2)
+            self._normals[f] = (n.astype(np.float16), ok)
         return self._normals[f]
 
 
@@ -264,6 +265,10 @@ def register_views(dst: list[ViewPrediction], src: list[ViewPrediction], seed: i
 
 def pose_fallback(dst: list[ViewPrediction], src: list[ViewPrediction]) -> np.ndarray:
     """Sim(3) from the camera poses of shared frames when point registration fails."""
+    pairs = [(d, s) for d, s in zip(dst, src) if d.pose_ok and s.pose_ok]
+    if not pairs:
+        return np.eye(4)
+    dst, src = [d for d, _ in pairs], [s for _, s in pairs]
     Rs = [d.T_wc[:3, :3] @ s.T_wc[:3, :3].T for d, s in zip(dst, src)]
     U, _, Vt = np.linalg.svd(np.sum(Rs, axis=0))
     R = U @ np.diag([1.0, 1.0, np.sign(np.linalg.det(U @ Vt))]) @ Vt
@@ -388,12 +393,13 @@ def _chunk_cloud(run: ChunkRun, X: np.ndarray, frames: list[int]):
         grid[::stride, ::stride] = True
         sel &= grid
         pts.append(p.pts3d[sel] @ (s * R).T + t)
-        nrm.append(normals[sel] @ R.T)
+        nrm.append(normals[sel].astype(np.float32) @ R.T)
         ws.append(p.weight[sel])
-        cz.append((s * R @ p.T_wc[:3, 3] + t)[2])
+        if p.pose_ok:
+            cz.append((s * R @ p.T_wc[:3, 3] + t)[2])
     if not pts:
         return np.zeros((0, 3)), np.zeros((0, 3)), np.zeros(0), None
-    return np.concatenate(pts), np.concatenate(nrm), np.concatenate(ws), float(np.mean(cz))
+    return np.concatenate(pts), np.concatenate(nrm), np.concatenate(ws), float(np.mean(cz)) if cz else None
 
 
 def _floor_spread(values: list[float]) -> float | None:
@@ -525,9 +531,9 @@ def build_scene_from_frames(frames: list[Frame], *, drift_correction: bool = Tru
         "overlap": overlap, "scale_spread_log": scale["spread"], "thin": n < 3,
     }
     applied = ["sim3_chain"] + (["loop_closure"] if loop["accepted"] else [])
-    if anchor.get("height_chunks") or anchor["max_tilt_correction_deg"] > 0:
+    if anchor.get("floor_applied"):
         applied.append("floor_anchoring")
-    if anchor["max_yaw_correction_deg"] > 0:
+    if anchor.get("yaw_applied"):
         applied.append("manhattan_yaw")
     drift = {
         "enabled": bool(drift_correction), "method": "+".join(applied), "chunks": chunk_info, "loop_closure": loop,
@@ -552,7 +558,9 @@ def _scale_and_gravity(runs: list[ChunkRun], X: list[np.ndarray], owners: list[i
     spread = float(np.std(chunk_log)) if len(chunk_log) > 1 else 0.0
     S = np.diag([math.exp(log_corr)] * 3 + [1.0])
     X = [S @ T for T in X]
-    poses = [_world_pose(X[owners[f]], runs[owners[f]].pred(f).T_wc) for f in range(len(owners))]
+    poses = [_world_pose(X[owners[f]], runs[owners[f]].pred(f).T_wc) for f in range(len(owners))
+             if runs[owners[f]].pred(f).pose_ok]
+    poses = poses or [np.eye(4)]
     nrm, w = [], []
     for c, run in enumerate(runs):
         _, nr, wc, _ = _chunk_cloud(run, X[c], owned[c])
@@ -602,8 +610,9 @@ def _loop_closure(frames, runs, owners, X, seq_edges, runner, cache, source_key,
         return X, loop
     Z = fit0.T @ invert(fitK.T)
     err = sim3_error(Z, invert(X[0]) @ X[-1])
-    centers = np.array([apply(X[owners[f]], runs[owners[f]].pred(f).T_wc[:3, 3]) for f in range(n)])
-    path = float(np.sum(np.linalg.norm(np.diff(centers, axis=0), axis=1))) if n > 1 else 0.0
+    centers = np.array([apply(X[owners[f]], runs[owners[f]].pred(f).T_wc[:3, 3]) for f in range(n)
+                        if runs[owners[f]].pred(f).pose_ok]).reshape(-1, 3)
+    path = float(np.sum(np.linalg.norm(np.diff(centers, axis=0), axis=1))) if len(centers) > 1 else 0.0
     depth = _median_depth(runs[0].preds)
     loop.update({"error_trans_m": err["trans"], "error_rot_deg": err["rot_deg"], "error_log_scale": err["log_scale"],
                  "path_length_m": path})
@@ -679,12 +688,16 @@ def _anchor_chunks(runs, X, owned, floors, edges):
     pivot = np.asarray(floors[0]["centroid"]) if floors[0] is not None else X[0][:3, 3]
     A = make_T(corr.get(0, np.eye(3)), np.zeros(3))
     A[:3, 3] = pivot - A[:3, :3] @ pivot
+    dz0 = 0.0
     if 0 in height_ok:
-        A[2, 3] += z_ref - apply(A, np.asarray(floors[0]["centroid"]))[2]
+        dz0 = z_ref - apply(A, np.asarray(floors[0]["centroid"]))[2]
+        A[2, 3] += dz0
     X[0] = A @ X[0]
     res = optimize_pose_graph(X, edges, priors, fixed=(0,))
     yaws = [abs(r.get("yaw_correction_deg", 0.0)) for r in out["per_chunk"].values()]
     tilts = [abs(r.get("tilt_correction_deg", 0.0)) for r in out["per_chunk"].values()]
+    out["floor_applied"] = bool(any(c >= 1 for c in height_ok) or abs(dz0) > 1e-3 or max(tilts, default=0.0) > 0.01)
+    out["yaw_applied"] = bool(max(yaws, default=0.0) > 0.01)
     out.update({"max_yaw_correction_deg": max(yaws, default=0.0), "max_tilt_correction_deg": max(tilts, default=0.0),
                 "z_ref": z_ref, "theta_manhattan_deg": None if theta_g is None else math.degrees(theta_g),
                 "graph_cost_before": res.cost_before, "graph_cost_after": res.cost_after})
@@ -694,9 +707,12 @@ def _anchor_chunks(runs, X, owned, floors, edges):
 def _fuse_scene(frames: list[Frame], runs: list[ChunkRun], X: list[np.ndarray], owners: list[int],
                 flags: list[str]) -> Scene:
     n = len(frames)
-    keyframes = list(range(0, n, KEYFRAME_EVERY))
+    usable = [f for f in range(n) if runs[owners[f]].pred(f).pose_ok] or [0]
+    keyframes = usable[::KEYFRAME_EVERY]
     key_of = {f: i for i, f in enumerate(keyframes)}
     nearest_key = [key_of[min(keyframes, key=lambda k: abs(k - f))] for f in range(n)]
+    if len(usable) < n:
+        flags.append(f"frames_without_pose:{n - len(usable)}")
     views: list[CameraView] = []
     frame_T = np.zeros((n, 4, 4))
     pts, nrm, ws, vidx, score, wmeans = [], [], [], [], [], []
@@ -715,7 +731,7 @@ def _fuse_scene(frames: list[Frame], runs: list[ChunkRun], X: list[np.ndarray], 
         sel &= grid
         pw = p.pts3d[sel] @ (s * R).T + t
         pts.append(pw)
-        nrm.append(normals[sel] @ R.T)
+        nrm.append(normals[sel].astype(np.float32) @ R.T)
         ws.append(w[sel])
         vidx.append(np.full(len(pw), nearest_key[f], np.int64))
         score.append(w[sel] + (0.5 if f in key_of else 0.0))
@@ -737,5 +753,5 @@ def _fuse_scene(frames: list[Frame], runs: list[ChunkRun], X: list[np.ndarray], 
     meta = {"flags": flags, "_mean_conf": float(np.mean(wmeans)) if wmeans else 0.0,
             "frames": {"source_index": [fr.source_index for fr in frames], "timestamp": [fr.timestamp for fr in frames],
                        "path": [str(fr.path) for fr in frames], "owner_chunk": owners, "T_wc": frame_T,
-                       "keyframes": keyframes}}
+                       "pose_ok": [runs[owners[f]].pred(f).pose_ok for f in range(n)], "keyframes": keyframes}}
     return Scene(tier="video", views=views, points=P, normals=N, weights=W, view_index=V, meta=meta)

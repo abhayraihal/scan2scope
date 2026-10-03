@@ -45,10 +45,11 @@ class FakeRunner:
     """Renders each call in the frame of its first camera, with a random per-call Sim(3) and an optional bend
     that grows with the position in the call (yaw, tilt, height and scale), so chained chunks drift."""
 
-    def __init__(self, poses_by_sha, bend=(0.0, 0.0, 0.0, 0.0), seed=0):
+    def __init__(self, poses_by_sha, bend=(0.0, 0.0, 0.0, 0.0), seed=0, invalid=()):
         self.poses = poses_by_sha
         self.bend = bend
         self.seed = seed
+        self.invalid = set(invalid)  # image hashes that come back without a usable pose
         self.calls = []
 
     def infer(self, images, intrinsics=None, key=None, cache=None):
@@ -72,10 +73,13 @@ class FakeRunner:
             pts = se3.apply(M, render_box(T)) + rng.normal(scale=0.002, size=(H, W, 3))
             MT = M @ T
             T_out = se3.make_T(se3.decompose_sim3(MT)[1], MT[:3, 3])
+            bad = shas[i] in self.invalid
             out.append(mb.ViewPrediction(
-                pts3d=pts.astype(np.float32), conf=np.full((H, W), 20.0, np.float32), mask=np.ones((H, W), bool),
-                T_wc=T_out, K=K_TRUE.copy(), metric_scale=float(se3.decompose_sim3(D)[0]), image_size=(W, H),
-                resized_size=(W, H), crop=(0, 0), intrinsics_given=Ks[i] is not None))
+                pts3d=np.zeros_like(pts, np.float32) if bad else pts.astype(np.float32),
+                conf=np.full((H, W), 20.0, np.float32), mask=np.full((H, W), not bad),
+                T_wc=np.eye(4) if bad else T_out, K=K_TRUE.copy(), metric_scale=float(se3.decompose_sim3(D)[0]),
+                image_size=(W, H), resized_size=(W, H), crop=(0, 0), intrinsics_given=Ks[i] is not None,
+                pose_ok=not bad))
         return out
 
 
@@ -401,6 +405,39 @@ def test_build_room_scenes_with_fake_runner(tmp_path):
         assert np.std(s.points[down, 2]) < 0.02
 
 
+def test_rotated_jpeg_gets_an_upright_copy_and_bad_views_are_dropped(tmp_path):
+    rng = np.random.default_rng(5)
+    root = tmp_path / "Scan"
+    (root / "01 bed").mkdir(parents=True)
+    by_sha, shots = {}, _room_shots(rng, 4)
+    stored = None
+    for k, T in enumerate(shots):
+        p = root / "01 bed" / f"IMG_{k}.jpg"
+        arr = _noise_image(rng)
+        if k == 0:  # stored sideways with EXIF Orientation 6, as iPhone JPEGs often are
+            stored = np.ascontiguousarray(np.rot90(arr, 1))
+            _save_with_exif(p, stored, focal35=27, orientation=6)
+        else:
+            _save_with_exif(p, arr, focal35=27)
+        img, _, _ = photo.load_photo(p)
+        by_sha[mb.array_sha256(img)] = T
+    loose = root / "IMG_loose.jpg"
+    _save_with_exif(loose, _noise_image(rng), focal35=27)
+    img, _, _ = photo.load_photo(loose)
+    by_sha[mb.array_sha256(img)] = shots[1]
+    bad_sha = mb.array_sha256(photo.load_photo(root / "01 bed" / "IMG_3.jpg")[0])
+    scenes = photo.build_room_scenes(root, tmp_path / "work", runner=FakeRunner(by_sha, invalid={bad_sha}))
+    assert [s.room_hint for s in scenes] == ["01 bed", "Scan"] and "loose_photos_room" in scenes[1].meta["flags"]
+    bed = scenes[0]
+    assert "view_dropped:IMG_3.jpg" in bed.meta["flags"] and len(bed.views) == 3
+    v0 = bed.views[0]
+    assert v0.meta["upright_copy"] and v0.image_path.parent == tmp_path / "work" / "upright" / "01 bed"
+    with Image.open(v0.image_path) as im:  # plain PIL, no EXIF handling: still matches the view
+        assert im.size == (v0.width, v0.height) and im.getexif().get(0x0112) in (None, 1)
+    assert not bed.views[1].meta["upright_copy"] and bed.views[1].image_path == root / "01 bed" / "IMG_1.jpg"
+    assert bed.view_index.max() < len(bed.views)
+
+
 def test_build_room_scenes_raises_when_nothing_readable(tmp_path):
     (tmp_path / "Scan" / "a").mkdir(parents=True)
     (tmp_path / "Scan" / "a" / "x.jpg").write_bytes(b"broken")
@@ -501,6 +538,18 @@ def test_video_loop_rejected_when_the_correction_is_implausible(tmp_path):
     lc = s.meta["drift"]["loop_closure"]
     assert lc["attempted"] and not lc["accepted"] and "rotation" in lc["reason"], lc
     assert lc["error_rot_deg"] > video.LOOP_MAX_ROT_DEG
+
+
+def test_video_frame_without_pose_is_not_a_keyframe(tmp_path):
+    frames, by_sha, poses = _loop_frames(tmp_path, n=24)
+    bad = mb.array_sha256(np.asarray(Image.open(frames[6].path).convert("RGB")))
+    s = video.build_scene_from_frames(frames, runner=FakeRunner(by_sha, invalid={bad}), chunk_size=8, overlap=3,
+                                      loop_frames=4)
+    assert "frames_without_pose:1" in s.meta["flags"] and not s.meta["frames"]["pose_ok"][6]
+    assert 6 not in s.meta["frames"]["keyframes"] and all(v.meta["frame_index"] != 6 for v in s.views)
+    good = [T for T, ok in zip(s.meta["frames"]["T_wc"], s.meta["frames"]["pose_ok"]) if ok]
+    ate, _ = _ate(good, [P for k, P in enumerate(poses) if k != 6])
+    assert ate < 0.05
 
 
 def test_video_single_chunk_and_tiny_inputs(tmp_path):
