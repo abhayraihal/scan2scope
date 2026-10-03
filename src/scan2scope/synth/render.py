@@ -18,13 +18,16 @@ from scan2scope.synth.apartment import Apartment
 log = logging.getLogger("scan2scope.synth")
 
 _CHUNK = 4096
-_WALL_PAINT = [(0.93, 0.91, 0.86), (0.86, 0.90, 0.93), (0.90, 0.93, 0.86), (0.95, 0.89, 0.84), (0.88, 0.86, 0.92),
-               (0.94, 0.94, 0.94), (0.92, 0.87, 0.80), (0.83, 0.89, 0.88)]
-_FURNITURE_COLOURS = {"wardrobe": (0.62, 0.45, 0.30), "dresser": (0.70, 0.55, 0.38), "desk": (0.55, 0.40, 0.28),
-                      "shelf": (0.75, 0.65, 0.50), "sofa": (0.35, 0.40, 0.55), "tv_unit": (0.25, 0.25, 0.27),
-                      "cabinet": (0.80, 0.78, 0.74), "counter": (0.88, 0.86, 0.82), "tall_unit": (0.90, 0.90, 0.90),
-                      "vanity": (0.92, 0.92, 0.90), "bathtub": (0.97, 0.97, 0.97), "table": (0.58, 0.42, 0.28),
-                      "door_leaf": (0.93, 0.92, 0.89)}
+_WALL_PAINT = [(0.93, 0.91, 0.86), (0.86, 0.90, 0.93), (0.90, 0.93, 0.86), (0.95, 0.89, 0.84),
+               (0.88, 0.86, 0.92), (0.94, 0.94, 0.94), (0.92, 0.87, 0.80), (0.83, 0.89, 0.88)]
+_FLOOR_TILE = [(0.80, 0.80, 0.78), (0.62, 0.64, 0.66), (0.85, 0.82, 0.76)]
+_FLOOR_WOOD = [(0.66, 0.50, 0.34), (0.74, 0.60, 0.44), (0.55, 0.40, 0.28)]
+_FURNITURE_COLOURS = {"wardrobe": (0.62, 0.45, 0.30), "dresser": (0.70, 0.55, 0.38),
+                      "desk": (0.55, 0.40, 0.28), "shelf": (0.75, 0.65, 0.50), "sofa": (0.35, 0.40, 0.55),
+                      "tv_unit": (0.25, 0.25, 0.27), "cabinet": (0.80, 0.78, 0.74),
+                      "counter": (0.88, 0.86, 0.82), "tall_unit": (0.90, 0.90, 0.90),
+                      "vanity": (0.92, 0.92, 0.90), "bathtub": (0.97, 0.97, 0.97),
+                      "table": (0.58, 0.42, 0.28), "door_leaf": (0.93, 0.92, 0.89)}
 TEXTURES = ("paint", "wood", "tile", "ceiling", "grain", "fabric", "trim", "sky")
 
 
@@ -95,9 +98,9 @@ class RenderScene:
         for room in apt.rooms:
             paint = style(_WALL_PAINT[palette[room.index % len(palette)]], "paint")
             if room.kind in ("bathroom", "kitchen"):
-                floor = style(rng.choice([(0.80, 0.80, 0.78), (0.62, 0.64, 0.66), (0.85, 0.82, 0.76)]), "tile")
+                floor = style(rng.choice(_FLOOR_TILE), "tile")
             else:
-                floor = style(rng.choice([(0.66, 0.50, 0.34), (0.74, 0.60, 0.44), (0.55, 0.40, 0.28)]), "wood")
+                floor = style(rng.choice(_FLOOR_WOOD), "wood")
             ceil = style((0.97, 0.97, 0.96), "ceiling")
             self.room_paint.append(paint)
             self.room_floor.append(floor)
@@ -197,7 +200,7 @@ class RenderScene:
                 t_box[s:s + _CHUNK] = tn[np.arange(len(k)), k]
                 k_box[s:s + _CHUNK] = idx[k]
             k_box[~np.isfinite(t_box)] = -1
-            # Recompute the winning box in float64 (depth exact well below a millimetre) and find the hit face.
+            # Recompute the winning box in float64 (depth exact well below 1 mm) and find the hit face.
             hit = np.nonzero(k_box >= 0)[0]
             if len(hit):
                 kk = k_box[hit]
@@ -320,8 +323,8 @@ def render_depth(scene: RenderScene, K: np.ndarray, rgb_size: tuple[int, int], d
     return DepthRender(depth=depth, cos_incidence=cos_inc, sid=hits.sid.reshape(h, w), boxes_seen=seen)
 
 
-def render_rgb(scene: RenderScene, K: np.ndarray, rgb_size: tuple[int, int], R_wc: np.ndarray, t_wc: np.ndarray,
-               boxes: np.ndarray | None = None, scale: float = 0.5,
+def render_rgb(scene: RenderScene, K: np.ndarray, rgb_size: tuple[int, int], R_wc: np.ndarray,
+               t_wc: np.ndarray, boxes: np.ndarray | None = None, scale: float = 0.5,
                rng: np.random.Generator | None = None) -> np.ndarray:
     """Shaded RGB image (H, W, 3) uint8. Rendered at `scale` of the RGB size and resized up."""
     W, Hh = rgb_size

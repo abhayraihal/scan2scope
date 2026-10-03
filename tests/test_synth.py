@@ -100,7 +100,8 @@ def test_apartment_is_deterministic():
 
 
 def test_ground_truth_matches_apartment(apt):
-    gt = yaml.safe_load(ground_truth_text(apt, "synth_t", ["lidar_1", "lidar_2", "lidar_drift"], date="2026-10-03"))
+    text = ground_truth_text(apt, "synth_t", ["lidar_1", "lidar_2", "lidar_drift"], date="2026-10-03")
+    gt = yaml.safe_load(text)
     template = yaml.safe_load(TEMPLATE_GT.read_text())
     assert set(template) <= set(gt) and "adjacency" in gt
     assert gt["measured_by"] == "synthetic"
@@ -110,7 +111,7 @@ def test_ground_truth_matches_apartment(apt):
     assert [c["id"] for c in gt["captures"]] == ["lidar_1", "lidar_2", "lidar_drift"]
     assert all(c["tier"] == "lidar" and c["path"] == f"raw/{c['id']}" for c in gt["captures"])
     assert len(gt["rooms"]) == len(apt.rooms)
-    for room, g in zip(apt.rooms, gt["rooms"]):
+    for room, g in zip(apt.rooms, gt["rooms"], strict=True):
         assert g["id"] == room.name
         P = np.asarray(g["polygon"])
         edges = np.linalg.norm(np.roll(P, -1, axis=0) - P, axis=1)
@@ -120,14 +121,14 @@ def test_ground_truth_matches_apartment(apt):
         assert abs(-_signed_area(P) - room.area) < 1e-6
         assert g["ceiling_height"] == [apt.ceiling] * 3
         if len(room.rects) == 1:
-            r = room.rects[0]
-            assert sorted(w["length"] for w in g["walls"]) == sorted([r.w / 1000, r.w / 1000, r.h / 1000, r.h / 1000])
+            w, h = room.rects[0].w / 1000, room.rects[0].h / 1000
+            assert sorted(wall["length"] for wall in g["walls"]) == sorted([w, w, h, h])
             assert g["diagonal"] is None
         else:
             assert len(g["walls"]) == 6 and g["diagonal"] > 0
         lengths = {w["id"]: w["length"] for w in g["walls"]}
         for o in g["openings"]:
-            assert 0 <= o["offset"] and o["offset"] + o["width"] <= lengths[o["wall"]] + 1e-9
+            assert o["offset"] >= 0 and o["offset"] + o["width"] <= lengths[o["wall"]] + 1e-9
             expected = set(t_win) if o["type"] == "window" else set(t_door)
             assert set(o) == expected
         if room.index > 0:
@@ -141,7 +142,7 @@ def test_ground_truth_matches_apartment(apt):
 def test_entry_offset_is_from_left_end_seen_from_inside(apt):
     """Offsets run from the wall's left end as seen standing in the room facing the wall."""
     rooms = ground_truth_rooms(apt)
-    for room, g in zip(apt.rooms[1:], rooms[1:]):
+    for room, g in zip(apt.rooms[1:], rooms[1:], strict=True):
         door = apt.openings[room.entry]
         P = room.polygon
         a, b = P[0], P[1]
@@ -198,7 +199,7 @@ def test_camera_rotations_orientation():
     assert np.allclose(port[:, 0], [0, 0, -1])  # held upright, the sensor's x axis points down
 
 
-# ------------------------------------------------------------------------------------------- sensors and poses
+# --------------------------------------------------------------------------------------- sensors and poses
 
 
 def test_lidar_measurement_rules():
@@ -220,9 +221,10 @@ def test_lidar_measurement_rules():
 
 
 @pytest.mark.parametrize("value,double,expected", [
-    (0.0, False, "0.0"), (1.0, False, "1.0"), (-0.5, False, "-0.5"), (0.1, False, "0.1"), (1e-05, False, "1e-05"),
-    (0.0001, False, "0.0001"), (1597.2357, False, "1597.2357"), (-2.3841858e-07, False, "-2.3841858e-07"),
-    (12.0, True, "12.0"), (52361.483529125, True, "52361.483529125"), (0.1, True, "0.1")])
+    (0.0, False, "0.0"), (1.0, False, "1.0"), (-0.5, False, "-0.5"), (0.1, False, "0.1"),
+    (1e-05, False, "1e-05"), (0.0001, False, "0.0001"), (1597.2357, False, "1597.2357"),
+    (-2.3841858e-07, False, "-2.3841858e-07"), (12.0, True, "12.0"),
+    (52361.483529125, True, "52361.483529125"), (0.1, True, "0.1")])
 def test_swift_float(value, double, expected):
     assert swift_float(value, double) == expected
 
@@ -263,7 +265,7 @@ def test_trajectory_visits_rooms_and_returns(apt):
     assert abs(np.degrees((traj.yaw[-1] - traj.yaw[0] + np.pi) % (2 * np.pi) - np.pi)) < 2.0
     assert abs(np.degrees(traj.pitch[-1] - traj.pitch[0])) < 1.0
     assert free_mask(apt, p[:, :2]).all() and not traj.flags
-    assert 1.25 < p[:, 2].min() and p[:, 2].max() < 1.6
+    assert p[:, 2].min() > 1.25 and p[:, 2].max() < 1.6
     assert 60.0 < traj.duration <= 210.0
     assert np.degrees(traj.pitch.min()) < -30 and np.degrees(traj.pitch.max()) > 20
     dt = 1.0 / traj.rate
@@ -278,7 +280,8 @@ def test_long_routes_are_walked_faster(apt):
     assert slow.speed == 1.0 and fast.speed > 1.0
     assert fast.duration <= 0.8 * slow.duration + 1e-6
     # same route; height and sway noise differ because the sample count differs
-    assert np.allclose(fast.pos[0], slow.pos[0], atol=0.03) and np.allclose(fast.pos[-1], slow.pos[-1], atol=0.03)
+    assert np.allclose(fast.pos[0], slow.pos[0], atol=0.03)
+    assert np.allclose(fast.pos[-1], slow.pos[-1], atol=0.03)
 
 
 # ------------------------------------------------------------------------------------------- capture files
@@ -294,8 +297,8 @@ def test_capture_layout_and_headers(capture):
 
     text = (d / "odometry.csv").read_text()
     assert text.startswith(ODOMETRY_HEADER)
-    assert ODOMETRY_HEADER == ("timestamp, frame, x, y, z, qx, qy, qz, qw, fx, fy, cx, cy, distortion_center_x, "
-                               "distortion_center_y\n")
+    assert ODOMETRY_HEADER == ("timestamp, frame, x, y, z, qx, qy, qz, qw, fx, fy, cx, cy, "
+                               "distortion_center_x, distortion_center_y\n")
     rows = list(csv.reader(text.splitlines()[1:], skipinitialspace=True))
     assert len(rows) == n
     assert all(len(r) == 15 and r[13] == "" and r[14] == "" for r in rows)
@@ -355,7 +358,7 @@ def test_poses_reproduce_rendered_geometry(apt, scene, capture):
         pw = np.stack([x, y, z], 1) @ T_wc[:3, :3].T + T_wc[:3, 3]
         pp = pw @ T_pa[:3, :3].T + T_pa[:3, 3]
         dist = np.minimum(np.abs(pp[:, 2]), np.abs(pp[:, 2] - apt.ceiling))
-        for b0, b1 in zip(lo, hi):
+        for b0, b1 in zip(lo, hi, strict=True):
             dist = np.minimum(dist, np.linalg.norm(pp - np.clip(pp, b0, b1), axis=1))
         assert len(pp) > 10000 and dist.max() < 0.002
 
@@ -387,7 +390,8 @@ def test_generate_benchmark_layout(tmp_path):
     assert [c["id"] for c in gt["captures"]] == ["lidar_1", "lidar_2", "lidar_drift"]
     for c in gt["captures"]:
         d = p / c["path"]
-        assert (d / "odometry.csv").exists() and (d / "rgb.mp4").exists() and len(list((d / "depth").iterdir())) == 6
+        assert (d / "odometry.csv").exists() and (d / "rgb.mp4").exists()
+        assert len(list((d / "depth").iterdir())) == 6
         truth = yaml.safe_load((p / "truth" / f"{c['id']}.yaml").read_text())
         assert truth["frames"] == 6 and np.asarray(truth["T_arkit_from_property"]).shape == (4, 4)
         assert (p / "truth" / f"{c['id']}_poses.csv").exists()

@@ -1,10 +1,10 @@
-"""Synthetic Stray Scanner 1.4 captures: walking route, ARKit-like poses with drift, LiDAR depth and confidence.
+"""Synthetic Stray Scanner 1.4 captures: walking route, ARKit-like poses with drift, LiDAR depth, confidence.
 
-The files mirror the Stray Scanner 1.4 encoders (github.com/strayrobots/scanner, tag v1.4, StrayScanner/Helpers,
-MIT licence):
-- odometry.csv: one row per saved frame, ", " separated, Swift float printing, empty distortion columns (ARKit
-  gives no lens calibration for the rear camera). The quaternion is ARKit's camera rotation times a 180 degree
-  rotation about x, i.e. OpenCV camera axes, camera-to-world in ARKit's gravity-aligned y-up world.
+The files mirror the Stray Scanner 1.4 encoders (github.com/strayrobots/scanner, tag v1.4,
+StrayScanner/Helpers, MIT licence):
+- odometry.csv: one row per saved frame, ", " separated, Swift float printing. The distortion columns are
+  empty, which 1.4 writes when ARKit supplies no lens calibration. The quaternion is ARKit's camera rotation
+  times a 180 degree rotation about x (OpenCV camera axes), camera-to-world in ARKit's y-up world.
 - depth/NNNNNN.png: 16-bit grey, millimetres, round(metres * 1000), 0 where there is no return.
 - confidence/NNNNNN.png: 8-bit grey with values 0, 1, 2.
 - camera_matrix.csv: intrinsics of the last frame, three rows, no trailing newline.
@@ -109,7 +109,7 @@ class Trajectory:
 
 
 def camera_rotations(yaw: np.ndarray, pitch: np.ndarray, roll: np.ndarray, *, orientation: str) -> np.ndarray:
-    """OpenCV camera-to-property rotations. Portrait: image x points down in the world, as on a held iPhone."""
+    """OpenCV camera-to-property rotations. Portrait (phone upright): image x points down in the world."""
     yaw, pitch, roll = (np.atleast_1d(np.asarray(a, float)) for a in (yaw, pitch, roll))
     f = np.stack([np.cos(yaw) * np.cos(pitch), np.sin(yaw) * np.cos(pitch), np.sin(pitch)], -1)
     r = np.stack([np.sin(yaw), -np.cos(yaw), np.zeros_like(yaw)], -1)
@@ -153,7 +153,8 @@ class _Path:
         for i in range(1, n + 1):
             self._push(self.x[-1], self.y[-1], y0 + delta * i / n, mode, abs(delta) / n / rate)
 
-    def line_to(self, x: float, y: float, speed: float, rate: float, mode: int, yaw: float | None = None) -> None:
+    def line_to(self, x: float, y: float, speed: float, rate: float, mode: int,
+                yaw: float | None = None) -> None:
         """Walk straight to (x, y), facing the walking direction unless `yaw` is given."""
         p0, p1 = self.pos, np.array([x, y], float)
         length = float(np.linalg.norm(p1 - p0))
@@ -171,7 +172,7 @@ class _Path:
             self._push(p[0], p[1], y0 + dy * i / n, mode, max(length / n / speed, abs(dy) / n / rate))
 
     def follow(self, pts: np.ndarray, yaws: np.ndarray, speed: float, rate: float, mode: int) -> None:
-        """Walk through points (K, 2) with continuous yaw targets (K,), turning on the spot to yaws[0] first."""
+        """Walk through points (K, 2) with continuous yaw targets (K,), first turning to yaws[0]."""
         self.line_to(pts[0, 0], pts[0, 1], speed, rate, mode, yaw=self.yaw[-1])
         self.turn_to(yaws[0], rate, TURN)
         # turn_to may land on yaws[0] +- 2 pi (a half turn can go either way); continue from where it landed
@@ -237,7 +238,8 @@ def plan_trajectory(apt: Apartment, rng: np.random.Generator, *, orientation: st
     return traj
 
 
-def _plan_once(apt: Apartment, rng: np.random.Generator, orientation: str, rate: float, speed: float) -> Trajectory:
+def _plan_once(apt: Apartment, rng: np.random.Generator, orientation: str, rate: float,
+               speed: float) -> Trajectory:
     v_cor, v_door, v_loop = (speed * rng.uniform(*r) for r in ((0.50, 0.62), (0.36, 0.45), (0.30, 0.38)))
     w_turn, w_walk = (speed * np.radians(rng.uniform(*r)) for r in ((45, 60), (35, 45)))
     inset = rng.uniform(1.1, 1.3)
@@ -284,8 +286,8 @@ def _plan_once(apt: Apartment, rng: np.random.Generator, orientation: str, rate:
          + 0.015 * _smooth_noise(rng, (n,), 2.0 * rate) * (0.3 + 0.7 * activity))
     sway = 0.008 * _smooth_noise(rng, (n, 2), 1.0 * rate) * activity[:, None]
     pos = np.stack([x + sway[:, 0], y + sway[:, 1], z], 1)
-    traj = Trajectory(t=t, pos=pos, yaw=yaw, pitch=pitch, roll=roll, mode=mode, orientation=orientation, rate=rate,
-                      flags=flags)
+    traj = Trajectory(t=t, pos=pos, yaw=yaw, pitch=pitch, roll=roll, mode=mode, orientation=orientation,
+                      rate=rate, flags=flags)
     bad = ~free_mask(apt, pos[::5, :2], margin=0.05)
     if bad.any():
         log.warning("trajectory leaves free space at %d of %d samples", int(bad.sum()), len(bad))
@@ -294,7 +296,8 @@ def _plan_once(apt: Apartment, rng: np.random.Generator, orientation: str, rate:
 
 
 def _visit_room(path: _Path, apt: Apartment, room: SynthRoom, rng: np.random.Generator, inset: float,
-                y_cc: float, speeds: tuple[float, float, float], rates: tuple[float, float], flags: list[str]) -> None:
+                y_cc: float, speeds: tuple[float, float, float], rates: tuple[float, float],
+                flags: list[str]) -> None:
     v_cor, v_door, v_loop = speeds
     w_turn, w_walk = rates
     o = apt.openings[room.entry]
@@ -343,13 +346,13 @@ def _visit_room(path: _Path, apt: Apartment, room: SynthRoom, rng: np.random.Gen
     path.line_to(*corridor, v_door, w_walk, DOOR)
 
 
-# --------------------------------------------------------------------------------------------- poses and drift
+# ----------------------------------------------------------------------------------------- poses and drift
 
 
 def arkit_world(rng: np.random.Generator, p0: np.ndarray, R0: np.ndarray) -> np.ndarray:
     """4x4 transform from the property frame to an ARKit world (y up, -z = initial heading, origin near p0).
 
-    The AR session starts a moment before recording, so the origin and heading are offset from the first frame.
+    The AR session starts before recording, so the origin and heading are offset from the first frame.
     """
     fwd = R0[:, 2]
     ang = np.arctan2(fwd[1], fwd[0]) + rng.uniform(-0.35, 0.35)
@@ -380,9 +383,9 @@ class Drift:
 def sample_drift(rng: np.random.Generator, t: np.ndarray, mode: str) -> Drift:
     """VIO-like drift: a yaw random walk and a translation random walk, each pinned to a final magnitude.
 
-    normal: 1 to 3 degrees for a 3-minute capture (scaled by sqrt(duration / 3 min), as a random walk grows) and
-    1 to 2 cm per minute; strong: 4 degrees and 10 cm by the end. Each frame's rotation turns about gravity
-    around its own camera centre; the translation is added to the camera centre.
+    normal: 1 to 3 degrees for a 3-minute capture (scaled by sqrt(duration / 3 min), as a random walk grows)
+    and 1 to 2 cm per minute; strong: 4 degrees and 10 cm by the end. Each frame's rotation turns about
+    gravity around its own camera centre; the translation is added to the camera centre.
     """
     if mode not in DRIFT_MODES:
         raise ValueError(f"drift must be one of {DRIFT_MODES}, got {mode!r}")
@@ -441,10 +444,10 @@ def lidar_measurement(depth: np.ndarray, cos_inc: np.ndarray, rng: np.random.Gen
                       max_range: float = 5.0) -> tuple[np.ndarray, np.ndarray]:
     """ARKit-like depth (uint16 mm) and confidence (uint8 0/1/2) from a noise-free z-depth render.
 
-    Noise sigma is 0.004 + 0.006 * depth (a quarter of the variance white, the rest spatially smooth, as ARKit
-    depth is a densified, filtered map); depth edges get mixed pixels,
-    grazing angles drop out, nothing returns beyond max_range. Confidence is 2 under 3 m at incidence under
-    60 degrees, 1 under 4.5 m, else 0. rng=None gives the noise-free measurement with the same confidence rule.
+    Noise sigma is 0.004 + 0.006 * depth, a quarter of the variance white and the rest spatially smooth (ARKit
+    depth is a densified, filtered map). Depth edges get mixed pixels, grazing angles drop out, nothing
+    returns beyond max_range. Confidence is 2 under 3 m at incidence under 60 degrees, 1 under 4.5 m, else 0.
+    rng=None gives the noise-free measurement with the same confidence rule.
     """
     z = np.asarray(depth, np.float64)
     valid = np.isfinite(z) & (z > 0) & (z <= max_range)
@@ -473,7 +476,8 @@ def lidar_measurement(depth: np.ndarray, cos_inc: np.ndarray, rng: np.random.Gen
     return np.clip(mm, 0, 65535).astype(np.uint16), conf
 
 
-def imu_samples(traj: Trajectory, rng: np.random.Generator | None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def imu_samples(traj: Trajectory,
+                rng: np.random.Generator | None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Raw accelerometer (g, gravity included) and gyroscope (rad/s) in device axes at the trajectory rate."""
     dt = 1.0 / traj.rate
     R_pd = traj.rotations() @ R_DEV_CV.T
@@ -494,7 +498,7 @@ def imu_samples(traj: Trajectory, rng: np.random.Generator | None) -> tuple[np.n
 
 
 class VideoWriter:
-    """rgb.mp4 through PyAV: HEVC (hvc1) when available, else H.264, on a 1/60 s timescale like Stray Scanner."""
+    """rgb.mp4 through PyAV: HEVC (hvc1) when available, else H.264, on Stray Scanner's 1/60 s timescale."""
 
     def __init__(self, path: Path, size: tuple[int, int], fps: float, codec: str | None = None,
                  crf: int = 26) -> None:
@@ -557,7 +561,7 @@ def _camera_matrix_text(K: np.ndarray) -> str:
 def _imu_text(timestamps: np.ndarray, acc: np.ndarray, gyro: np.ndarray) -> str:
     f = swift_float
     rows = [IMU_HEADER]
-    for t, a, w in zip(timestamps, acc, gyro):
+    for t, a, w in zip(timestamps, acc, gyro, strict=True):
         rows.append(f"{f(t, True)}, {f(a[0], True)}, {f(a[1], True)}, {f(a[2], True)}, "
                     f"{f(w[0], True)}, {f(w[1], True)}, {f(w[2], True)}\n")
     return "".join(rows)
@@ -646,12 +650,13 @@ def write_capture(apt: Apartment, out_dir: str | Path, *, seed: int, config: Cap
     drift = sample_drift(rng_drift, frame_t, cfg.drift)
     jitter = None
     if cfg.noise:
-        jitter = (0.0015 * _smooth_noise(rng_misc, (n, 3), 3.0), np.radians(0.05) * _smooth_noise(rng_misc, (n, 3), 3.0))
+        jitter = (0.0015 * _smooth_noise(rng_misc, (n, 3), 3.0),
+                  np.radians(0.05) * _smooth_noise(rng_misc, (n, 3), 3.0))
     t0 = rng_misc.uniform(5000.0, 400000.0)
     stamps = t0 + frame_t + (rng_misc.normal(0.0, 2e-5, n) if cfg.noise else 0.0)
-    result = CaptureResult(path=out, config=cfg, frame_times=frame_t, timestamps=stamps, slots=slots, true_pos=pos,
-                           true_R=R, K=K, T_arkit_property=T_wp, drift=drift, trajectory=traj, jitter=jitter,
-                           flags=list(traj.flags))
+    result = CaptureResult(path=out, config=cfg, frame_times=frame_t, timestamps=stamps, slots=slots,
+                           true_pos=pos, true_R=R, K=K, T_arkit_property=T_wp, drift=drift, trajectory=traj,
+                           jitter=jitter, flags=list(traj.flags))
 
     out.mkdir(parents=True, exist_ok=True)
     (out / "depth").mkdir(exist_ok=True)
@@ -667,8 +672,8 @@ def write_capture(apt: Apartment, out_dir: str | Path, *, seed: int, config: Cap
             depth_mm, conf = lidar_measurement(dr.depth, dr.cos_incidence, noise_rng, max_range=cfg.max_range)
             cv2.imwrite(str(out / "depth" / f"{i:06d}.png"), depth_mm, png)
             cv2.imwrite(str(out / "confidence" / f"{i:06d}.png"), conf, png)
-            rgb = render_rgb(scene, K[i], cfg.rgb_size, R[i], pos[i], boxes=dr.boxes_seen, scale=cfg.rgb_scale,
-                             rng=noise_rng)
+            rgb = render_rgb(scene, K[i], cfg.rgb_size, R[i], pos[i], boxes=dr.boxes_seen,
+                             scale=cfg.rgb_scale, rng=noise_rng)
             video.write(rgb, int(slots[i]))
             if (i + 1) % 300 == 0:
                 log.info("%s: frame %d/%d (%.0f s)", out.name, i + 1, n, time.perf_counter() - t_start)
@@ -686,12 +691,14 @@ def write_capture(apt: Apartment, out_dir: str | Path, *, seed: int, config: Cap
 
 
 def write_odometry(result: CaptureResult, path: Path) -> None:
-    p_w, q = odometry_poses(result.true_pos, result.true_R, result.drift, result.T_arkit_property, result.jitter)
+    p_w, q = odometry_poses(result.true_pos, result.true_R, result.drift, result.T_arkit_property,
+                            result.jitter)
     path.write_text(_odometry_text(result.timestamps, p_w, q, result.K))
 
 
-def redrift_capture(src: CaptureResult, out_dir: str | Path, *, seed: int, drift: str = "strong") -> CaptureResult:
-    """Same frames as `src` with a different pose drift: sensor files are hard-linked (copied if that fails)."""
+def redrift_capture(src: CaptureResult, out_dir: str | Path, *, seed: int,
+                    drift: str = "strong") -> CaptureResult:
+    """Same frames as `src` with a different pose drift; sensor files are hard-linked (or copied)."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     for sub in ("depth", "confidence"):
@@ -703,8 +710,9 @@ def redrift_capture(src: CaptureResult, out_dir: str | Path, *, seed: int, drift
     rng = np.random.default_rng(np.random.SeedSequence(seed).spawn(3)[2])
     new = CaptureResult(path=out, config=src.config, frame_times=src.frame_times, timestamps=src.timestamps,
                         slots=src.slots, true_pos=src.true_pos, true_R=src.true_R, K=src.K,
-                        T_arkit_property=src.T_arkit_property, drift=sample_drift(rng, src.frame_times, drift),
-                        trajectory=src.trajectory, jitter=src.jitter, flags=list(src.flags))
+                        T_arkit_property=src.T_arkit_property,
+                        drift=sample_drift(rng, src.frame_times, drift), trajectory=src.trajectory,
+                        jitter=src.jitter, flags=list(src.flags))
     write_odometry(new, out / "odometry.csv")
     return new
 

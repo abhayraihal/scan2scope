@@ -5,7 +5,7 @@ Layout per property (same as real benchmark data):
     synth_K/plan.png            ground-truth plan with the lidar_1 route
     synth_K/raw/lidar_1         normal drift
     synth_K/raw/lidar_2         repeat: different route, noise and drift seeds
-    synth_K/raw/lidar_drift     lidar_1 frames with strong pose drift (drift ablation); sensor files hard-linked
+    synth_K/raw/lidar_drift     lidar_1 frames with strong pose drift (ablation), sensor files hard-linked
     synth_K/truth/<capture>.yaml, <capture>_poses.csv   ARKit-from-property transform, drift, true poses
 """
 
@@ -19,6 +19,7 @@ from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 
 import numpy as np
+import yaml
 from scipy.spatial.transform import Rotation
 
 from scan2scope.synth.apartment import TEMPLATES, Apartment, adjacency, ground_truth_rooms, random_apartment
@@ -30,15 +31,17 @@ log = logging.getLogger("scan2scope.synth")
 CAPTURE_NOTES = {"lidar_1": "normal drift",
                  "lidar_2": "repeat: different route, noise and drift seeds",
                  "lidar_drift": "lidar_1 frames with strong pose drift, for the drift ablation"}
+_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
 
 def generate_benchmark(out: str | Path, n_properties: int = 4, seed: int = 0, *, fps: float = 10.0,
                        max_frames: int | None = None, rgb_scale: float = 0.5, workers: int = 1,
                        overwrite: bool = True) -> list[Path]:
-    """Write `n_properties` synthetic properties under `out` (synth_0, synth_1, ...) and return their folders.
+    """Write `n_properties` synthetic properties under `out` (synth_0, synth_1, ...); return their folders.
 
     Property K uses template TEMPLATES[K % 3]; odd K get an L-shaped room and landscape holding, even K a
-    passage between rooms and portrait holding, so a 4-property run covers every variant.
+    passage between rooms and portrait holding, so a 4-property run covers every variant. A property that
+    fails is logged and left out of the returned list.
     """
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
@@ -56,7 +59,7 @@ def generate_benchmark(out: str | Path, n_properties: int = 4, seed: int = 0, *,
     if summaries is None:
         summaries = [_property_job(job) for job in jobs]
     done = []
-    for job, s in zip(jobs, summaries):
+    for job, s in zip(jobs, summaries, strict=True):
         if "error" in s:
             log.error("%s failed: %s", s["property"], s["error"])
             continue
@@ -66,7 +69,7 @@ def generate_benchmark(out: str | Path, n_properties: int = 4, seed: int = 0, *,
 
 
 def _init_worker(level: int) -> None:
-    logging.basicConfig(level=level, format="%(asctime)s %(levelname)s %(name)s: %(message)s", datefmt="%H:%M:%S")
+    logging.basicConfig(level=level, format=_LOG_FORMAT, datefmt="%H:%M:%S")
 
 
 def _property_job(job: tuple) -> dict:
@@ -79,8 +82,8 @@ def _property_job(job: tuple) -> dict:
         return {"property": path.name, "error": f"{type(exc).__name__}: {exc}"}
 
 
-def generate_property(path: str | Path, index: int, seed: int, *, fps: float = 10.0, max_frames: int | None = None,
-                      rgb_scale: float = 0.5, overwrite: bool = True) -> dict:
+def generate_property(path: str | Path, index: int, seed: int, *, fps: float = 10.0,
+                      max_frames: int | None = None, rgb_scale: float = 0.5, overwrite: bool = True) -> dict:
     path = Path(path)
     if path.exists() and overwrite:
         shutil.rmtree(path)
@@ -89,14 +92,17 @@ def generate_property(path: str | Path, index: int, seed: int, *, fps: float = 1
                            passage=True if index % 2 == 0 else None)
     scene = RenderScene(apt, seed=int(ss[0]))
     orientation = "portrait" if index % 2 == 0 else "landscape"
-    cfg = CaptureConfig(fps=fps, orientation=orientation, drift="normal", rgb_scale=rgb_scale, max_frames=max_frames)
+    cfg = CaptureConfig(fps=fps, orientation=orientation, drift="normal", rgb_scale=rgb_scale,
+                        max_frames=max_frames)
     raw = path / "raw"
     caps = {"lidar_1": write_capture(apt, raw / "lidar_1", seed=int(ss[1]), config=cfg, scene=scene)}
     caps["lidar_2"] = write_capture(apt, raw / "lidar_2", seed=int(ss[2]), config=cfg, scene=scene)
-    caps["lidar_drift"] = redrift_capture(caps["lidar_1"], raw / "lidar_drift", seed=int(ss[3]), drift="strong")
+    caps["lidar_drift"] = redrift_capture(caps["lidar_1"], raw / "lidar_drift", seed=int(ss[3]),
+                                          drift="strong")
     write_ground_truth(apt, path / "ground_truth.yaml", path.name, list(caps))
     for cid, res in caps.items():
-        write_truth(res, path / "truth", cid, path.name, same_frames_as="lidar_1" if cid == "lidar_drift" else None)
+        same = "lidar_1" if cid == "lidar_drift" else None
+        write_truth(res, path / "truth", cid, path.name, same_frames_as=same)
     save_plan_png(apt, path / "plan.png", title=path.name, trajectory=caps["lidar_1"].true_pos)
     return {"property": path.name, "template": apt.template, "rooms": len(apt.rooms) - 1,
             "captures": {cid: res.n_frames for cid, res in caps.items()}}
@@ -115,12 +121,12 @@ def ground_truth_text(apt: Apartment, property_id: str, capture_ids: list[str],
     """ground_truth.yaml text in the bench/templates/ground_truth.yaml layout, plus polygon and adjacency."""
     rooms = ground_truth_rooms(apt)
     lines = [
-        f"# Synthetic ground truth from scan2scope.synth (apartment seed {apt.seed}, template {apt.template}).",
+        f"# Synthetic ground truth from scan2scope.synth: apartment seed {apt.seed}, {apt.template}.",
         "# Definitions: docs/ground_truth_protocol.md. Lengths in metres, exact to the millimetre.",
-        "# Walls start at the wall holding the room's entry door (hallway: the entrance wall where every capture",
-        "# starts and ends) and go clockwise seen from above. polygon: interior corners in property coordinates",
-        "# (x east, y north, metres) in wall order; vertex k is the left end of wall W(k+1) seen from inside.",
-        "# diagonal (non-rectangular rooms): distance from the start of W1 to the farthest corner.",
+        "# Walls start at the wall holding the room's entry door (hallway: the entrance wall where every",
+        "# capture starts and ends) and go clockwise seen from above. polygon: interior corners in property",
+        "# coordinates (x east, y north, metres) in wall order; vertex k is the left end of wall W(k+1)",
+        "# seen from inside. diagonal (non-rectangular rooms): from the start of W1 to the farthest corner.",
         f"property: {property_id}",
         "measured_by: synthetic",
         'instrument: "exact (generated geometry)"',
@@ -148,7 +154,8 @@ def ground_truth_text(apt: Apartment, property_id: str, capture_ids: list[str],
         else:
             lines.append("    openings: []")
         lines.append("    damage: []")
-        lines.append("    polygon: [" + ", ".join(f"[{_f3(x)}, {_f3(y)}]" for x, y in room["polygon"]) + "]")
+        corners = ", ".join(f"[{_f3(x)}, {_f3(y)}]" for x, y in room["polygon"])
+        lines.append(f"    polygon: [{corners}]")
         lines.append("")
     lines.append("# Rooms joined by a door or an open passage, with the opening id on each side.")
     lines.append("adjacency:")
@@ -172,8 +179,6 @@ def write_ground_truth(apt: Apartment, path: Path, property_id: str, capture_ids
 def write_truth(res: CaptureResult, folder: Path, capture_id: str, property_id: str,
                 same_frames_as: str | None = None) -> None:
     """Per-capture truth: the transform into the capture's ARKit world, drift record and true poses."""
-    import yaml
-
     folder.mkdir(parents=True, exist_ok=True)
     cfg = res.config
     doc = {
@@ -199,7 +204,8 @@ def write_truth(res: CaptureResult, folder: Path, capture_id: str, property_id: 
     }
     (folder / f"{capture_id}.yaml").write_text(
         "# Synthetic capture truth. T_arkit_from_property maps property coordinates (metres, z up) to this\n"
-        "# capture's ARKit world (y up). The poses file holds the true OpenCV camera-to-property pose per frame.\n"
+        "# capture's ARKit world (y up). The poses file holds the true OpenCV camera-to-property pose\n"
+        "# of every frame.\n"
         + yaml.safe_dump(doc, sort_keys=False, default_flow_style=None, width=120))
     q = Rotation.from_matrix(res.true_R).as_quat()
     rows = ["frame, timestamp, x, y, z, qx, qy, qz, qw"]
@@ -210,7 +216,8 @@ def write_truth(res: CaptureResult, folder: Path, capture_id: str, property_id: 
     (folder / f"{capture_id}_poses.csv").write_text("\n".join(rows) + "\n")
 
 
-def save_plan_png(apt: Apartment, path: Path, *, title: str = "", trajectory: np.ndarray | None = None) -> None:
+def save_plan_png(apt: Apartment, path: Path, *, title: str = "",
+                  trajectory: np.ndarray | None = None) -> None:
     """Ground-truth plan: walls cut at 1.0 m, openings, furniture, wall ids and lengths, optional route."""
     import matplotlib
 
@@ -221,30 +228,29 @@ def save_plan_png(apt: Apartment, path: Path, *, title: str = "", trajectory: np
     fp = apt.footprint
     w, h = (fp.x1 - fp.x0) / 1000.0, (fp.y1 - fp.y0) / 1000.0
     fig, ax = plt.subplots(figsize=(min(16.0, 2.0 + 0.9 * w), min(12.0, 1.5 + 0.9 * h)))
+    styles = {"wall": ("#2b2b2b", 1.0), "furniture": ("#c9955c", 0.55), "door_leaf": ("#3a9d3a", 0.8)}
     for b in apt.boxes:
         if b.kind == "wall" and not (b.lo[2] <= 1.0 <= b.hi[2]):
             continue
-        style = {"wall": ("#2b2b2b", 1.0), "furniture": ("#c9955c", 0.55), "door_leaf": ("#3a9d3a", 0.8)}[b.kind]
-        ax.add_patch(plt.Rectangle(b.lo[:2], b.hi[0] - b.lo[0], b.hi[1] - b.lo[1], color=style[0], alpha=style[1],
+        colour, alpha = styles[b.kind]
+        ax.add_patch(plt.Rectangle(b.lo[:2], b.hi[0] - b.lo[0], b.hi[1] - b.lo[1], color=colour, alpha=alpha,
                                    lw=0))
     colours = {"door": "#d62728", "window": "#17becf", "opening": "#9467bd"}
     for o in apt.openings:
         r = o.plan_rect()
         ax.add_patch(plt.Rectangle((r.x0 / 1000.0, r.y0 / 1000.0), r.w / 1000.0, r.h / 1000.0, fill=True,
                                    color=colours[o.kind], alpha=0.6, lw=0))
-    for room, gt in zip(apt.rooms, rooms):
+    for room, gt in zip(apt.rooms, rooms, strict=True):
         P = room.polygon
         c = room.shape_m().representative_point()
         ax.text(c.x, c.y, f"{room.name}\n{room.area:.2f} m²", ha="center", va="center", fontsize=8,
                 fontweight="bold")
         for k, wall in enumerate(gt["walls"]):
             a, b = P[k], P[(k + 1) % len(P)]
-            mid = 0.5 * (a + b)
             d = (b - a) / np.linalg.norm(b - a)
-            inward = np.array([d[1], -d[0]])
-            pos = mid + inward * 0.22
-            ax.text(pos[0], pos[1], f"{wall['id']} {wall['length']:.3f}", ha="center", va="center", fontsize=5.5,
-                    rotation=0 if abs(d[0]) > 0.5 else 90, color="#333366")
+            pos = 0.5 * (a + b) + np.array([d[1], -d[0]]) * 0.22
+            ax.text(pos[0], pos[1], f"{wall['id']} {wall['length']:.3f}", ha="center", va="center",
+                    fontsize=5.5, rotation=0 if abs(d[0]) > 0.5 else 90, color="#333366")
     if trajectory is not None and len(trajectory):
         ax.plot(trajectory[:, 0], trajectory[:, 1], "-", color="#1f77b4", lw=0.6, alpha=0.7)
         ax.plot(trajectory[0, 0], trajectory[0, 1], "o", color="#1f77b4", ms=6)
@@ -254,8 +260,9 @@ def save_plan_png(apt: Apartment, path: Path, *, title: str = "", trajectory: np
     ax.set_xlabel("x (m)")
     ax.set_ylabel("y (m)")
     area = sum(r.area for r in apt.rooms)
-    ax.set_title(f"{title}: {apt.template}, {len(apt.rooms) - 1} rooms + hallway, ceiling {apt.ceiling:.3f} m, "
-                 f"floor area {area:.2f} m²   (red door, purple passage, cyan window, green door leaf)", fontsize=8)
+    ax.set_title(f"{title}: {apt.template}, {len(apt.rooms) - 1} rooms + hallway, "
+                 f"ceiling {apt.ceiling:.3f} m, floor area {area:.2f} m²   "
+                 "(red door, purple passage, cyan window, green door leaf)", fontsize=8)
     fig.tight_layout()
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=150)

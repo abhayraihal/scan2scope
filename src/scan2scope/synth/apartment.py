@@ -1,8 +1,8 @@
 """Random Manhattan apartments made of axis-aligned boxes, with exact ground truth.
 
-Property frame: metres, x east, y north, z up, floor at z = 0. Layouts are generated in integer millimetres, so
-every ground-truth number is exact at the millimetre precision the ground-truth file records. Walls are the solid
-left over when the room interiors are cut out of the footprint; openings cut z-ranges out of that solid.
+Property frame: metres, x east, y north, z up, floor at z = 0. Layouts are generated in integer millimetres,
+so every ground-truth number is exact at the millimetre precision the ground-truth file records. Walls are the
+solid left over when the room interiors are cut out of the footprint; openings cut z-ranges out of that solid.
 """
 
 from __future__ import annotations
@@ -27,15 +27,22 @@ FURNITURE_CLEARANCE_M = 0.35  # free space kept between furniture and the camera
 
 # label, width, depth, height ranges in mm
 FURNITURE: dict[str, list[tuple[str, tuple[int, int], tuple[int, int], tuple[int, int]]]] = {
-    "bedroom": [("wardrobe", (1000, 2000), (550, 620), (1900, 2150)), ("dresser", (800, 1400), (400, 500), (750, 950)),
-                ("desk", (1000, 1400), (550, 650), (730, 760)), ("shelf", (600, 1000), (280, 350), (1700, 2000))],
-    "living": [("sofa", (1600, 2200), (700, 800), (800, 900)), ("tv_unit", (1200, 1800), (400, 450), (450, 550)),
-               ("shelf", (600, 1000), (280, 350), (1700, 2000)), ("cabinet", (800, 1200), (400, 450), (800, 1000))],
-    "kitchen": [("counter", (1800, 3000), (600, 620), (880, 920)), ("tall_unit", (600, 700), (600, 650), (1900, 2100)),
+    "bedroom": [("wardrobe", (1000, 2000), (550, 620), (1900, 2150)),
+                ("dresser", (800, 1400), (400, 500), (750, 950)),
+                ("desk", (1000, 1400), (550, 650), (730, 760)),
+                ("shelf", (600, 1000), (280, 350), (1700, 2000))],
+    "living": [("sofa", (1600, 2200), (700, 800), (800, 900)),
+               ("tv_unit", (1200, 1800), (400, 450), (450, 550)),
+               ("shelf", (600, 1000), (280, 350), (1700, 2000)),
+               ("cabinet", (800, 1200), (400, 450), (800, 1000))],
+    "kitchen": [("counter", (1800, 3000), (600, 620), (880, 920)),
+                ("tall_unit", (600, 700), (600, 650), (1900, 2100)),
                 ("counter", (1200, 2000), (600, 620), (880, 920))],
-    "bathroom": [("vanity", (600, 1000), (450, 550), (820, 880)), ("bathtub", (1500, 1700), (700, 750), (550, 600)),
+    "bathroom": [("vanity", (600, 1000), (450, 550), (820, 880)),
+                 ("bathtub", (1500, 1700), (700, 750), (550, 600)),
                  ("cabinet", (400, 600), (300, 350), (1600, 1900))],
-    "office": [("desk", (1200, 1600), (600, 700), (730, 760)), ("shelf", (800, 1200), (300, 350), (1800, 2000)),
+    "office": [("desk", (1200, 1600), (600, 700), (730, 760)),
+               ("shelf", (800, 1200), (300, 350), (1800, 2000)),
                ("cabinet", (800, 1000), (400, 450), (700, 1000))],
 }
 TABLE = ("table", (1000, 1400), (700, 900), (730, 760))
@@ -159,7 +166,7 @@ class Apartment:
     envelope: Rect  # interior envelope; the exterior walls surround it
     rooms: list[SynthRoom]  # rooms[0] is the hallway, rooms[1:] are in walking order
     openings: list[SynthOpening]
-    entrance: tuple[tuple[int, int], tuple[int, int]]  # hallway entrance wall (left end, right end) seen from inside
+    entrance: tuple[tuple[int, int], tuple[int, int]]  # hallway entrance wall ends (left, right) from inside
     boxes: list[SynthBox] = field(default_factory=list)
     flags: list[str] = field(default_factory=list)
 
@@ -222,7 +229,7 @@ def _split(rng: np.random.Generator, total: int, k: int, lo: int = ROOM_SIDE_MM[
     raise _Retry("could not split row")
 
 
-def _row(rng: np.random.Generator, widths: list[int], walls: list[int], y0: int, y1: int, x0: int = 0) -> list[Rect]:
+def _row(widths: list[int], walls: list[int], y0: int, y1: int, x0: int = 0) -> list[Rect]:
     rects, x = [], x0
     for i, w in enumerate(widths):
         rects.append(Rect(x, y0, x + w, y1))
@@ -270,8 +277,8 @@ def _exterior_segments(room: SynthRoom, env: Rect) -> list[tuple[int, int, int, 
     return [tuple(m) for m in merged]
 
 
-def _build(rng: np.random.Generator, seed: int, template: str | None, n_rooms: int | None, l_room: bool | None,
-           passage: bool | None, furniture: bool, door_leaves: bool) -> Apartment:
+def _build(rng: np.random.Generator, seed: int, template: str | None, n_rooms: int | None,
+           l_room: bool | None, passage: bool | None, furniture: bool, door_leaves: bool) -> Apartment:
     tpl = template if template is not None else str(rng.choice(TEMPLATES))
     n_max = 5 if tpl == "double" else 4
     n = int(n_rooms) if n_rooms is not None else int(rng.integers(3, n_max + 1))
@@ -299,9 +306,9 @@ def _build(rng: np.random.Generator, seed: int, template: str | None, n_rooms: i
         y_c1 = y_c0 + c
         y_n0 = y_c1 + t_cn
         hall = Rect(0, y_c0, L, y_c1)
-        rows.append({"rects": _row(rng, _split(rng, L - sum(walls_s), k_s), walls_s, 0, d_s), "corridor_low": False,
-                     "y0": 0, "y1": d_s})
-        rows.append({"rects": _row(rng, _split(rng, L - sum(walls_n), k_n), walls_n, y_n0, y_n0 + d_n),
+        rows.append({"rects": _row(_split(rng, L - sum(walls_s), k_s), walls_s, 0, d_s),
+                     "corridor_low": False, "y0": 0, "y1": d_s})
+        rows.append({"rects": _row(_split(rng, L - sum(walls_n), k_n), walls_n, y_n0, y_n0 + d_n),
                      "corridor_low": True, "y0": y_n0, "y1": y_n0 + d_n})
         env = Rect(0, 0, L, y_n0 + d_n)
         end_rects: list[Rect] = []
@@ -315,7 +322,7 @@ def _build(rng: np.random.Generator, seed: int, template: str | None, n_rooms: i
         L = sum(widths) + sum(walls)
         y_n0 = c + t_cn
         hall = Rect(0, 0, L, c)
-        rows.append({"rects": _row(rng, widths, walls, y_n0, y_n0 + d_n), "corridor_low": True, "y0": y_n0,
+        rows.append({"rects": _row(widths, walls, y_n0, y_n0 + d_n), "corridor_low": True, "y0": y_n0,
                      "y1": y_n0 + d_n})
         end_rects = []
         x_max = L
@@ -339,7 +346,8 @@ def _build(rng: np.random.Generator, seed: int, template: str | None, n_rooms: i
 
     openings: list[SynthOpening] = []
 
-    def add(kind: str, axis: int, n0: int, n1: int, s0: int, s1: int, z0: int, z1: int, low: int, high: int) -> int:
+    def add(kind: str, axis: int, n0: int, n1: int, s0: int, s1: int, z0: int, z1: int, low: int,
+            high: int) -> int:
         openings.append(SynthOpening(len(openings), kind, axis, n0, n1, s0, s1, z0, z1, low, high))
         return len(openings) - 1
 
@@ -407,8 +415,8 @@ def _build(rng: np.random.Generator, seed: int, template: str | None, n_rooms: i
     for room in apt.rooms:
         room.polygon_mm = _gt_polygon(apt, room)
         room.max_inset = _max_inset(room)
-    apt.boxes = [SynthBox((b[0] / 1000, b[1] / 1000, b[4] / 1000), (b[2] / 1000, b[3] / 1000, b[5] / 1000), "wall")
-                 for b in _wall_boxes(apt)]
+    apt.boxes = [SynthBox((x0 / 1000, y0 / 1000, z0 / 1000), (x1 / 1000, y1 / 1000, z1 / 1000), "wall")
+                 for x0, y0, x1, y1, z0, z1 in _wall_boxes(apt)]
     if door_leaves:
         _place_door_leaves(apt, rng)
     if furniture:
@@ -456,7 +464,7 @@ def _order_and_name(apt: Apartment, rng: np.random.Generator) -> None:
         return (x, y)
 
     others = sorted(apt.rooms[1:], key=key)
-    order = [apt.rooms[0]] + others
+    order = [apt.rooms[0], *others]
     remap = {room.index: i for i, room in enumerate(order)}
     for o in apt.openings:
         o.low = remap.get(o.low, -1)
@@ -475,7 +483,7 @@ def _order_and_name(apt: Apartment, rng: np.random.Generator) -> None:
         kinds[rank[1]] = "kitchen"
     if n >= 5:
         kinds[rank[2]] = str(rng.choice(["bedroom", "office"]))
-    for room, kind in zip(others, kinds):
+    for room, kind in zip(others, kinds, strict=True):
         room.kind = kind
     for i, room in enumerate(order):
         room.name = f"{i + 1:02d} {room.kind}"
@@ -508,12 +516,14 @@ def _gt_polygon(apt: Apartment, room: SynthRoom) -> np.ndarray:
 
 
 def _edge_containing(pts: np.ndarray, p: tuple[float, float], tol: float = 0.5) -> int | None:
+    """Index of the axis-aligned polygon edge that the point lies on (within tol), or None."""
     for k in range(len(pts)):
         a, b = pts[k], pts[(k + 1) % len(pts)]
-        if a[0] == b[0] and abs(p[0] - a[0]) <= tol and min(a[1], b[1]) - tol <= p[1] <= max(a[1], b[1]) + tol:
-            return k
-        if a[1] == b[1] and abs(p[1] - a[1]) <= tol and min(a[0], b[0]) - tol <= p[0] <= max(a[0], b[0]) + tol:
-            return k
+        for ax in (0, 1):
+            if a[ax] == b[ax] and abs(p[ax] - a[ax]) <= tol:
+                lo, hi = sorted((a[1 - ax], b[1 - ax]))
+                if lo - tol <= p[1 - ax] <= hi + tol:
+                    return k
     return None
 
 
@@ -636,7 +646,7 @@ def _box_m(axis: int, n0: float, n1: float, s0: float, s1: float) -> Polygon:
 
 
 def _place_door_leaves(apt: Apartment, rng: np.random.Generator) -> None:
-    """Open door leaves: swung 90 degrees into the room when there is space, else folded flat against the wall."""
+    """Open door leaves: swung 90 degrees into the room if there is space, else flat against the wall."""
     for o in apt.openings:
         if o.kind != "door" or rng.random() >= 0.6:
             continue
@@ -658,11 +668,12 @@ def _place_door_leaves(apt: Apartment, rng: np.random.Generator) -> None:
         if not shape.buffer(1e-6).contains(poly) or any(_conflicts(apt, room, poly, skip=o.index)):
             continue
         x0, y0, x1, y1 = poly.bounds
-        apt.boxes.append(SynthBox((x0, y0, 0.01), (x1, y1, o.z1 / 1000.0 - 0.01), "door_leaf", room, "door_leaf"))
+        top = o.z1 / 1000.0 - 0.01
+        apt.boxes.append(SynthBox((x0, y0, 0.01), (x1, y1, top), "door_leaf", room, "door_leaf"))
 
 
 def arm_path(room: SynthRoom) -> tuple[np.ndarray, np.ndarray] | None:
-    """Walking line into the arm of an L-shaped room: (start inside the main part, end near the arm's far wall)."""
+    """Walking line into the arm of an L-shaped room: (start in the main part, end near the far wall)."""
     if len(room.rects) != 2:
         return None
     main, arm = room.rects
@@ -673,7 +684,7 @@ def arm_path(room: SynthRoom) -> tuple[np.ndarray, np.ndarray] | None:
 
 
 def free_mask(apt: Apartment, xy: np.ndarray, margin: float = 0.05) -> np.ndarray:
-    """Plan points (N, 2) in metres that are inside a room or a door gap and clear of furniture by `margin`."""
+    """Plan points (N, 2) in metres inside a room or a door gap and clear of furniture by `margin`."""
     x, y = xy[:, 0:1] * 1000.0, xy[:, 1:2] * 1000.0
     rects = [r for room in apt.rooms for r in room.rects]
     rects += [o.plan_rect() for o in apt.openings if o.kind != "window"]
@@ -784,8 +795,8 @@ def ground_truth_rooms(apt: Apartment) -> list[dict]:
                 entry.update(height=(o.z1 - o.z0) / 1000.0, sill=o.z0 / 1000.0)
             else:
                 other = o.other(room.index)
-                entry.update(height=o.z1 / 1000.0, leads_to=apt.rooms[other].name if other >= 0 else "outside",
-                             wall_thickness=o.thickness / 1000.0)
+                leads_to = apt.rooms[other].name if other >= 0 else "outside"
+                entry.update(height=o.z1 / 1000.0, leads_to=leads_to, wall_thickness=o.thickness / 1000.0)
             openings.append(entry)
         openings.sort(key=lambda e: (e["index"] != room.entry, e["wall"], e["offset"]))
         counters = {"door": 0, "window": 0, "opening": 0}
@@ -793,8 +804,9 @@ def ground_truth_rooms(apt: Apartment) -> list[dict]:
         items = []
         for e in openings:
             counters[e["kind"]] += 1
-            item = {"id": f"{prefix[e['kind']]}{counters[e['kind']]}", "type": e["kind"], "wall": f"W{e['wall'] + 1}",
-                    "offset": e["offset"], "width": e["width"], "height": e["height"]}
+            item = {"id": f"{prefix[e['kind']]}{counters[e['kind']]}", "type": e["kind"],
+                    "wall": f"W{e['wall'] + 1}", "offset": e["offset"], "width": e["width"],
+                    "height": e["height"]}
             if e["kind"] == "window":
                 item["sill"] = e["sill"]
             else:
@@ -814,7 +826,7 @@ def ground_truth_rooms(apt: Apartment) -> list[dict]:
 def adjacency(apt: Apartment, rooms_gt: list[dict]) -> list[dict]:
     """Room pairs joined by a door or open passage, with the opening id on each side."""
     ids: dict[tuple[int, int], str] = {}
-    for room, gt in zip(apt.rooms, rooms_gt):
+    for room, gt in zip(apt.rooms, rooms_gt, strict=True):
         for item in gt["openings"]:
             ids[room.index, item["_opening"]] = item["id"]
     out = []
