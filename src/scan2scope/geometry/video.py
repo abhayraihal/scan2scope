@@ -524,8 +524,13 @@ def build_scene_from_frames(frames: list[Frame], *, drift_correction: bool = Tru
         "n_chunks": len(runs), "sample_fps": float(info.get("sample_fps", 0.0)), "chunk_size": chunk_size,
         "overlap": overlap, "scale_spread_log": scale["spread"], "thin": n < 3,
     }
+    applied = ["sim3_chain"] + (["loop_closure"] if loop["accepted"] else [])
+    if anchor.get("height_chunks") or anchor["max_tilt_correction_deg"] > 0:
+        applied.append("floor_anchoring")
+    if anchor["max_yaw_correction_deg"] > 0:
+        applied.append("manhattan_yaw")
     drift = {
-        "enabled": bool(drift_correction), "chunks": chunk_info, "loop_closure": loop,
+        "enabled": bool(drift_correction), "method": "+".join(applied), "chunks": chunk_info, "loop_closure": loop,
         "max_yaw_correction_deg": float(anchor["max_yaw_correction_deg"]),
         "max_tilt_correction_deg": float(anchor["max_tilt_correction_deg"]),
         "floor_z_spread_before_m": _floor_spread([fl["z"] for fl in floors_chain if fl is not None]),

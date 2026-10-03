@@ -435,6 +435,7 @@ def test_video_drift_correction_beats_chaining(tmp_path):
     assert d_on["enabled"] and not d_off["enabled"]
     assert d_on["loop_closure"]["attempted"] and d_on["loop_closure"]["accepted"], d_on["loop_closure"]
     assert not d_off["loop_closure"]["attempted"]
+    assert d_on["method"] == "sim3_chain+loop_closure+floor_anchoring+manhattan_yaw" and d_off["method"] == "sim3_chain"
     ate_on, S_on = _ate(on.meta["frames"]["T_wc"], poses)
     ate_off, _ = _ate(off.meta["frames"]["T_wc"], poses)
     assert ate_on < 0.5 * ate_off and ate_on < 0.08, (ate_on, ate_off)
