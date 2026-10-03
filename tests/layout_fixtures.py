@@ -241,6 +241,23 @@ def l_room() -> Synth:
     return Synth(free, [], cams, H, {"R": [(0, 0, 5.0, 2.5), (0, 2.5, 2.5, 5.0)]}, ops)
 
 
+def two_areas(passage: str) -> Synth:
+    """Two 4 x 3 m areas split by a 12 cm wall at x = 4.0 with one passage through it.
+
+    passage: "wide" (2.2 m, floor to ceiling), "narrow" (1.0 m, floor to ceiling, no header) or
+    "cased" (2.0 m wide with a header at 2.1 m).
+    """
+    y0, y1, top = {"wide": (0.8, 3.0, H), "narrow": (1.0, 2.0, H), "cased": (0.5, 2.5, 2.1)}[passage]
+    free = [Box((0, 0, 0), (4.0, 3.0, H)), Box((4.12, 0, 0), (8.12, 3.0, H)), Box((4.0, y0, 0), (4.12, y1, top))]
+    cams = [Cam((0.5, 0.5, 1.5), 35), Cam((3.4, 2.5, 1.5), -140), Cam((0.6, 2.5, 1.5), -30), Cam((2.0, 1.5, 1.5), 0),
+            Cam((7.6, 0.5, 1.5), 145), Cam((4.7, 2.5, 1.5), -40), Cam((7.5, 2.5, 1.5), -150), Cam((6.0, 1.5, 1.5), 180)]
+    for c in cams:
+        c.room = "west" if c.pos[0] < 4.0 else "east"
+    rooms = {"west": [(0, 0, 4.0, 3.0)], "east": [(4.12, 0, 8.12, 3.0)]}
+    ops = [Opening("west", "opening" if passage != "cased" else "door", "x", 4.0, y0, y1, 0.0, top, "east")]
+    return Synth(free, [], cams, H, rooms, ops)
+
+
 def hallway_three_rooms() -> Synth:
     """Hallway along y=0..1.2 with rooms A and B above it and a room C at its east end."""
     t = 0.12

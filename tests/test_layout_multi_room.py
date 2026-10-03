@@ -48,6 +48,27 @@ def test_l_shaped_room(l_syn, kw, tol):
     assert abs(room.openings[0].width.value - 0.9) < max(2 * tol, 0.02)
 
 
+@pytest.mark.parametrize("noisy", [False, True])
+@pytest.mark.parametrize("passage,n_rooms", [("wide", 1), ("cased", 1), ("narrow", 2)])
+def test_passage_width_decides_open_plan(passage, n_rooms, noisy):
+    syn = lf.two_areas(passage)
+    kw = NOISY if noisy else {"noise": 0.01}
+    plan = build_plan(lf.make_scene(syn, **kw))
+    assert len(plan.rooms) == n_rooms
+    if n_rooms == 1:
+        assert plan.rooms[0].floor_area.value == pytest.approx(24.36, abs=0.3)
+        assert not plan.adjacency
+        return
+    assert sorted(r.label for r in plan.rooms) == ["east", "west"]
+    for r in plan.rooms:
+        assert lf.cyclic_match([w.length.value for w in r.walls], [4.0, 3.0, 4.0, 3.0]) < 0.04
+        assert [o.type for o in r.openings] == ["opening"]
+        o = r.openings[0]
+        assert abs(o.width.value - 1.0) < 0.03
+        assert o.connects_to == next(q.id for q in plan.rooms if q is not r)
+    assert len(plan.adjacency) == 1 and plan.adjacency[0].opening_b is not None
+
+
 def _room_by_label(plan, label):
     return next(r for r in plan.rooms if r.label == label)
 
