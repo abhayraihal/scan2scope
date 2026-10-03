@@ -51,7 +51,6 @@ PROTOCOL_MIN_FOCAL_LONG = 0.6
 FOCAL_MISMATCH_LOG = 0.1  # a predicted focal this far (log) from the EXIF one: the model did not take it
 
 
-
 def confidence_weight(conf: np.ndarray) -> np.ndarray:
     """Absolute map of MapAnything confidence to [0, 1]: log(conf) / log(CONF_REF), clipped."""
     c = np.maximum(np.nan_to_num(np.asarray(conf, np.float64), nan=1.0), 1.0)
@@ -221,12 +220,11 @@ class ViewPrediction:
         return out
 
 
-
 def focal_check(preds: Sequence[ViewPrediction], ref_focal_long: float | None = None) -> tuple[dict, list[str]]:
     """Compare MapAnything's predicted focal (median over views, times the image's long side) with the EXIF focal
     when known, else with the shortest focal the protocol's camera can have. The log distance beyond those bounds
-    is returned as an extra 1-sigma log-scale uncertainty: every capture where the focal was off had a large
-    metric error, and passing intrinsics does not fix it (MapAnything keeps its own, wider field of view)."""
+    is returned as an extra 1-sigma log-scale uncertainty: the captures where it was off had metric errors of 7 to
+    41%, and passing intrinsics does not fix it (MapAnything keeps its own, wider field of view)."""
     fl = [p.K_image()[0, 0] / max(p.image_size) for p in preds if p.pose_ok and np.isfinite(p.K).all()]
     rec: dict[str, Any] = {"ma_focal_long": None, "ref_focal_long": ref_focal_long, "sigma_log": 0.0}
     if not fl:
