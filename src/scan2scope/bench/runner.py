@@ -3,6 +3,8 @@
 Layout: <data_root>/<property>/ground_truth.yaml (or ground_truth.yaml directly in data_root), results in
 <out_dir>/<property>/<capture>/result.json, and for multi-room video and LiDAR captures a second run with drift
 correction off in <out_dir>/<property>/<capture>__nodrift (semantics skipped there, it does not change the plan).
+Each run also writes bench_run.json (status, error, runner seconds) and, on a crash, error.txt with the
+traceback, so a later skip_run rescoring keeps failures as failures.
 """
 
 from __future__ import annotations
@@ -26,6 +28,8 @@ from scan2scope.bench.report import write_report
 log = logging.getLogger("scan2scope.bench")
 
 RunFn = Callable[..., dict[str, Any]]
+RESULT = "result.json"
+RUN_RECORD = "bench_run.json"  # status, error and runner seconds of the last run, read back by skip_run
 
 
 def find_properties(data_root: str | Path) -> list[Path]:
@@ -53,6 +57,20 @@ def needs_ablation(gt: GroundTruth, cap: GTCapture) -> bool:
     return cap.tier in ("video", "lidar") and len(gt.capture_rooms(cap)) >= 2
 
 
+def _reload(run: dict[str, Any], dest: Path) -> dict[str, Any]:
+    """skip_run: the stored result, with the status, error and runner time of the run that wrote it."""
+    res = _load_result(dest / RESULT)
+    rec = _load_result(dest / RUN_RECORD) or {}
+    run["run_s"] = rec.get("run_s")
+    if res is not None:
+        run["result"] = res
+    elif rec.get("status") == "failed":
+        run.update(status="failed", error=rec.get("error"))
+    else:
+        run.update(status="missing", error=f"no {RESULT} in {dest} (skip_run)")
+    return run
+
+
 def run_one(gt: GroundTruth, cap: GTCapture, dest: Path, *, cache_mode: str, skip_run: bool, drift: bool,
             run_fn: RunFn | None = None) -> dict[str, Any]:
     """One pipeline run (or a reload with skip_run); failures are recorded, never raised."""
@@ -60,32 +78,29 @@ def run_one(gt: GroundTruth, cap: GTCapture, dest: Path, *, cache_mode: str, ski
                            "variant": "main" if drift else "nodrift", "out_dir": str(dest), "status": "ok",
                            "error": None, "run_s": None, "result": None}
     if skip_run:
-        res = _load_result(dest / "result.json")
-        if res is None:
-            run.update(status="missing", error=f"no result.json in {dest} (skip_run)")
-        run["result"] = res
-        return run
+        return _reload(run, dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    for name in (RESULT, RUN_RECORD, "error.txt"):
+        (dest / name).unlink(missing_ok=True)
+    t0 = time.perf_counter()
     if not cap.path.exists():
         run.update(status="failed", error=f"capture path not found: {cap.path}")
-        return run
-    dest.mkdir(parents=True, exist_ok=True)
-    (dest / "result.json").unlink(missing_ok=True)
-    (dest / "error.txt").unlink(missing_ok=True)
-    if run_fn is None:
-        from scan2scope.pipeline import run_capture
+    else:
+        if run_fn is None:
+            from scan2scope.pipeline import run_capture
 
-        run_fn = run_capture
-    t0 = time.perf_counter()
-    try:
-        run["result"] = run_fn(cap.path, dest, tier=cap.tier, cache_mode=cache_mode, drift_correction=drift,
-                               semantics=drift, quiet=True)
-    except Exception as exc:  # noqa: BLE001  one broken capture must not stop the benchmark
-        tb = traceback.format_exc(limit=12)
-        log.error("%s/%s%s failed: %s", gt.property, cap.id, "" if drift else NODRIFT_SUFFIX, exc)
-        log.debug(tb)
-        run.update(status="failed", error=f"{type(exc).__name__}: {exc}", traceback=tb)
-        (dest / "error.txt").write_text(tb)
+            run_fn = run_capture
+        try:
+            run["result"] = run_fn(cap.path, dest, tier=cap.tier, cache_mode=cache_mode, drift_correction=drift,
+                                   semantics=drift, quiet=True)
+        except Exception as exc:  # noqa: BLE001  one broken capture must not stop the benchmark
+            tb = traceback.format_exc(limit=12)
+            log.error("%s/%s%s failed: %s", gt.property, cap.id, "" if drift else NODRIFT_SUFFIX, exc)
+            log.debug(tb)
+            run.update(status="failed", error=f"{type(exc).__name__}: {exc}", traceback=tb)
+            (dest / "error.txt").write_text(tb)
     run["run_s"] = round(time.perf_counter() - t0, 3)
+    (dest / RUN_RECORD).write_text(json.dumps({k: run[k] for k in ("status", "error", "run_s", "variant")}, indent=1))
     return run
 
 

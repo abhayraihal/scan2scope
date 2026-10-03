@@ -546,6 +546,9 @@ def test_run_benchmark_with_fake_pipeline(gt, tmp_path):
     again = run_benchmark(gt.root.parent, out, skip_run=True, only=["photo_1", "home/video_1"])
     assert {m["capture"]: m["status"] for m in again["metrics"]} == {"photo_1": "ok", "video_1": "ok"}
     assert len(again["nodrift_metrics"]) == 1
+    rescored = {m["capture"]: m for m in run_benchmark(gt.root.parent, out, skip_run=True)["metrics"]}
+    assert rescored["photo_2"]["status"] == "failed" and "no room folders" in rescored["photo_2"]["error"]
+    assert rescored["photo_1"]["timing"]["run_s"] is not None
 
 
 def test_compare_runs_before_after_table(gt, tmp_path, capsys):
