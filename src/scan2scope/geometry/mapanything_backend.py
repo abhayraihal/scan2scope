@@ -48,6 +48,20 @@ def confidence_weight(conf: np.ndarray) -> np.ndarray:
     c = np.maximum(np.nan_to_num(np.asarray(conf, np.float64), nan=1.0), 1.0)
     return np.clip(np.log(c) / np.log(CONF_REF), 0.0, 1.0).astype(np.float32)
 
+def _rank_in_mask(conf: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """Percentile rank (0..1) of each masked pixel's confidence within the view; 0 outside the mask."""
+    out = np.zeros(conf.shape, np.float32)
+    vals = conf[mask]
+    if vals.size < 2:
+        out[mask] = 1.0
+        return out
+    order = np.argsort(vals, kind="stable")
+    ranks = np.empty(vals.size, np.float32)
+    ranks[order] = np.arange(vals.size, dtype=np.float32) / (vals.size - 1)
+    out[mask] = ranks
+    return out
+
+
 
 try:
     from scan2scope.cache import CacheMiss
@@ -153,8 +167,13 @@ class ViewPrediction:
 
     @cached_property
     def weight(self) -> np.ndarray:
-        """Confidence normalised to [0, 1], zero outside the mask."""
-        return np.where(self.mask, confidence_weight(self.conf), 0.0).astype(np.float32)
+        """Confidence in [0, 1], zero outside the mask: half absolute, half the pixel's rank within its view.
+
+        The rank term keeps each view's most confident pixels usable when the model is unsure about a whole
+        clip (median confidence near its floor of 1 on some real walkthroughs).
+        """
+        return np.where(self.mask, 0.5 * confidence_weight(self.conf) + 0.5 * _rank_in_mask(self.conf, self.mask),
+                        0.0).astype(np.float32)
 
     @property
     def scale(self) -> tuple[float, float]:

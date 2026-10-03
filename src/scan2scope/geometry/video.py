@@ -39,11 +39,11 @@ from scan2scope.types import CameraView, Scene
 log = logging.getLogger("scan2scope.geometry")
 
 VIDEO_SUFFIXES = {".mov", ".mp4", ".m4v", ".avi", ".mkv", ".webm", ".3gp", ".hevc"}
-TARGET_FPS = 2.0
-MAX_FRAMES = 200
+TARGET_FPS = 1.5
+MAX_FRAMES = 120
 FRAME_MAX_SIDE = 1280
-CHUNK_SIZE = 20
-OVERLAP = 6
+CHUNK_SIZE = 24
+OVERLAP = 5
 LOOP_FRAMES = 6
 KEYFRAME_EVERY = 3
 VOXEL = 0.02
