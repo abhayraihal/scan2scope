@@ -8,12 +8,20 @@ tiers:
   lidar:
     scale_floor: 0.003        # s, log-scale sigma shared by every measurement; s = max(floor, capture estimate)
     additive: {length: 0.008, height: 0.006, opening: 0.012}   # metres
+    vertical: 0.0             # log sigma of heights on top of s; LiDAR depth is metric in every direction
   video:
-    scale_floor: 0.03
+    # One MapAnything metric estimate is good to about 0.08 in log scale (photo.SCALE_LOG_SIGMA). The chunks
+    # of a walkthrough are runs of the same model on the same camera and room, so they share that error and
+    # averaging them does not take the floor below it.
+    scale_floor: 0.08
     additive: {length: 0.025, height: 0.02, opening: 0.03}
+    # Heights are seen across the image and lengths partly in depth, so a field-of-view error scales them
+    # differently: ceilings on 11 photo and video captures of 4 real rooms missed by 0.13 in log RMS.
+    vertical: 0.1
   photo:
-    scale_floor: 0.05
+    scale_floor: 0.08         # one MapAnything run per room; the geometry stage reports the same 0.08
     additive: {length: 0.04, height: 0.035, opening: 0.04}
+    vertical: 0.1
 
 # Damage width, height and length: sqrt((v s)^2 + a^2); area uses the bounding-box perimeter times a.
 damage_additive: 0.02

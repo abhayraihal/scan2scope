@@ -73,7 +73,9 @@ def test_every_measurement_gets_an_interval(tier):
 def test_widths_ordered_photo_video_lidar():
     widths = {t: {k: m.hi - m.lo for k, m in measurements(*run(t)[:2]).items()} for t in TIERS}
     for name in widths["lidar"]:
-        assert widths["photo"][name] > widths["video"][name] > widths["lidar"][name], name
+        assert widths["photo"][name] >= widths["video"][name] > widths["lidar"][name], name
+        if not name.startswith("D"):  # damage has one additive term for every tier and the same scale floor
+            assert widths["photo"][name] > widths["video"][name], name
 
 
 def test_length_formula_with_residual_in_quadrature():
@@ -89,12 +91,16 @@ def test_length_formula_with_residual_in_quadrature():
 def test_opening_and_ceiling_formulas():
     plan, _, _ = run("video")
     door = plan.rooms[0].openings[0]
-    assert door.width.evidence["sigma"] == pytest.approx(math.hypot(0.8 * 0.03, 0.03))
-    assert plan.rooms[0].ceiling_height.evidence["sigma"] == pytest.approx(math.hypot(2.5 * 0.03, 0.02))
+    assert door.width.evidence["sigma"] == pytest.approx(math.hypot(0.8 * 0.08, 0.03))
+    # heights add the vertical term on top of the shared scale
+    ceiling = math.sqrt((2.5 * 0.08) ** 2 + (2.5 * 0.1) ** 2 + 0.02 ** 2)
+    assert plan.rooms[0].ceiling_height.evidence["sigma"] == pytest.approx(ceiling)
+    plan, _, _ = run("lidar")
+    assert plan.rooms[0].ceiling_height.evidence["sigma"] == pytest.approx(math.hypot(2.5 * 0.003, 0.006))
 
 
 def test_scale_term_uses_floor_or_capture_estimate():
-    for scale, expect in ((0.01, 0.03), (0.08, 0.08)):
+    for scale, expect in ((0.01, 0.08), (0.12, 0.12)):
         plan, _, rec = run("video", quality={"scale_log_sigma": scale, "scenes": []})
         assert rec["scale_sigma"] == pytest.approx(expect)
         assert plan.rooms[1].walls[0].length.evidence["sigma_parts"]["scale"] == pytest.approx(3.0 * expect)
@@ -118,7 +124,7 @@ def test_observed_fraction_and_few_points_inflate_additive_term():
 
 def test_area_perimeter_and_footprint_formulas():
     plan, _, _ = run("video")
-    s = 0.03
+    s = 0.08
     r1, r2 = plan.rooms
     a = math.hypot(0.025, 0.004)
     t2 = 3.0 * a * 4
@@ -245,7 +251,9 @@ def test_shipped_files_match_the_spec():
     assert pri["tiers"]["lidar"]["additive"] == {"length": 0.008, "height": 0.006, "opening": 0.012}
     assert pri["tiers"]["video"]["additive"] == {"length": 0.025, "height": 0.02, "opening": 0.03}
     assert pri["tiers"]["photo"]["additive"] == {"length": 0.04, "height": 0.035, "opening": 0.04}
-    assert [pri["tiers"][t]["scale_floor"] for t in ("lidar", "video", "photo")] == [0.003, 0.03, 0.05]
+    # one MapAnything metric estimate is good to about 0.08 in log scale, video chunks share that error
+    assert [pri["tiers"][t]["scale_floor"] for t in ("lidar", "video", "photo")] == [0.003, 0.08, 0.08]
+    assert [pri["tiers"][t]["vertical"] for t in ("lidar", "video", "photo")] == [0.0, 0.1, 0.1]
 
 
 # calibration ------------------------------------------------------------------------------------------------

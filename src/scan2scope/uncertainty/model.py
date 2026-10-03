@@ -1,7 +1,8 @@
 """Interval model: fills lo/hi of every Measurement in a Plan and its damage regions.
 
 For a length v, sigma = sqrt((v s)^2 + a^2). s is the capture's log-scale sigma, shared by every measurement;
-a is the tier's additive term for the measurement's role (priors.yaml), inflated by thin evidence. Areas use
+a is the tier's additive term for the measurement's role (priors.yaml), inflated by thin evidence. Heights add
+a vertical log term (photo and video see heights across the image and lengths partly in depth). Areas use
 sqrt((2 A s)^2 + (sum_i L_i a_i)^2) over the room's walls. The interval is value -/+ z q sigma with q per tier
 from calibration.yaml, lo clipped at 0.
 
@@ -119,7 +120,7 @@ class _Model:
             a *= _step(self.infl.get("n_points"), n)
         return math.hypot(a, abs(_first(sources, RESID_KEYS) or 0.0))
 
-    def set(self, m: Measurement | None, sigma: float, parts: tuple[float, float]) -> None:
+    def set(self, m: Measurement | None, sigma: float, parts: tuple[float, float] | dict[str, float]) -> None:
         if m is None:
             return
         ev = dict(m.evidence) if isinstance(m.evidence, dict) else {}
@@ -134,14 +135,18 @@ class _Model:
         h = self.zq * sigma
         lo, hi = v - h, v + h
         m.lo, m.hi = (max(0.0, lo) if v >= 0 else lo), hi
-        ev.update(sigma=sigma, q=self.q, sigma_parts={"scale": parts[0], "additive": parts[1]})
+        if not isinstance(parts, dict):
+            parts = {"scale": parts[0], "additive": parts[1]}
+        ev.update(sigma=sigma, q=self.q, sigma_parts=dict(parts))
         m.evidence = ev
 
-    def length(self, m: Measurement | None, a: float) -> None:
+    def length(self, m: Measurement | None, a: float, extra: dict[str, float] | None = None) -> None:
         if m is None:
             return
         sc = abs(_num(m.value) or 0.0) * self.s
-        self.set(m, math.hypot(sc, a), (sc, a))
+        extra = {k: v for k, v in (extra or {}).items() if v > 0}
+        sigma = math.sqrt(sc * sc + a * a + sum(v * v for v in extra.values()))
+        self.set(m, sigma, {"scale": sc, "additive": a, **extra})
 
     def area(self, m: Measurement, t_add: float) -> None:
         sc = 2.0 * abs(_num(m.value) or 0.0) * self.s
@@ -218,21 +223,26 @@ def _room_flags(room: Room, plan: Plan) -> set[str]:
     return flags
 
 
-def _annotate_room(mdl: _Model, room: Room, add: dict[str, float], f_room: float) -> float:
+def _annotate_room(mdl: _Model, room: Room, add: dict[str, float], f_room: float, vertical: float) -> float:
     """Intervals for one room's walls, openings, ceiling, floor area and perimeter; returns its area term."""
     wall_terms: list[tuple[float, float]] = []
+
+    def height(m: Measurement | None, a_h: float) -> None:
+        if m is not None:
+            mdl.length(m, a_h, {"vertical": abs(_num(m.value) or 0.0) * vertical})
+
     for wall in room.walls:
         src = [wall.evidence, {"observed_fraction": wall.observed_fraction}]
         a_len = mdl.additive(add["length"] * f_room, [wall.length.evidence, *src])
         mdl.length(wall.length, a_len)
-        mdl.length(wall.height, mdl.additive(add["height"] * f_room, [wall.height.evidence, *src]))
+        height(wall.height, mdl.additive(add["height"] * f_room, [wall.height.evidence, *src]))
         wall_terms.append((max(_num(wall.length.value) or 0.0, 0.0), a_len))
     for op in room.openings:
         for m in (op.offset, op.width, op.height, op.sill):
             if m is not None:
                 mdl.length(m, mdl.additive(add["opening"] * f_room, [m.evidence, op.evidence]))
-    mdl.length(room.ceiling_height,
-               mdl.additive(add["height"] * f_room, [room.ceiling_height.evidence, room.evidence]))
+    height(room.ceiling_height,
+           mdl.additive(add["height"] * f_room, [room.ceiling_height.evidence, room.evidence]))
     a0 = add["length"] * f_room
     if wall_terms:
         t_area = sum(L * a for L, a in wall_terms)
@@ -288,6 +298,7 @@ def annotate(plan: Plan, damage: list[DamageRegion] | None, *, tier: str, qualit
     z = float(pri.get("z", 1.645))
     q, status, cal_entry = tier_q(cal, model_tier)
     s_floor = float(tp["scale_floor"])
+    vertical = float(tp.get("vertical", 0.0))
     s_cap = _num(quality.get("scale_log_sigma")) if isinstance(quality, dict) else None
     s = max(s_floor, abs(s_cap or 0.0))
     add = {k: float(v) for k, v in tp["additive"].items()}
@@ -307,7 +318,7 @@ def annotate(plan: Plan, damage: list[DamageRegion] | None, *, tier: str, qualit
         room_factors[room.id] = {"factor": f_room, "reasons": why}
         a0 = add["length"] * f_room
         try:
-            t_area = _annotate_room(mdl, room, add, f_room)
+            t_area = _annotate_room(mdl, room, add, f_room, vertical)
         except Exception as exc:  # noqa: BLE001 - one odd room must not cost the whole result its intervals
             log.warning("intervals for room %s failed (%s); using the fallback", room.id, exc)
             plan.flags.append(f"uncertainty_failed:{room.id}")
@@ -346,6 +357,7 @@ def annotate(plan: Plan, damage: list[DamageRegion] | None, *, tier: str, qualit
         "tier": tier, "model_tier": model_tier, "level": float(pri.get("level", 0.9)), "z": z,
         "q": q, "status": status, "min_rooms": int(cal.get("min_rooms", 9)),
         "scale_sigma": s, "scale_floor": s_floor, "scale_capture": s_cap,
+        "vertical": vertical,
         "additive": add, "damage_additive": a_d,
         "placement_factor": float(infl.get("placement_uncertain", 1.0)),
         "room_factors": room_factors, "placement_uncertain": placement,
@@ -377,7 +389,8 @@ def describe(record: dict[str, Any] | None) -> str:
         f"additive terms a = {add.get('length', 0):.3f} m (walls), {add.get('height', 0):.3f} m (heights), "
         f"{add.get('opening', 0):.3f} m (openings), {float(record.get('damage_additive', 0.0)):.3f} m (damage), "
         "inflated for thin evidence (low observed wall fraction, few supporting points, fit residuals in "
-        "quadrature, low light, fewer than 4 photos, missing EXIF focal length). Areas: "
+        "quadrature, low light, fewer than 4 photos, missing EXIF focal length). Heights add a vertical term of "
+        f"{float(record.get('vertical', 0.0)):.2f} (log). Areas: "
         "sqrt((2*A*s)^2 + (sum of L_i*a_i)^2). Footprint: scale term fully correlated across rooms plus "
         f"independent per-room terms; unplaced rooms widen footprint and extents "
         f"{float(record.get('placement_factor', 1.5)):.1f}x. Interval = value -/+ "
