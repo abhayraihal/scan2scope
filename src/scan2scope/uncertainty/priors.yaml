@@ -38,3 +38,10 @@ inflation:
   low_light: 1.3
   few_photos: {below: 4, factor: 1.5}
   missing_exif_focal: 1.2
+
+# Capture consistency.
+capture:
+  loop_min_overlap: 0.2       # a rejected loop closure counts as a drift measurement only if it registered
+  loop_min_inliers: 0.3       # this well
+  loop_max_rot_deg: 20.0
+  report_ratio: 1.1           # list a capture reason when it raises s by more than this factor

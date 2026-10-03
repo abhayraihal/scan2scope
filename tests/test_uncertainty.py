@@ -256,6 +256,55 @@ def test_shipped_files_match_the_spec():
     assert [pri["tiers"][t]["vertical"] for t in ("lidar", "video", "photo")] == [0.0, 0.1, 0.1]
 
 
+# capture evidence -------------------------------------------------------------------------------------------
+
+
+def test_chunk_scale_spread_widens_the_shared_scale():
+    scales = (0.8, 1.0, 1.0, 1.02)
+    plan = make_plan()
+    plan.meta["drift"] = {"chunks": [{"world_scale": w, "align_method": m}
+                                     for w, m in zip(scales, ("reference", "poses", "points", "points"))]}
+    rec = annotate(plan, [], tier="video", quality={"scale_log_sigma": 0.05}, calibration=NO_CAL)
+    logs = np.log(scales)
+    spread = float(np.sqrt(np.mean((logs - np.median(logs)) ** 2)))
+    assert rec["scale_sigma"] == pytest.approx(math.hypot(0.08, spread))
+    assert rec["capture_reasons"] == ["chunk_scale_spread", "chunk_align_fallback"]
+    w = plan.rooms[1].walls[0].length
+    assert w.evidence["sigma_parts"]["scale"] == pytest.approx(3.0 * math.hypot(0.08, spread))
+    # chunks that agree leave the floor alone
+    plan = make_plan()
+    plan.meta["drift"] = {"chunks": [{"world_scale": 1.0}, {"world_scale": 1.01}, {"world_scale": 0.99}]}
+    rec = annotate(plan, [], tier="video", quality={}, calibration=NO_CAL)
+    assert rec["capture_reasons"] == [] and rec["scale_sigma"] < 1.1 * 0.08
+
+
+LOOP = {"attempted": True, "accepted": False, "overlap": 0.5, "inlier_frac": 0.8, "error_rot_deg": 2.7,
+        "error_log_scale": 0.27, "error_trans_m": 0.31}
+
+
+@pytest.mark.parametrize("change, used", [({}, True), ({"overlap": 0.0}, False),
+                                          ({"error_rot_deg": 65.0}, False), ({"accepted": True}, False)])
+def test_rejected_loop_closure_counts_only_when_it_registered_well(change, used):
+    plan = make_plan()
+    plan.meta["drift"] = {"loop_closure": {**LOOP, **change}}
+    rec = annotate(plan, [], tier="video", quality={}, calibration=NO_CAL)
+    w = plan.rooms[1].walls[0].length
+    if used:
+        assert rec["scale_sigma"] == pytest.approx(math.hypot(0.08, 0.135))
+        assert w.evidence["sigma_parts"]["drift"] == pytest.approx(0.155)
+        assert rec["capture_reasons"] == ["loop_closure_rejected"]
+    else:
+        assert rec["scale_sigma"] == pytest.approx(0.08) and "drift" not in w.evidence["sigma_parts"]
+        assert rec["capture_reasons"] == []
+
+
+def test_lidar_drift_record_leaves_the_scale_alone():
+    plan = make_plan()
+    plan.meta["drift"] = {"enabled": True, "segments": 11, "loop_closures_accepted": 2}
+    rec = annotate(plan, [], tier="lidar", quality={"scale_log_sigma": 0.003}, calibration=NO_CAL)
+    assert rec["scale_sigma"] == pytest.approx(0.003) and rec["capture_reasons"] == []
+
+
 # calibration ------------------------------------------------------------------------------------------------
 
 

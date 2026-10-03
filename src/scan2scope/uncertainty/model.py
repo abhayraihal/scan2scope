@@ -1,10 +1,13 @@
 """Interval model: fills lo/hi of every Measurement in a Plan and its damage regions.
 
-For a length v, sigma = sqrt((v s)^2 + a^2). s is the capture's log-scale sigma, shared by every measurement;
-a is the tier's additive term for the measurement's role (priors.yaml), inflated by thin evidence. Heights add
-a vertical log term (photo and video see heights across the image and lengths partly in depth). Areas use
-sqrt((2 A s)^2 + (sum_i L_i a_i)^2) over the room's walls. The interval is value -/+ z q sigma with q per tier
-from calibration.yaml, lo clipped at 0.
+For a length v, sigma = sqrt((v s)^2 + a^2). s is the capture's log-scale sigma, shared by every measurement:
+the larger of the tier floor and the geometry's estimate, combined with the scale inconsistency the capture
+measured itself (video: the RMS deviation of the chunks' world scales from their median, and half the scale
+error of a loop closure that registered well but was rejected; the larger of the two counts). Half that loop's
+translation error adds to every wall length. a is the tier's additive term for the measurement's role
+(priors.yaml), inflated by thin evidence. Heights add a vertical log term (photo and video see heights across
+the image and lengths partly in depth). Areas use sqrt((2 A s)^2 + (sum_i L_i a_i)^2) over the room's walls.
+The interval is value -/+ z q sigma with q per tier from calibration.yaml, lo clipped at 0.
 
 Evidence is read from the Measurement's evidence first, then from its wall, opening or room: observed_fraction
 (walls also use Wall.observed_fraction), n_points (or n_inliers, support), and a fit residual in the
@@ -21,6 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import yaml
 
 from scan2scope.types import DamageRegion, Measurement, Plan, Room
@@ -37,6 +41,7 @@ RESID_KEYS = ("residual", "residual_m", "rms", "fit_residual")
 NPHOTO_KEYS = ("n_photos", "n_images", "num_images", "n_views")
 HINT_KEYS = ("room_hint", "room", "room_id", "folder")
 NOT_EXIF = ("default", "fallback", "estimated", "predicted", "model", "none", "missing")
+CAPTURE = {"loop_min_overlap": 0.2, "loop_min_inliers": 0.3, "loop_max_rot_deg": 20.0, "report_ratio": 1.1}
 
 
 def _num(x: Any) -> float | None:
@@ -223,7 +228,60 @@ def _room_flags(room: Room, plan: Plan) -> set[str]:
     return flags
 
 
-def _annotate_room(mdl: _Model, room: Room, add: dict[str, float], f_room: float, vertical: float) -> float:
+@dataclass
+class _Capture:
+    s: float  # log-scale sigma shared by every measurement
+    s_base: float  # max(tier floor, geometry estimate)
+    s_chunks: float  # RMS deviation of the chunks' world scales from their median (log)
+    s_loop: float  # half the scale error of a credible rejected loop closure (log)
+    drift_m: float  # half the translation error of a credible rejected loop closure (m)
+    reasons: list[str]
+
+    def record(self) -> dict[str, Any]:
+        return {"scale_sigma": self.s, "scale_base": self.s_base, "scale_chunks": self.s_chunks,
+                "scale_loop": self.s_loop, "drift_m": self.drift_m, "reasons": list(self.reasons)}
+
+
+def _capture(plan: Plan, quality: dict[str, Any] | None, s_floor: float, cfg: dict[str, Any]) -> _Capture:
+    """Scale and drift terms from what the capture measured about its own consistency."""
+    quality = quality if isinstance(quality, dict) else {}
+    s_cap = _num(quality.get("scale_log_sigma"))
+    s_base = max(s_floor, abs(s_cap or 0.0))
+    flags = set(_flag_list(quality)) | {str(f) for f in plan.flags or []}
+    meta = plan.meta if isinstance(plan.meta, dict) else {}
+    drift = meta.get("drift") if isinstance(meta.get("drift"), dict) else {}
+    raw = drift.get("chunks")
+    chunks = [c for c in raw if isinstance(c, dict)] if isinstance(raw, list) else []
+    scales = [_num(c.get("world_scale")) for c in chunks]
+    logs = np.array([math.log(w) for w in scales if w is not None and w > 0])
+    s_chunks = 0.0
+    if len(logs) >= 2:  # chunks scaled apart: a measurement taken mostly from one of them carries its offset
+        s_chunks = float(np.sqrt(np.mean((logs - np.median(logs)) ** 2)))
+    fallback = (any(c.get("align_method") == "poses" for c in chunks)
+                or _has_flag(flags, "chunk_align_fallback"))
+    loop = drift.get("loop_closure") if isinstance(drift.get("loop_closure"), dict) else {}
+    s_loop = drift_m = 0.0
+    if loop.get("attempted") and loop.get("accepted") is False:
+        overlap, inliers = _num(loop.get("overlap")), _num(loop.get("inlier_frac"))
+        rot = _num(loop.get("error_rot_deg"))
+        credible = (overlap is not None and overlap >= float(cfg["loop_min_overlap"])
+                    and (inliers is None or inliers >= float(cfg["loop_min_inliers"]))
+                    and rot is not None and abs(rot) <= float(cfg["loop_max_rot_deg"]))
+        if credible:  # a good registration that was refused: its error measures the chain's drift
+            s_loop = 0.5 * abs(_num(loop.get("error_log_scale")) or 0.0)
+            drift_m = 0.5 * abs(_num(loop.get("error_trans_m")) or 0.0)
+    s = math.hypot(s_base, max(s_chunks, s_loop))
+    ratio = float(cfg["report_ratio"])
+    reasons = []
+    if math.hypot(s_base, s_chunks) > ratio * s_base:
+        reasons += ["chunk_scale_spread"] + (["chunk_align_fallback"] if fallback else [])
+    if math.hypot(s_base, s_loop) > ratio * s_base or drift_m > 0:
+        reasons.append("loop_closure_rejected")
+    return _Capture(s, s_base, s_chunks, s_loop, drift_m, reasons)
+
+
+def _annotate_room(mdl: _Model, room: Room, add: dict[str, float], f_room: float, cap: _Capture,
+                   vertical: float) -> float:
     """Intervals for one room's walls, openings, ceiling, floor area and perimeter; returns its area term."""
     wall_terms: list[tuple[float, float]] = []
 
@@ -234,7 +292,7 @@ def _annotate_room(mdl: _Model, room: Room, add: dict[str, float], f_room: float
     for wall in room.walls:
         src = [wall.evidence, {"observed_fraction": wall.observed_fraction}]
         a_len = mdl.additive(add["length"] * f_room, [wall.length.evidence, *src])
-        mdl.length(wall.length, a_len)
+        mdl.length(wall.length, a_len, {"drift": cap.drift_m})
         height(wall.height, mdl.additive(add["height"] * f_room, [wall.height.evidence, *src]))
         wall_terms.append((max(_num(wall.length.value) or 0.0, 0.0), a_len))
     for op in room.openings:
@@ -295,12 +353,14 @@ def annotate(plan: Plan, damage: list[DamageRegion] | None, *, tier: str, qualit
         plan.flags.append(f"uncertainty_unknown_tier:{tier}")
     tp = tiers[model_tier]
     infl = pri.get("inflation") or {}
+    cfg = {**CAPTURE, **(pri.get("capture") or {})}
     z = float(pri.get("z", 1.645))
     q, status, cal_entry = tier_q(cal, model_tier)
     s_floor = float(tp["scale_floor"])
     vertical = float(tp.get("vertical", 0.0))
     s_cap = _num(quality.get("scale_log_sigma")) if isinstance(quality, dict) else None
-    s = max(s_floor, abs(s_cap or 0.0))
+    cap = _capture(plan, quality, s_floor, cfg)
+    s = cap.s
     add = {k: float(v) for k, v in tp["additive"].items()}
     mdl = _Model(s=s, q=q, zq=z * q, infl=infl)
 
@@ -318,13 +378,13 @@ def annotate(plan: Plan, damage: list[DamageRegion] | None, *, tier: str, qualit
         room_factors[room.id] = {"factor": f_room, "reasons": why}
         a0 = add["length"] * f_room
         try:
-            t_area = _annotate_room(mdl, room, add, f_room, vertical)
+            t_area = _annotate_room(mdl, room, add, f_room, cap, vertical)
         except Exception as exc:  # noqa: BLE001 - one odd room must not cost the whole result its intervals
             log.warning("intervals for room %s failed (%s); using the fallback", room.id, exc)
             plan.flags.append(f"uncertainty_failed:{room.id}")
             t_area = abs(_num(getattr(room.perimeter, "value", 0.0)) or 0.0) * a0
         area_terms.append(t_area)
-        len_terms.append(a0)
+        len_terms.append(math.hypot(a0, cap.drift_m))
 
     # Footprint: the scale term is fully correlated across rooms, the per-room terms are independent.
     f_place = float(infl.get("placement_uncertain", 1.0)) if placement else 1.0
@@ -332,7 +392,7 @@ def annotate(plan: Plan, damage: list[DamageRegion] | None, *, tier: str, qualit
         sc = 2.0 * abs(_num(plan.footprint_area.value) or 0.0) * s
         t_fp = math.sqrt(sum(t * t for t in area_terms))
         mdl.set(plan.footprint_area, math.hypot(sc, t_fp) * f_place, (sc * f_place, t_fp * f_place))
-    a_ext = math.sqrt(sum(a * a for a in len_terms)) if len_terms else add["length"]
+    a_ext = math.sqrt(sum(a * a for a in len_terms)) if len_terms else math.hypot(add["length"], cap.drift_m)
     for m in (plan.extent_x, plan.extent_y):
         if isinstance(m, Measurement):
             sc = abs(_num(m.value) or 0.0) * s
@@ -357,7 +417,7 @@ def annotate(plan: Plan, damage: list[DamageRegion] | None, *, tier: str, qualit
         "tier": tier, "model_tier": model_tier, "level": float(pri.get("level", 0.9)), "z": z,
         "q": q, "status": status, "min_rooms": int(cal.get("min_rooms", 9)),
         "scale_sigma": s, "scale_floor": s_floor, "scale_capture": s_cap,
-        "vertical": vertical,
+        "capture": cap.record(), "capture_reasons": list(cap.reasons), "vertical": vertical,
         "additive": add, "damage_additive": a_d,
         "placement_factor": float(infl.get("placement_uncertain", 1.0)),
         "room_factors": room_factors, "placement_uncertain": placement,
@@ -366,8 +426,8 @@ def annotate(plan: Plan, damage: list[DamageRegion] | None, *, tier: str, qualit
     }
     if isinstance(plan.meta, dict):
         plan.meta["uncertainty"] = record
-    log.info("intervals: tier %s, s %.4f, q %.3f (%s), %d rooms, %d damage regions", tier, s, q, status,
-             len(plan.rooms), len(damage or []))
+    log.info("intervals: tier %s, s %.4f (%s), q %.3f (%s), %d rooms, %d damage regions", tier, s,
+             ", ".join(cap.reasons) or "no capture evidence", q, status, len(plan.rooms), len(damage or []))
     return record
 
 
@@ -383,9 +443,13 @@ def describe(record: dict[str, Any] | None) -> str:
     else:
         cal = (f"q = {q:.2f}, prior value: not calibrated, this tier has fewer than "
                f"{record.get('min_rooms', 9)} ground-truth rooms")
+    reasons = record.get("capture_reasons") or []
+    widened = f" This capture's scale term was widened for: {', '.join(reasons)}." if reasons else ""
     return (
         f"{record.get('model_tier', record.get('tier'))} tier error model. Lengths: sigma = sqrt((v*s)^2 + a^2) "
-        f"with a scale term s = {float(record.get('scale_sigma', 0.0)):.3f} shared by every measurement and "
+        f"with a scale term s = {float(record.get('scale_sigma', 0.0)):.3f} shared by every measurement (the "
+        "larger of the tier floor and the geometry's estimate, with the scale spread across video chunks or the "
+        "scale error of a rejected loop closure) and "
         f"additive terms a = {add.get('length', 0):.3f} m (walls), {add.get('height', 0):.3f} m (heights), "
         f"{add.get('opening', 0):.3f} m (openings), {float(record.get('damage_additive', 0.0)):.3f} m (damage), "
         "inflated for thin evidence (low observed wall fraction, few supporting points, fit residuals in "
@@ -394,5 +458,5 @@ def describe(record: dict[str, Any] | None) -> str:
         "sqrt((2*A*s)^2 + (sum of L_i*a_i)^2). Footprint: scale term fully correlated across rooms plus "
         f"independent per-room terms; unplaced rooms widen footprint and extents "
         f"{float(record.get('placement_factor', 1.5)):.1f}x. Interval = value -/+ "
-        f"{float(record.get('z', 1.645)):.3f}*q*sigma, lo clipped at 0; {cal}."
+        f"{float(record.get('z', 1.645)):.3f}*q*sigma, lo clipped at 0; {cal}.{widened}"
     )
