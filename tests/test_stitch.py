@@ -742,19 +742,18 @@ def test_as_predictions_accepts_objects_dicts_and_batches():
 
 @pytest.mark.ml
 def test_default_runner_returns_one_pose_per_view(tmp_path):
-    pytest.importorskip("scan2scope.geometry.mapanything_backend")
+    pytest.importorskip("torch")
+    pytest.importorskip("mapanything")
     from PIL import Image
 
-    from scan2scope.config import setup_env
+    from scan2scope.cache import OutputCache
+    from scan2scope.config import MODELS, setup_env
     from scan2scope.stitch.doorway import mapanything_runner, run_key
 
+    if not (MODELS["mapanything"].local_dir / "model.safetensors").exists():
+        pytest.skip("MapAnything weights not downloaded")
     setup_env()
-    try:
-        from scan2scope.cache import OutputCache
-
-        cache = OutputCache(mode="off", root=tmp_path / "cache")
-    except ImportError:
-        cache = None
+    cache = OutputCache(mode="off", root=tmp_path / "cache")
     rng = np.random.default_rng(0)
     views = []
     yy, xx = np.mgrid[0:240, 0:320]

@@ -7,13 +7,13 @@ on:
 
 jobs:
   unit-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.12"
       - name: Install core dependencies (no model stack)
-        run: uv sync --group dev
+        run: uv sync --locked --group dev
       - name: Unit tests on synthetic data
         run: uv run pytest -m "not ml" -q

@@ -1,7 +1,7 @@
 """Package raw benchmark captures for a GitHub release, and fetch them back.
 
-    python scripts/benchmark_data.py package bench/data/home      # zips raw/ into dist/, writes raw_manifest.json
-    python scripts/benchmark_data.py fetch bench/data/home        # downloads and verifies the zips listed there
+    python scripts/benchmark_data.py package bench/data/bedroom   # zips raw/ into dist/, writes raw_manifest.json
+    python scripts/benchmark_data.py fetch bench/data/bedroom     # downloads and verifies the zips listed there
 
 Raw captures are too large for git; the manifest (committed) pins every zip by size and SHA-256 and records
 which release asset holds it. GitHub release assets are capped at 2 GiB each, so captures are split by folder.
@@ -33,8 +33,8 @@ def sha256(path: Path) -> str:
 
 def gps_warnings(raw: Path) -> list[str]:
     try:
-        from PIL import Image
         import pillow_heif
+        from PIL import Image
 
         pillow_heif.register_heif_opener()
     except ImportError:
@@ -45,7 +45,7 @@ def gps_warnings(raw: Path) -> list[str]:
             try:
                 if any(t in Image.open(p).getexif() for t in GPS_TAGS):
                     found.append(str(p.relative_to(raw)))
-            except Exception:  # unreadable files are reported by the pipeline, not here
+            except Exception:  # noqa: BLE001, S112 - unreadable files are reported by the pipeline, not here
                 continue
     return found
 

@@ -2,10 +2,10 @@
 
 Layout: <data_root>/<property>/ground_truth.yaml (or ground_truth.yaml directly in data_root), results in
 <out_dir>/<property>/<capture>/result.json, and for multi-room video and LiDAR captures a second run with
-drift correction off in <out_dir>/<property>/<capture>__nodrift (semantics skipped there, it does not change
-the plan).
-Each run also writes bench_run.json (status, error, runner seconds) and, on a crash, error.txt with the
-traceback, so a later skip_run rescoring keeps failures as failures.
+drift correction off in <out_dir>/<property>/<capture>__nodrift (semantics skipped there: the ablation scores
+the footprint and walls, which semantics does not change). Each run also writes bench_run.json (status, error,
+runner seconds) and, on a crash, error.txt with the traceback, so a later skip_run rescoring keeps failures as
+failures.
 """
 
 from __future__ import annotations
@@ -96,7 +96,7 @@ def run_one(gt: GroundTruth, cap: GTCapture, dest: Path, *, cache_mode: str, ski
         try:
             run["result"] = run_fn(cap.path, dest, tier=cap.tier, cache_mode=cache_mode,
                                    drift_correction=drift, semantics=semantics and drift, quiet=True)
-        except Exception as exc:  # noqa: BLE001  one broken capture must not stop the benchmark
+        except Exception as exc:  # noqa: BLE001 - one broken capture must not stop the benchmark
             tb = traceback.format_exc(limit=12)
             log.error("%s/%s%s failed: %s", gt.property, cap.id, "" if drift else NODRIFT_SUFFIX, exc)
             log.debug(tb)

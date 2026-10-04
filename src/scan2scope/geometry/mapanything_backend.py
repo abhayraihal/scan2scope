@@ -56,6 +56,7 @@ def confidence_weight(conf: np.ndarray) -> np.ndarray:
     c = np.maximum(np.nan_to_num(np.asarray(conf, np.float64), nan=1.0), 1.0)
     return np.clip(np.log(c) / np.log(CONF_REF), 0.0, 1.0).astype(np.float32)
 
+
 def _rank_in_mask(conf: np.ndarray, mask: np.ndarray) -> np.ndarray:
     """Percentile rank (0..1) of each masked pixel's confidence within the view; 0 outside the mask."""
     out = np.zeros(conf.shape, np.float32)
@@ -68,14 +69,6 @@ def _rank_in_mask(conf: np.ndarray, mask: np.ndarray) -> np.ndarray:
     ranks[order] = np.arange(vals.size, dtype=np.float32) / (vals.size - 1)
     out[mask] = ranks
     return out
-
-
-
-try:
-    from scan2scope.cache import CacheMiss
-except ImportError:  # cache.py is written in parallel; keep the name available for except clauses
-    class CacheMiss(Exception):
-        pass
 
 
 class OutputCacheLike(Protocol):

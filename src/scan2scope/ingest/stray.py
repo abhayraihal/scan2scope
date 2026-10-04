@@ -190,7 +190,7 @@ class StrayCapture:
                 if raw.ndim == 3:
                     raw = raw[..., 0]
                 d = raw.astype(np.float32) / (1000.0 if raw.dtype == np.uint16 else 1.0)
-        except Exception as exc:  # unreadable file: the caller skips the frame
+        except Exception as exc:  # noqa: BLE001 - unreadable file: the caller skips the frame
             log.debug("depth %s unreadable: %s", p, exc)
             return None
         d = np.nan_to_num(d.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
@@ -204,7 +204,7 @@ class StrayCapture:
             return None
         try:
             c = cv2.imread(str(p), cv2.IMREAD_UNCHANGED)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - unreadable file: the caller skips the frame
             log.debug("confidence %s unreadable: %s", p, exc)
             return None
         if c is None:
@@ -260,7 +260,7 @@ class StrayCapture:
                         index += 1
                     if index > last:
                         break
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - keep the frames decoded so far
             log.warning("rgb.mp4 could not be decoded: %s", exc)
             self._flag(f"rgb_unreadable:{type(exc).__name__}")
         if n_err:
@@ -379,7 +379,7 @@ def _probe_video(path: Path, flags: list[str]) -> tuple[tuple[int, int] | None, 
             s = container.streams.video[0]
             size = (int(s.codec_context.width or s.width), int(s.codec_context.height or s.height))
             return (size if size[0] > 0 and size[1] > 0 else None), (int(s.frames) or None)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - flagged; the size then comes from the intrinsics
         log.warning("cannot probe %s: %s", path, exc)
         flags.append(f"rgb_unreadable:{type(exc).__name__}")
         return None, None

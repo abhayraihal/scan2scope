@@ -47,41 +47,48 @@ def _cmd_synth(args: argparse.Namespace) -> int:
     return 0
 
 
+CACHE_HELP = ("live (default): reuse stored model outputs, compute and store missing ones; "
+              "replay: stored outputs only, fail on a miss; off: compute everything, store nothing")
+NO_SEMANTICS_HELP = "skip damage and object detection"
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="scan2scope", description=__doc__)
-    p.add_argument("-v", "--verbose", action="store_true")
+    p.add_argument("-v", "--verbose", action="store_true", help="debug logging")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     r = sub.add_parser("run", help="process one capture (photo folders, a video file, or a Stray Scanner export)")
-    r.add_argument("capture")
+    r.add_argument("capture",
+                   help="folder of room folders or of photos, video file, Stray Scanner export, or a zip")
     r.add_argument("--out", help="output directory (default: out/<capture name>)")
     r.add_argument("--tier", choices=["photo", "video", "lidar"], help="override tier detection")
-    r.add_argument("--cache", choices=["live", "replay", "off"], default="live",
-                   help="live: compute and store model outputs; replay: reuse stored outputs only")
+    r.add_argument("--cache", choices=["live", "replay", "off"], default="live", help=CACHE_HELP)
     r.add_argument("--no-drift", action="store_true", help="disable drift correction (ablation)")
-    r.add_argument("--no-semantics", action="store_true", help="skip damage and object detection")
+    r.add_argument("--no-semantics", action="store_true", help=NO_SEMANTICS_HELP)
     r.set_defaults(fn=_cmd_run)
 
     b = sub.add_parser("bench", help="run and score the benchmark")
     b.add_argument("data", help="benchmark data root (one folder per property with ground_truth.yaml)")
-    b.add_argument("--out", default="runs/bench")
-    b.add_argument("--cache", choices=["live", "replay", "off"], default="live")
-    b.add_argument("--only", nargs="*", help="capture ids to run")
+    b.add_argument("--out", default="runs/bench", help="output directory (default: %(default)s)")
+    b.add_argument("--cache", choices=["live", "replay", "off"], default="live", help=CACHE_HELP)
+    b.add_argument("--only", nargs="*", help="capture ids, property names or property/capture pairs to run")
     b.add_argument("--skip-run", action="store_true", help="score existing results without rerunning")
-    b.add_argument("--no-semantics", action="store_true", help="skip damage detection (synthetic captures)")
+    b.add_argument("--no-semantics", action="store_true",
+                   help=NO_SEMANTICS_HELP + " (the synthetic captures have no damage)")
     b.set_defaults(fn=_cmd_bench)
 
     f = sub.add_parser("fetch-weights", help="download pinned model weights")
-    f.add_argument("--no-verify", action="store_true")
+    f.add_argument("--no-verify", action="store_true",
+                   help="skip the hash checks (file sizes are still checked)")
     f.set_defaults(fn=_cmd_fetch)
 
     d = sub.add_parser("doctor", help="check weights, device and disk before a run")
     d.set_defaults(fn=_cmd_doctor)
 
     s = sub.add_parser("synth", help="generate synthetic LiDAR benchmark captures with exact ground truth")
-    s.add_argument("--out", default="bench/synthetic")
-    s.add_argument("--properties", type=int, default=4)
-    s.add_argument("--seed", type=int, default=0)
+    s.add_argument("--out", default="bench/synthetic", help="output directory (default: %(default)s)")
+    s.add_argument("--properties", type=int, default=4, help="number of properties (default: %(default)s)")
+    s.add_argument("--seed", type=int, default=0, help="random seed (default: %(default)s)")
     s.set_defaults(fn=_cmd_synth)
 
     args = p.parse_args(argv)

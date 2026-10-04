@@ -6,8 +6,8 @@ registration can stand in for one refused link, and chunks that stay unconnected
 video_segment_dropped flag. The measured disagreement widens the capture's scale interval, and so does a
 predicted focal the protocol's camera cannot have (mapanything_backend.focal_check).
 
-Frame sampling here is a thin stand-in for scan2scope.ingest.video.sample_frames; integration can switch to the
-ingest version once it lands.
+Frames are sampled here (blur judged against the clip's median sharpness); the pipeline does not call
+scan2scope.ingest.video.sample_frames.
 """
 
 from __future__ import annotations
@@ -661,7 +661,7 @@ def build_scene_from_frames(frames: list[Frame], *, drift_correction: bool = Tru
             ci.update(anchor.get("per_chunk", {}).get(k, {}))
         chunk_info.append(ci)
     scale_log_sigma = math.sqrt(SCALE_SIGMA_BASE ** 2 + scale["spread"] ** 2 / K)
-    if K < 3:  # one or two chunks cannot show their spread; fall back to the single-run photo prior
+    if K < 3:  # one or two chunks cannot show their spread; fall back to the error of one MapAnything run
         scale_log_sigma = max(scale_log_sigma, SINGLE_RUN_SCALE_SIGMA / math.sqrt(K))
     # A link that rests on a subset of the shared frames carries its own scale uncertainty into every chunk after
     # it. Two runs that place the shared cameras apart by d (share of depth) disagree by about d about the

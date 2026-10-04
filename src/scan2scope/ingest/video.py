@@ -1,4 +1,8 @@
-"""Video ingest with PyAV: metadata probe and upright, sharp keyframes for the video tier."""
+"""Video ingest with PyAV: metadata probe and upright, sharp keyframes.
+
+Tier detection and the input summary use probe. The video tier samples its own frames in
+scan2scope.geometry.video, so the pipeline does not call sample_frames.
+"""
 
 from __future__ import annotations
 

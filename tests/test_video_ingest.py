@@ -176,6 +176,21 @@ def test_ten_bit_hlg_marked_hdr_and_written_as_8bit(tmp_path):
     assert im.mode == "RGB" and im.size == (W, H)
 
 
+def test_video_tier_sampler_reads_ten_bit_hlg(tmp_path):
+    from PIL import Image
+
+    from scan2scope.geometry import video as video_geometry
+
+    try:
+        p = make_video(tmp_path / "hdr.mov", 20, pix_fmt="yuv420p10le", trc=18)
+    except (ValueError, av.error.FFmpegError) as exc:  # pragma: no cover - no 10-bit encoder
+        pytest.skip(f"no 10-bit encoder: {exc}")
+    frames, _ = video_geometry.sample_frames(p, tmp_path / "f", target_fps=2.0)
+    assert frames
+    im = Image.open(frames[0].path)
+    assert im.mode == "RGB" and im.size == (W, H)
+
+
 def test_truncated_video_keeps_decoded_frames(tmp_path):
     p = make_video(tmp_path / "cut.ts", 120)
     data = p.read_bytes()

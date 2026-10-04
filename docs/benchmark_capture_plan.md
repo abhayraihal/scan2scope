@@ -1,6 +1,6 @@
 # Benchmark capture plan
 
-What gets captured for the benchmark, with the iPhone 17 (photo and video tiers). The LiDAR tier is benchmarked on synthetic captures because no LiDAR phone is available; see `docs/design.md`.
+What gets captured for the benchmark, with the iPhone 17 (photo and video tiers). The LiDAR tier is benchmarked on synthetic captures because no LiDAR phone is available; see `docs/design.md`. This is the plan as written before the captures; "What was captured" at the end lists what was done.
 
 ## Property
 
@@ -30,3 +30,12 @@ After the captures, measure everything in `docs/ground_truth_protocol.md` and fi
 ## Transfer
 
 AirDrop everything to the Mac and put it under `~/code/scan2scope-data/home/raw/` with the ids above as folder or file names.
+
+## What was captured
+
+- Property: one furnished bedroom with one staged damage class (a crack drawn on paper), a window and a small wall mirror. No other room, hallway or bathroom was captured.
+- Captures: photo_1 (5 photos), video_1 (57 s at 1080p) and video_2 (49 s at 4K, aimed at furniture), both clips filmed in portrait. photo_2 and photo_dim were not captured.
+- magicplan: one IFC export (`bench/data/bedroom/magicplan/room.ifc`) with no room geometry. The Statistics CSV and Sketch PDF were not exported and the app version was not recorded, so there is no head-to-head.
+- Measurements: whole-inch tape readings of the two wall lengths and one ceiling height. Openings and the staged crack were not measured.
+- Transfer: the files were sent from the phone as documents (property `bedroom`) and again as ordinary WhatsApp media (`bedroom_whatsapp`). They are published as release assets under tag `benchmark-data-v1`, pinned in each property's `raw_manifest.json`, with laptop screens blurred.
+- LiDAR: three real Stray Scanner recordings provided with the problem statement were run without ground truth (`docs/testdata_validation.md`).

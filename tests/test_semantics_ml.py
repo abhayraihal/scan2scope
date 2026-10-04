@@ -1,4 +1,6 @@
-"""Smoke test with the real Grounding DINO and SAM 2.1 weights. Run under the GPU lock:
+"""Smoke test with the real Grounding DINO and SAM 2.1 weights; skips without them. LOCAL_IMAGES are not in
+the repository, and a synthetic wall image stands in when they are missing. On a shared machine, run it under
+a lock file:
 
 lockf -k /tmp/scan2scope-gpu.lock python -m pytest tests/test_semantics_ml.py -q -m ml
 """

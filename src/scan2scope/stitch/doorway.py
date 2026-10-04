@@ -9,7 +9,6 @@ because both room frames are gravity aligned.
 from __future__ import annotations
 
 import hashlib
-import inspect
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -80,23 +79,9 @@ class DoorHit:
 # --- the model call ----------------------------------------------------------------------------------
 
 def _load_rgb(path: Path) -> np.ndarray:
-    try:
-        from scan2scope.ingest.images import load_image
-    except ImportError:
-        load_image = None
-    if load_image is not None:
-        out = load_image(path)
-        return np.asarray(out[0] if isinstance(out, tuple) else out)
-    from PIL import Image, ImageOps
+    from scan2scope.ingest.images import load_image
 
-    try:
-        import pillow_heif
-
-        pillow_heif.register_heif_opener()
-    except ImportError:
-        pass
-    with Image.open(path) as im:
-        return np.asarray(ImageOps.exif_transpose(im).convert("RGB"))
+    return np.asarray(load_image(path)[0])
 
 
 def mapanything_runner(views: list[CameraView], key: dict, cache: Any) -> Any:
@@ -116,10 +101,7 @@ def mapanything_runner(views: list[CameraView], key: dict, cache: Any) -> Any:
             K[1] *= h / v.height
         images.append(rgb)
         intrinsics.append(K)
-    runner = MapAnythingRunner.get()
-    if "cache" in inspect.signature(runner.infer).parameters:
-        return runner.infer(images, intrinsics, key, cache=cache)
-    return runner.infer(images, intrinsics, key)
+    return MapAnythingRunner.get().infer(images, intrinsics, key, cache=cache)
 
 
 def _to_numpy(x: Any) -> np.ndarray | None:
@@ -620,7 +602,7 @@ def _run(runner: RunnerFn, view: CameraView, room_b: StitchRoom, door_a: Door, c
     except ImportError as exc:
         log.warning("stitch: doorway registration unavailable: %s", exc)
         return "import_error"
-    except Exception as exc:  # one failed run must not stop the stitch
+    except Exception as exc:  # noqa: BLE001 - one failed run must not stop the stitch
         log.warning("stitch: doorway registration run failed: %s", exc)
         flag = f"doorway_registration_failed:{type(exc).__name__}"
         if flag not in flags:

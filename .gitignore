@@ -15,3 +15,5 @@ __pycache__/
 /bench/synthetic/
 /dist/
 /bench/data/*/.download/
+*.zip
+/testdata/

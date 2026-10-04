@@ -1,5 +1,6 @@
-"""Photo and video scenes from real kitchen frames through MapAnything. Needs the weights; run under the GPU lock:
-lockf -k /tmp/scan2scope-gpu.lock python -m pytest tests/test_photo_video_ml.py -q"""
+"""Photo and video scenes from real kitchen frames through MapAnything. Needs the weights and the kitchen
+frames (KITCHEN below), which are not in the repository; skips without them. On a shared machine, run it under
+a lock file: lockf -k /tmp/scan2scope-gpu.lock python -m pytest tests/test_photo_video_ml.py -q"""
 
 import hashlib
 import json
@@ -23,7 +24,7 @@ if not (MODELS["mapanything"].local_dir / "model.safetensors").exists():
 if not (KITCHEN / "24.png").exists():
     pytest.skip("kitchen test images not available", allow_module_level=True)
 
-from scan2scope.geometry import photo, video  # noqa: E402
+from scan2scope.geometry import photo, video
 
 
 class NpzCache:

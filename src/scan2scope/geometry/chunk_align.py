@@ -228,7 +228,7 @@ def optimize_pose_graph(nodes: list[np.ndarray], edges: list[Edge], priors: list
     logs, R, t = unpack(x)
     out_nodes = [make_T(R[k], t[k], float(np.exp(logs[k]))) for k in range(K)]
     per_edge = []
-    for n, e in enumerate(edges):
+    for e in edges:
         err = sim3_error(np.asarray(e.T_ij, float), invert(out_nodes[e.i]) @ out_nodes[e.j])
         per_edge.append({"i": e.i, "j": e.j, "kind": e.kind, **err})
     return GraphResult(out_nodes, float(0.5 * r0 @ r0), float(0.5 * r1 @ r1), per_edge, success)

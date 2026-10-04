@@ -166,7 +166,7 @@ def _write_video(path: Path, frames: list[np.ndarray], divider: int) -> None:
         try:
             stream = out.add_stream(codec, rate=Fraction(60, divider))
             break
-        except Exception:
+        except Exception:  # noqa: BLE001, S112 - try the next encoder
             continue
     assert stream is not None, "no usable video encoder in PyAV"
     stream.width, stream.height = frames[0].shape[1], frames[0].shape[0]

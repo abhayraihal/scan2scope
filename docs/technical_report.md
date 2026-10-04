@@ -10,7 +10,7 @@ The benchmark is one real bedroom shot on an iPhone 17 (5 photos, a 57 s 1080p c
 
 ## 2. Architecture
 
-Stages run in the order ingest, geometry, layout, stitch (photo only), semantics, rules, intervals, scope and output. The tiers differ only in how geometry builds the `Scene` (gravity-aligned points with normals and confidence weights, and camera views with per-pixel world point maps), so a later fix such as the fix loop's layout change (section 7) reaches all three tiers.
+Stages run in the order ingest, geometry, layout, stitch (photo only), semantics, rules, intervals, scope and output. The tiers differ only in how geometry builds the `Scene` (gravity-aligned points with normals and confidence weights, and camera views with per-pixel world point maps), so a layout fix such as the fix loop's (section 7) reaches all three tiers.
 
 | Stage | Method |
 |----------|--------------------------------------------------|
@@ -27,17 +27,17 @@ Stages run in the order ingest, geometry, layout, stitch (photo only), semantics
 |------|------------|------------|------------|------------|
 | Photo | a folder per room, 2 to 8 photos | iPhone 15 or newer, including 16e, 17e, Air | Camera app, 1x | iPhone 17, 1 room, 2 captures |
 | Video | one walkthrough ending where it started | iPhone 15 or newer | Camera app, 1x, HDR off, Lock Camera on | iPhone 17, 1 room, 4 captures |
-| LiDAR | Stray Scanner folder or zip | 15 Pro to 18 Pro Max, iOS 18.6+ | Stray Scanner 1.4 (free) | 12 synthetic captures; 1 real, no ground truth |
+| LiDAR | Stray Scanner folder or zip | 15 Pro to 18 Pro Max, iOS 18.6+ | Stray Scanner 1.4 (free) | 12 synthetic captures; 4 real, no ground truth |
 
 `docs/device_matrix.md` has the per-model matrix and accuracy. LiDAR has metric depth and ARKit poses, so its errors are drift and layout; photo and video take scale, intrinsics and poses from MapAnything, whose metric scale nothing downstream corrects. Photo rooms are reconstructed one at a time and stitched, hence a photo through every doorway; video runs in 24-frame chunks (about 32 views at 518x336 fit in 16 GB), so its scale drift enters at the chunk links.
 
 ## 4. Drift handling
 
-LiDAR: 3 s trajectory segments more than 20 s apart whose clouds overlap, always including first against last, are registered by point-to-plane ICP. A loop edge needs an RMS residual under 2 cm, an overlap over 30%, a correction under 15 degrees and 1.5 m and at least 4 constrained degrees of freedom, and constrains only the directions its geometry fixes. Loop and odometry edges form a 4-DoF pose graph; a second solve adds per-segment floor-height priors (plane anchoring) and snaps segment yaw to the global wall direction within 5 degrees (Manhattan anchoring).
+LiDAR: point-to-plane ICP registers 3 s trajectory segments more than 20 s apart whose clouds overlap, and the first segment against the last when both have depth. A loop edge needs an RMS residual under 2 cm, an overlap over 30%, a correction under 15 degrees and 1.5 m and at least 4 constrained degrees of freedom, and constrains only the directions its geometry fixes. Loop and odometry edges form a 4-DoF pose graph; a second solve adds per-segment floor-height priors (plane anchoring) and snaps segment yaw to the global wall direction within 5 degrees (Manhattan anchoring).
 
 Video: chunks are linked by Sim(3) on shared frames, so scale drift is modelled, and a link is refused when the two runs place the shared cameras more than 10% of the scene depth apart (consistent real links 0.7 to 7%, broken ones 13% or more). A loop registration on the first and last 6 frames can replace one refused link, and unconnected chunks are dropped and flagged; the old camera-pose fallback had chained a 23% scale jump into the real room's second clip. On bedroom/video_2 the accepted loop cut the end-to-start error from 0.38 m and 6.0 degrees to 0.04 m and 0.64 degrees.
 
-The on and off ablation covers the 12 synthetic captures, the only multi-room ones (`lidar_1` and `lidar_2` drift 1 to 3 degrees per 3 minutes and 1 to 2 cm per minute, `lidar_drift` 4 degrees and 10 cm). Walls count within max(2 cm, 1%), and a missing wall fails.
+The on and off ablation covers the 12 synthetic captures, the only scored multi-room ones (`lidar_1` and `lidar_2` drift 1 to 3 degrees per 3 minutes and 1 to 2 cm per minute, `lidar_drift` 4 degrees and 10 cm). Walls count within max(2 cm, 1%), and a missing wall fails.
 
 | Captures (4 each) | Mean footprint error, on / off | Worst footprint error, on / off | Walls in tolerance, on / off |
 |---|---|---|---|
@@ -56,7 +56,7 @@ The correction is neutral overall (mean wall error lower on 4 captures and highe
 | synth_0/lidar_drift | 47.7 (13/16) | 36.5 (13/16) | 36.1 (13/16) | 36.5 (13/16) | 39.1 (7/12) |
 | synth_3/lidar_1 | 1.4 (22/26) | 1.0 (24/26) | 1.3 (22/26) | 0.9 (24/26) | 1.2 (24/26) |
 
-Manhattan yaw anchoring moves the result most, both ways; plane anchoring matters only on synth_0/lidar_drift. A self-check keeping whichever pose set gave sharper walls preferred the corrected poses on all 6 captures tried, synth_3/lidar_drift included, so it was not shipped.
+Manhattan yaw anchoring moves the result most, both ways; plane anchoring matters only on synth_0/lidar_drift.
 
 On the real office recording (232 s, no tape readings) the correction accepted 71 of 122 loop closures, cut the floor-height spread across segments from 47.9 to 5.5 cm and moved poses by up to 0.54 m (at most 0.19 m on the synthetic captures). The plan is one room with 16 walls and 189.6 m2 [177.4, 258.0], against 10 walls and 184.8 m2 with `--no-drift`.
 
@@ -68,7 +68,7 @@ On a 4.1 m wall the gates allow 33 cm (photo, 8%), 12 cm (video, 3%) and 4.1 cm 
 |--------|------------|------------|------------|
 | Metric scale | walls 0.3 to 7.5% short; prior 0.15 (log) | video_1 walls 4.5 to 8.7% short, chunk scales within 4.3% (7.4% WhatsApp); prior 0.08 | metric depth; prior 0.003 |
 | Heights beyond scale | ceilings about 14 points below walls | video_1 ceilings 7 to 8 points below walls | within 0.5 cm |
-| Ceiling selection | 1 and 2 candidate levels rejected | 3 to 6 rejected; video_2 never saw the ceiling (87 and 103 cm low) | 1 to 3 rejected on 5 of 12 captures, none wrongly kept |
+| Ceiling selection | 1 and 2 candidate levels rejected | 3 to 6 rejected; video_2 never saw the ceiling (87 and 103 cm low) | 1 to 3 rejected on 9 of 12 captures, none wrongly kept |
 | Wall-face fit | single views fit LiDAR to 1.5 to 14 cm (ARKitScenes) | as photo | 0.03 cm median repeat delta, exact poses |
 | Opening edges | not measured | not measured | 52 of 83 matched doors within 2 cm; 0 of 84 windows found |
 | Pose drift, registration | isolated views 0.36 to 5.8 m off (ARKitScenes) | 23% scale jump, old pose fallback | camera centres 0.9 to 5.9 cm RMS, yaw 0.11 to 0.73 degrees off |
@@ -90,7 +90,7 @@ sigma^2 = (v s)^2 + a^2 plus structure terms, v being the value. The capture's l
 
 Photo and video pass the gate and show little: the 14 photo values are one rectangle in two copies, with equal opposite walls and a footprint equal to the floor area, so they hold 8 distinct numbers, and they cover because they are wide (a third of the true value). The 3 video misses are walls of the two video_2 copies. Before the real-room fixes (a94ee18, unpublished copy) 6 of the 14 WhatsApp video values missed by more than 2 half-widths.
 
-LiDAR fails: opening widths cover 64.2% (half-width 2.1 cm, mean error 3.9 cm), wall lengths 82.2%. The worst miss, synth_0/lidar_drift kitchen W4 (3.964 m, reported [7.810, 7.892] m), ran on through a hallway the run did not find, which a per-measurement model cannot see. q stays at 1.0: split conformal with the room as the unit needs the ceil((n+1) x 0.9)/n quantile, which exists only for n >= 9 rooms, and q is not fitted on synthetic rooms. A fit on the 20 synthetic rooms (section 8, not applied) gives q = 2.52 and leave-one-room-out coverage of 94.0% (515 of 548), which would calibrate the intervals to the simulator.
+LiDAR fails: opening widths cover 64.2% (half-width 2.1 cm, mean error 3.9 cm), wall lengths 82.2%. The worst miss, synth_0/lidar_drift kitchen W4 (3.964 m, reported [7.810, 7.892] m), ran on through a hallway the run did not find, which a per-measurement model cannot see. q stays at 1.0: split conformal with the room as the unit needs the ceil((n+1) x 0.9)/n quantile, which exists only for n >= 9 rooms, and q is not fitted on synthetic rooms. A fit on the 20 synthetic rooms (section 8, not applied) gives q = 2.52 and leave-one-room-out coverage of 94.0% (515 of 548; CI 91.6 to 95.8%), conservative on the simulator.
 
 ## 6. Results
 
@@ -106,6 +106,8 @@ LiDAR fails: opening widths cover 64.2% (half-width 2.1 cm, mean error 3.9 cm), 
 
 `*` marks thresholds the brief does not state (`assumed: true` in `bench/gates.yaml`). Ceiling failure mode: photo is biased (mean -62.2 cm), video biased and unrepeatable (mean -70.3 cm), and LiDAR neither (worst 0.5 cm; the gate fails on 2 rooms not found).
 
+The three LiDAR recordings provided with the problem statement have no ground truth (`docs/testdata_validation.md`): `c7d28f72c6` gave 7 rooms with 3.07 to 3.09 m ceilings; the two filmed looking down each merged into one room, never seeing the ceiling.
+
 ## 7. Fix loop
 
 Declared before any fix code or real capture (tag `fixloop-declared`): the worst gate was LiDAR repeatability, 82 of 236 wall pairs (34.7%) within max(1 cm, 0.5%). The hypothesis was that layout made repeats match walls that do not correspond: property-wide wall lines merged parallel faces of neighbouring rooms under about 10 cm apart, polygons stepped along interior-wall and furniture faces (a 4-wall hallway got 8 walls), and rectangle pairs differed by a median 2.4 cm where depth noise predicts millimetres. The fix (tag `fixloop-after`, 4 commits in `layout/` and its tests) refits each room's walls from the points within 15 cm facing into it, removes steps under 0.25 m and fills furniture notches.
@@ -114,14 +116,14 @@ Declared before any fix code or real capture (tag `fixloop-declared`): the worst
 |----------------|--------|--------|--------|
 | Repeat wall pairs in tolerance | 82/236 (34.7%) | 155/232 (66.8%) | 85% (75 to 95%) |
 | Median repeat delta, rectangle pairs | 2.43 cm | 1.04 cm | under 0.6 cm |
-| Rooms with the wrong wall count | 34/116 | 15/116 | under 10 |
+| Room instances with the wrong wall count | 34/116 | 15/116 | under 10 |
 | Wall-length pass share | 58.3% | 82.9% | at least 85% |
 
-The prediction missed (`docs/fixloop/postmortem.md`). With exact synthetic poses the same captures reach 96.3% (86.9% before), so the layout mechanisms were real; the declaration underweighted pose error left after drift correction (camera centres 0.9 to 5.9 cm RMS, yaw 0.11 to 0.73 degrees), about 1 cm per wall and the whole allowance, and the exact-pose run should have come first. 15 rooms keep the wrong wall count, mostly where a doorway opens onto free space. Later fixes left every LiDAR value unchanged and raised interval coverage from 73.2% to 85.5%.
+The prediction missed (`docs/fixloop/postmortem.md`). With exact synthetic poses the same captures reach 96.3% (86.9% before), so the layout mechanisms were real; the declaration underweighted pose error left after drift correction (camera centres 0.9 to 5.9 cm RMS, yaw 0.11 to 0.73 degrees), about 1 cm per wall and the whole allowance, and the exact-pose run should have come first. 15 room instances keep the wrong wall count, mostly where a doorway opens onto free space. Later fixes left every LiDAR value unchanged and raised interval coverage from 73.2% to 85.5%.
 
 ## 8. Reproduction
 
-The README ("Reproduce the reported numbers") has every command: the release-asset fetch (6 zips, 331 MB, SHA-256 checked), both benches into `runs/final_real` and `runs/final_synth`, the seeded synthetic set, the fix loop from clean worktrees, the office recording at a pinned revision with and without `--no-drift`, and the synthetic conformal fit of section 5, which writes nothing. Each `bench` run repeats its multi-room captures with drift correction off. The per-stage drift rows pass `drift_options` (`{"manhattan_anchoring": False}`, `{"plane_anchoring": False}` or both) to `geometry.lidar.build_scene`, which no CLI flag exposes; the ARKitScenes analysis is not scripted.
+The README ("Reproduce the reported numbers") has every command: the release-asset fetch (6 zips, 331 MB, SHA-256 checked), both benches, the seeded synthetic set, the fix loop from clean worktrees, the office recording with and without `--no-drift`, and the synthetic conformal fit of section 5. Each `bench` run repeats its multi-room captures with drift correction off. The per-stage drift rows come from `scripts/drift_stage_ablation.py`, since no CLI flag switches single stages. The ARKitScenes analysis is not scripted.
 
 ## 9. Known failure modes
 
@@ -140,7 +142,7 @@ ARKitScenes numbers come from development runs before the real-room fixes.
 
 ## 10. Deviations from the brief
 
-- One real room and no LiDAR phone: photo stitching (unit tests in `tests/test_stitch.py`), adjacency and the drift ablation are shown on synthetic data only, the LiDAR tier also runs on one public real recording without tape readings, and the photo tier has no repeat capture.
+- One real room and no LiDAR phone: photo stitching (unit tests in `tests/test_stitch.py`), adjacency and the drift ablation are tested on synthetic data only, the LiDAR tier's four real recordings have no tape readings, and the photo tier has no repeat capture.
 - One staged damage class (a drawn crack) where the brief asks for two; the real room's openings and damage extents were not measured, so neither is scored.
 - No head-to-head: the magicplan free-plan IFC export had no room geometry, and no other app data was captured.
 - No Round 1 schema or gates were provided, so both are ours; 8 thresholds in `bench/gates.yaml` are marked `assumed: true`.

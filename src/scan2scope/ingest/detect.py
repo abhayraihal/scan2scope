@@ -292,7 +292,7 @@ def _photo_summary(scan: PhotoScan, flags: list[str]) -> tuple[dict[str, Any], d
         for p in photos:
             try:
                 ex = read_exif(p)
-            except Exception as exc:  # any decoder error: count the photo as unreadable, keep going
+            except Exception as exc:  # noqa: BLE001 - any decoder error: count the photo as unreadable
                 log.warning("cannot read %s: %s", p, exc)
                 unreadable += 1
                 continue

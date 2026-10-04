@@ -2,10 +2,10 @@
 
     python scripts/blur_screens.py SRC_DIR DST_DIR
 
-Mirrors SRC_DIR into DST_DIR: images are re-saved as JPEG (quality 95) with screens blurred, videos are re-encoded
-(H.264, same size and frame rate) with screens blurred on every frame. Boxes come from Grounding DINO; in videos they
-are detected every few frames and held in between; frames are written upright. Photo EXIF (focal length,
-Apple MakerNote) is kept. Benchmark numbers are computed from the blurred copies, so the
+Mirrors SRC_DIR into DST_DIR: images are re-saved as JPEG (quality 95) with screens blurred, videos are
+re-encoded (H.264, same size and frame rate) with screens blurred on every frame. Boxes come from Grounding
+DINO; in videos they are detected every few frames and held in between; frames are written upright. Photo EXIF
+(focal length, Apple MakerNote) is kept. Benchmark numbers are computed from the blurred copies, so the
 published inputs regenerate them.
 """
 
@@ -16,7 +16,6 @@ import shutil
 import sys
 from pathlib import Path
 
-import numpy as np
 from PIL import Image, ImageFilter
 
 PROMPT = "laptop ."
@@ -48,7 +47,7 @@ class ScreenFinder:
         res = self.processor.post_process_grounded_object_detection(
             out, inputs.input_ids, threshold=self.threshold, text_threshold=0.25, target_sizes=[img.size[::-1]])[0]
         w, h = img.size
-        boxes = [tuple(int(round(v)) for v in b) for b in res["boxes"].cpu().numpy().tolist()]
+        boxes = [tuple(round(v) for v in b) for b in res["boxes"].cpu().numpy().tolist()]
         return [b for b in boxes if (b[2] - b[0]) * (b[3] - b[1]) <= MAX_BOX_FRACTION * w * h]
 
 

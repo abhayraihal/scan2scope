@@ -183,7 +183,7 @@ class LineItem:
     surface_id: str
     category: str  # Xactimate-style category code, e.g. DRY, PNT, WTR
     selector: str
-    activity: str  # "&" remove and replace, "-" remove, "+" replace, "R" detach and reset, "I" install
+    activity: str  # "&" remove and replace, "-" remove, "+" replace or apply, "R" detach and reset, "I" install
     description: str
     quantity: Measurement
     unit: str  # SF, LF, EA, m2, m

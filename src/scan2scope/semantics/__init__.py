@@ -185,7 +185,7 @@ def load_view_image(view: CameraView, long_side: int) -> tuple[np.ndarray, list[
         from scan2scope.ingest.images import load_image
 
         rgb = np.asarray(load_image(Path(view.image_path))[0])
-    except Exception:  # ingest not available or failed: decode here
+    except Exception:  # noqa: BLE001 - load_image failed: decode with PIL below
         rgb = None
     if rgb is None:
         from PIL import Image, ImageOps
@@ -195,7 +195,7 @@ def load_view_image(view: CameraView, long_side: int) -> tuple[np.ndarray, list[
 
             pillow_heif.register_heif_opener()
         except ImportError:
-            log.debug("pillow_heif not installed; HEIC images cannot be read")
+            log.debug("pillow-heif is not installed; HEIC images cannot be read")
         with Image.open(view.image_path) as im:
             rgb = np.asarray(ImageOps.exif_transpose(im).convert("RGB"))
     if rgb.ndim == 2:

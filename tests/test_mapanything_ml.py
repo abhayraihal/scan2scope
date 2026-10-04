@@ -1,4 +1,5 @@
-"""MapAnything runner on real images. Needs the weights; run under the GPU lock:
+"""MapAnything runner on real images. Needs the weights and local kitchen frames (KITCHEN below) that are not
+in the repository; skips without them. On a shared machine, run it under a lock file:
 lockf -k /tmp/scan2scope-gpu.lock python -m pytest tests/test_mapanything_ml.py -q"""
 
 import hashlib
@@ -12,7 +13,7 @@ from PIL import Image
 from scan2scope.config import MODELS
 
 pytestmark = pytest.mark.ml
-torch = pytest.importorskip("torch")
+pytest.importorskip("torch")
 pytest.importorskip("mapanything")
 
 KITCHEN = Path("/tmp/georesearch/testimgs/kitchen")
@@ -21,7 +22,7 @@ if not (MODELS["mapanything"].local_dir / "model.safetensors").exists():
 if not (KITCHEN / "05.png").exists():
     pytest.skip("kitchen test images not available", allow_module_level=True)
 
-from scan2scope.geometry import mapanything_backend as mb  # noqa: E402
+from scan2scope.geometry import mapanything_backend as mb
 
 
 class NpzCache:

@@ -105,7 +105,7 @@ def test_bom_headerless_and_unordered_odometry(tmp_path):
     ds = write_stray_dataset(tmp_path / "bom", n_frames=6)
     path = ds.root / "odometry.csv"
     rows = path.read_text().splitlines()
-    path.write_text("﻿" + "\n".join(rows) + "\n", encoding="utf-8")
+    path.write_text("\ufeff" + "\n".join(rows) + "\n", encoding="utf-8")
     assert load_stray(ds.root).flags == []
     body = rows[1:]
     body[2], body[3] = body[3], body[2]  # rows out of order; the frame column puts them back

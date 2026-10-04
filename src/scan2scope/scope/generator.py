@@ -202,7 +202,7 @@ def generate(plan: Plan, damage: list[DamageRegion], flags: list[ConcealedFlag],
         for sid, regions in groups.items():
             try:
                 item = _item(entry, sid, regions[0].room_id, surfaces.get(sid), regions, [])
-            except Exception as exc:  # odd geometry on one surface must not drop the whole scope
+            except Exception as exc:  # noqa: BLE001 - odd geometry on one surface must not drop the scope
                 log.warning("scope entry %s skipped on %s: %s", entry["id"], sid, exc)
                 continue
             if item is not None:
@@ -223,7 +223,7 @@ def generate(plan: Plan, damage: list[DamageRegion], flags: list[ConcealedFlag],
             room_id = regs[0].room_id if regs else fl[0].room_id
             try:
                 item = _item(entry, sid, room_id, surfaces.get(sid), regs, fl)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - same for the flag entries
                 log.warning("scope entry %s skipped on %s: %s", entry["id"], sid, exc)
                 continue
             if item is not None:

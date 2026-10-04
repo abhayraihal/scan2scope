@@ -1,4 +1,4 @@
-"""End-to-end run for one capture: ingest, geometry, layout, stitch, semantics, rules, scope, intervals, output."""
+"""End-to-end run for one capture: ingest, geometry, layout, stitch, semantics, rules, intervals, scope, output."""
 
 from __future__ import annotations
 
@@ -40,9 +40,10 @@ class Timer:
 def _git_commit() -> str | None:
     try:
         root = Path(__file__).resolve().parents[2]
-        out = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True, timeout=5)
+        out = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True,
+                             timeout=5, check=False)
         return out.stdout.strip() or None
-    except Exception:
+    except Exception:  # noqa: BLE001 - git missing or timed out: the provenance records no commit
         return None
 
 
@@ -161,7 +162,7 @@ def run_capture(
                 damage, objects = sem.damage, sem.objects
                 stage_errors.extend(getattr(sem, "flags", []))
                 plan.flags.extend(_reject_mirror_openings(plan, objects))
-            except Exception as exc:  # semantics must never block the geometric result
+            except Exception as exc:  # noqa: BLE001 - semantics must never block the geometric result
                 log.warning("semantics failed: %s", exc)
                 log.debug(traceback.format_exc())
                 stage_errors.append(f"semantics_failed:{type(exc).__name__}")

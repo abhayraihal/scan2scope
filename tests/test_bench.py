@@ -815,3 +815,13 @@ def test_hand_built_result_is_schema_valid():
 
     schema = json.loads((ROOT / "schema/scan2scope.schema.json").read_text())
     jsonschema.validate(result(good_rooms(), damage=[stain()]), schema)
+
+
+def test_worst_items_print_areas_in_m2_and_lengths_in_cm():
+    from scan2scope.bench.report import _worst_text
+
+    ref = {"property": "home", "capture": "photo_1", "item": "01 kitchen"}
+    area = _worst_text({"gate": "floor_area", "worst": [{**ref, "err": -3.78, "allowed": 0.891}]})
+    length = _worst_text({"gate": "wall_length", "worst": [{**ref, "err": 0.125, "allowed": 0.08}]})
+    assert area == "home/photo_1/01 kitchen err -3.78 m2 (allowed 0.89 m2)"
+    assert length == "home/photo_1/01 kitchen err +12.5 cm (allowed 8.0 cm)"

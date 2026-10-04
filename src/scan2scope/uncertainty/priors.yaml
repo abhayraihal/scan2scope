@@ -10,7 +10,7 @@ tiers:
     additive: {length: 0.008, height: 0.006, opening: 0.012}   # metres
     vertical: 0.0             # log sigma of heights on top of s; LiDAR depth is metric in every direction
   video:
-    # One MapAnything metric estimate is good to about 0.08 in log scale (photo.SCALE_LOG_SIGMA). The chunks
+    # One MapAnything metric estimate is good to about 0.08 in log scale (video.SCALE_SIGMA_BASE). The chunks
     # of a walkthrough are runs of the same model on the same camera and room, so they share that error and
     # averaging them does not take the floor below it.
     scale_floor: 0.08
@@ -19,7 +19,9 @@ tiers:
     # differently: ceilings on 11 photo and video captures of 4 real rooms missed by 0.13 in log RMS.
     vertical: 0.1
   photo:
-    scale_floor: 0.08         # one MapAnything run per room; the geometry stage reports the same 0.08
+    # One MapAnything run per room. The geometry stage reports at least 0.15 (photo.SCALE_LOG_SIGMA) and s is
+    # the larger of the two, so this floor does not bind.
+    scale_floor: 0.08
     additive: {length: 0.04, height: 0.035, opening: 0.04}
     vertical: 0.1
 

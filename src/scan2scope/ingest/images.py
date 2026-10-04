@@ -185,7 +185,7 @@ def _exif_from_image(im: Image.Image) -> ExifInfo:
     try:
         exif = im.getexif()
         sub = exif.get_ifd(_EXIF_IFD)
-    except Exception as exc:  # a malformed EXIF block should not make the photo unusable
+    except Exception as exc:  # noqa: BLE001 - a malformed EXIF block should not make the photo unusable
         log.debug("unreadable EXIF in %s: %s", getattr(im, "filename", "?"), exc)
         exif, sub = Image.Exif(), {}
     tag_orientation = int(_num(exif.get(_ORIENTATION)) or 1)
@@ -240,7 +240,7 @@ def load_image(path: str | Path) -> tuple[np.ndarray, ExifInfo]:
         info = _exif_from_image(im)
         try:
             upright = ImageOps.exif_transpose(im)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - keep the stored orientation
             log.warning("could not apply EXIF orientation to %s: %s", path, exc)
             upright = im
         rgb = _to_rgb_uint8(upright)

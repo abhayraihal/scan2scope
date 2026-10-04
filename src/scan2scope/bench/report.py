@@ -17,6 +17,7 @@ from scan2scope.types import TIERS
 log = logging.getLogger("scan2scope.bench")
 
 STAGES = ("ingest", "geometry", "layout", "stitch", "semantics", "rules", "uncertainty", "scope")
+AREA_GATES = ("floor_area", "footprint", "damage_area")  # worst items in m2, all others in cm
 
 GATES_NOTE = ("Status per tier against `bench/gates.yaml`. `assumed` marks thresholds the brief does not "
               "state. A missing value (room, wall or opening not found, capture failed) counts as a failing "
@@ -88,6 +89,12 @@ def _cm(x: float | None, signed: bool = False) -> str:
     return f"{100 * x:+.1f} cm" if signed else f"{100 * x:.1f} cm"
 
 
+def _m2(x: float | None, signed: bool = False) -> str:
+    if x is None:
+        return ""
+    return f"{x:+.2f} m2" if signed else f"{x:.2f} m2"
+
+
 def _pct(x: float | None, signed: bool = False) -> str:
     if x is None or not math.isfinite(x):
         return ""
@@ -112,6 +119,7 @@ def _cap(m: dict[str, Any]) -> str:
 
 
 def _worst_text(row: dict[str, Any]) -> str:
+    size = _m2 if row.get("gate") in AREA_GATES else _cm
     parts = []
     for w in row.get("worst") or []:
         where = f"{w.get('property') or '?'}/{w.get('capture') or '?'}/{w.get('item')}"
@@ -120,7 +128,7 @@ def _worst_text(row: dict[str, Any]) -> str:
         elif w.get("reason"):
             parts.append(f"{where} ({w['reason']})")
         elif w.get("err") is not None and w.get("allowed") is not None:
-            parts.append(f"{where} err {_cm(w['err'], True)} (allowed {_cm(w['allowed'])})")
+            parts.append(f"{where} err {size(w['err'], True)} (allowed {size(w['allowed'])})")
         elif w.get("miss_ratio") is not None:
             parts.append(f"{where} {w['kind']} gt {_m(w['gt'])} interval [{_m(w['lo'])}, {_m(w['hi'])}]")
         elif w.get("ours_err") is not None:

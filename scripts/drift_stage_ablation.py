@@ -4,14 +4,17 @@ switched off. Output: runs/drift_stages/rows.json and one line per run (docs/ben
     uv run python scripts/drift_stage_ablation.py
 """
 
-import functools, json, logging
+import functools
+import json
+import logging
 from pathlib import Path
-logging.basicConfig(level=logging.WARNING)
+
 import scan2scope.geometry.lidar as L
-from scan2scope.pipeline import run_capture
 from scan2scope.bench.groundtruth import load_ground_truth
 from scan2scope.bench.metrics import capture_metrics
+from scan2scope.pipeline import run_capture
 
+logging.basicConfig(level=logging.WARNING)
 orig = L.build_scene
 configs = {"all": {}, "no_manhattan": {"manhattan_anchoring": False}, "no_plane": {"plane_anchoring": False},
            "loop_only": {"manhattan_anchoring": False, "plane_anchoring": False}, "off": None}
@@ -34,4 +37,4 @@ for prop, cid in caps:
         ok = sum(abs(r["err"]) <= max(0.02, 0.01 * r["gt"]) for r in walls)
         rows.append((prop, cid, name, round(100 * mean, 2), f"{ok}/{len(walls)}", len(m.get("missing", []))))
         print(*rows[-1], flush=True)
-json.dump(rows, open(OUT / "rows.json", "w"))
+(OUT / "rows.json").write_text(json.dumps(rows))

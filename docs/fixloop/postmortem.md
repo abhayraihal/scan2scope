@@ -15,7 +15,7 @@ The declaration (`docs/fixloop/declaration.md`, tag `fixloop-declared`) named Li
 
 Other gates moved with it: interval coverage 60.6% to 73.2%, confident-garbage values 152 to 105, repeat structure 50% to 64%. Nothing got worse.
 
-The declaration text says it was written at about 18:55 IST; the tagged commit is at 18:41 IST. The declared before-count of wrong wall counts (43 of 112) counted room instances once per repeat pair. Counting each matched room once per capture gives 34 of 116; the after figure uses the same count.
+The declaration text says it was written at about 18:55 IST; the tagged commit is at 18:41 IST. The declaration put the rooms with the wrong number of walls at 43 of 112 before the fix. It took each room once per repeat pair and treated every room without 4 walls as wrong, so it included the 12 instances of the two 6-wall rooms, which had the right number. Checked against each room's true number of walls, the same per-pair tally is 31 of 112. The table takes each matched room once per run, over the 12 captures each run with and without drift correction: 34 of 116 rooms before the fix and 15 of 116 after.
 
 ## Was the root cause right
 

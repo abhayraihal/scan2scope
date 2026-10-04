@@ -8,7 +8,7 @@ Turns an iPhone capture of a home into a dimensioned floor plan of the whole pro
 | Video | one handheld walkthrough clip that ends where it started | any iPhone 15 or newer |
 | LiDAR | a Stray Scanner export (depth, poses, intrinsics) | iPhone 15 Pro to 18 Pro Max |
 
-Only an iPhone 17 has been used for real captures; [docs/device_matrix.md](docs/device_matrix.md) lists every model and what was tested on it. How to capture: [docs/capture_protocol.md](docs/capture_protocol.md) (one page). Design and decision log: [docs/design.md](docs/design.md). Technical report: [docs/technical_report.md](docs/technical_report.md). Running a capture at the walk-in: [docs/walkin_runbook.md](docs/walkin_runbook.md).
+Our own captures were all made on an iPhone 17, which has no LiDAR; [docs/device_matrix.md](docs/device_matrix.md) lists every model and what was tested on it. How to capture: [docs/capture_protocol.md](docs/capture_protocol.md) (one page). Design and decision log: [docs/design.md](docs/design.md). Technical report: [docs/technical_report.md](docs/technical_report.md). Running a capture at the walk-in: [docs/walkin_runbook.md](docs/walkin_runbook.md).
 
 ## Set up a clean machine
 
@@ -36,9 +36,9 @@ uv run scan2scope run ~/Downloads/recording.zip        # LiDAR tier: a Stray Sca
 
 The tier is detected from the files. A folder of photo folders is the photo tier with one room per folder (a single folder of photos is one room), a video file is the video tier, and a folder with `odometry.csv` and `depth/` is the LiDAR tier. Any of them can come as a zip.
 
-Flags: `--tier` overrides the detection, `--out` sets the output folder, `--no-semantics` skips damage detection, `--no-drift` turns drift correction off (for the ablation), and `--cache` takes `live` (the default: compute model outputs and store them), `replay` (use stored outputs only) or `off`.
+Flags: `--tier` overrides the detection, `--out` sets the output folder, `--no-semantics` skips damage detection (the stage that also finds the doors, windows, mirrors and fixtures the rules use), `--no-drift` turns drift correction off (for the ablation), and `--cache` takes `live` (the default: reuse a stored model output when there is one, otherwise compute and store it), `replay` (stored outputs only) or `off` (compute everything, store nothing).
 
-Run times on the M4 at commit 7d26d19 (cache off, other jobs running): 65 s for the 5 benchmark photos (22 s model loading, 32 s damage detection) and 264 s for the 57 s benchmark clip (142 s geometry, 120 s damage detection). The benchmark run at 226bcff, before the slower damage checks of 8df5f97, took 55 s for the photos and 162 to 179 s per clip. A synthetic LiDAR capture takes about 15 to 22 s without damage detection.
+Run times on the M4 at commit 7d26d19 (cache off, other jobs running): 65 s for the 5 benchmark photos (22 s model loading, 32 s damage detection) and 264 s for the 57 s benchmark clip (142 s geometry, 120 s damage detection). The benchmark run at 226bcff, before the slower damage checks of 8df5f97, took 55 s for the photos and 162 to 179 s per clip. A synthetic LiDAR capture takes about 15 to 22 s without damage detection. The three real test recordings under "Results" took 203 to 230 s each with damage detection on, 8 to 25 s of it geometry and layout.
 
 ## Outputs
 
@@ -62,6 +62,7 @@ Each run writes to `out/<capture name>/`, or to the `--out` folder:
 - Across repeat captures, 155 of 232 synthetic LiDAR wall pairs agree within max(1 cm, 0.5%). In the real room, 1 of 8 video wall pairs do.
 - Of the 192 synthetic LiDAR openings, 61 were found within 2 cm, 34 were found more than 2 cm off and 97 were missed; with the 10 phantoms counted as failures, the opening gate passes 61 of 202. The real room's openings were not measured and are not scored.
 - A public Stray Scanner recording of an open-plan office (232 s) gives a real LiDAR run without ground truth. Drift correction accepted 71 of 122 loop closures and cut the floor-height spread between trajectory segments from 48 cm to 5.5 cm, and the plan came out as one room with 16 walls and 189.6 m2.
+- Three real Stray Scanner LiDAR recordings of one apartment came with the problem statement as test data, without measurements, and we ran each end to end with the default settings ([docs/testdata_validation.md](docs/testdata_validation.md); outputs in `docs/testdata/`). `c7d28f72c6` (215 s) gave 7 rooms linked by 7 doorways, with ceilings of 3.07 to 3.09 m in every room. In `1a8384c3f6` (115 s) and `c00a170fe1` (37 s) the camera never looks above horizontal, so the ceiling and most door heads stay out of view. Each came out as one merged room, most likely for that reason, with the ceiling flagged as not observed and its interval reaching 4 m. None of these numbers is scored.
 - In the fix loop, synthetic LiDAR repeatability (the worst gate) went from 82 of 236 wall pairs (34.7%) to 155 of 232 (66.8%), against a predicted 85% (75 to 95%). The declaration, both runs, the diff and the post-mortem are in [docs/fixloop/](docs/fixloop/).
 
 ## Reproduce the reported numbers
@@ -75,6 +76,9 @@ uv run scan2scope bench bench/data --out runs/final_real
 # synthetic LiDAR: regenerate the 4 properties (12 captures, 0.9 GB), then run and score them
 uv run scan2scope synth --out bench/synthetic --properties 4 --seed 0
 uv run scan2scope bench bench/synthetic --out runs/final_synth --no-semantics
+
+# per-stage drift ablation on 5 of those captures (technical report section 4): prints the lines of docs/benchmark/drift_stages.txt
+uv run python scripts/drift_stage_ablation.py
 
 # fix loop: benchmark the tagged before and after commits from clean worktrees on the synthetic set
 BENCH_ARGS=--no-semantics CACHE=off scripts/fixloop.sh fixloop-before fixloop-after bench/synthetic
@@ -90,17 +94,17 @@ uv run python -c "import json; from scan2scope.uncertainty.calibrate import fit_
 
 Each `bench` run writes `benchmark_report.md`, `metrics.json` and `gates.json` to its `--out` folder, and runs every multi-room video or LiDAR capture a second time with drift correction off for the ablation. The fix-loop script writes `runs/fixloop/before`, `runs/fixloop/after` and `runs/fixloop/diff.md`; the committed copies are in `docs/fixloop/`. On the M4, generating the synthetic set took 26 minutes, the synthetic benchmark 5.5 minutes and the fix loop 12.5 minutes. The real benchmark took 12.5 minutes at 226bcff, running alongside the synthetic one; damage detection is slower from 8df5f97 on, and at 7d26d19 the six real captures add up to about 16 minutes (an estimate from stage times, not one measured bench run).
 
-Two reproduction checks were run on 2026-10-04. `synth --seed 0` regenerated the 4 synthetic properties with the same frame counts in all 12 captures (no file-by-file comparison was kept). Live reruns of bedroom/photo_1 and bedroom/video_1 at 7d26d19 with the cache off matched the published wall lengths, ceiling heights and floor areas, and their intervals, to all four decimals stored in `result.json`, and reported the same damage regions; the other four real captures were not rerun for this check. `--cache replay` reuses only the model outputs that a live run stored in `~/.cache/scan2scope/outputs`, so it works on the machine that made them.
+Three reproduction checks were run on 2026-10-04. `synth --seed 0` regenerated the 4 synthetic properties with the same frame counts in all 12 captures (no file-by-file comparison was kept). Live reruns of bedroom/photo_1 and bedroom/video_1 at 7d26d19, with the cache off, matched the published wall lengths, ceiling heights, floor areas and intervals to all four decimals stored in `result.json`. They also reported the same damage regions. The other four real captures were not rerun for this check. `scripts/drift_stage_ablation.py`, rerun with the final pipeline code, printed all 25 lines of `docs/benchmark/drift_stages.txt` unchanged. `--cache replay` reuses only the model outputs that a live run stored in `~/.cache/scan2scope/outputs`, so it works on the machine that made them.
 
-Two analyses are not scripted in this repository. The ARKitScenes runs that measured MapAnything's scale error used scripts and data kept outside it; those numbers and the real bedroom's set the photo and video scale priors. The per-stage drift ablation on 5 synthetic captures switches stages through the `drift_options` argument of `geometry.lidar.build_scene`, which the CLI does not expose (it has only `--no-drift`); [docs/benchmark_report.md](docs/benchmark_report.md) describes the script.
+One analysis is not scripted in this repository: the ARKitScenes runs that measured MapAnything's scale error used scripts and data kept outside it, and those numbers and the real-room errors set the photo and video scale priors. The per-stage drift ablation switches stages through the `drift_options` argument of `geometry.lidar.build_scene`. The CLI has no flag for that argument (only `--no-drift`), so the ablation runs from `scripts/drift_stage_ablation.py`. One figure cannot be rerun from the published files: the misses on the pre-fix WhatsApp videos at a94ee18 (technical report section 5) came from an unpublished copy of the captures.
 
 ## Repository map
 
 | Path | What it holds |
 |---|---|
 | `src/scan2scope/cli.py`, `pipeline.py` | the `scan2scope` command and the order of stages |
-| `src/scan2scope/ingest` | tier detection, photo EXIF and intrinsics, video frame sampling, Stray Scanner parser |
-| `src/scan2scope/geometry` | LiDAR back-projection and drift correction, MapAnything wrapper, photo and video reconstruction, video chunk alignment |
+| `src/scan2scope/ingest` | tier detection and the input summary (photo EXIF, video probe), image loading, Stray Scanner parser |
+| `src/scan2scope/geometry` | LiDAR back-projection and drift correction, MapAnything wrapper, photo and video reconstruction (with their own EXIF intrinsics and video frame sampling), video chunk alignment |
 | `src/scan2scope/layout` | floor, ceiling, walls, rooms and openings from a gravity-aligned point cloud (shared by all tiers) |
 | `src/scan2scope/stitch` | photo-tier placement of rooms into one property plan |
 | `src/scan2scope/semantics`, `rules`, `scope` | damage detection, concealed-damage rules, scope line items |
@@ -111,9 +115,10 @@ Two analyses are not scripted in this repository. The ARKitScenes runs that meas
 | `src/scan2scope/cache.py`, `weights.py` | model-output cache (`live`, `replay`, `off`); pinned weight download and `doctor` |
 | `schema/scan2scope.schema.json` | output contract (JSON Schema 2020-12) |
 | `bench/gates.yaml`, `bench/data/<property>/`, `bench/templates/` | gate thresholds; ground truth and release manifest per real property; ground-truth template |
-| `scripts/` | benchmark data packaging and fetch, laptop-screen blurring, fix-loop runner and comparison, compliance matrix |
+| `scripts/` | benchmark data packaging and fetch, laptop-screen blurring, fix-loop runner and comparison, per-stage drift ablation, compliance matrix |
 | `tests/` | unit tests; `uv run pytest -m "not ml"` runs the ones that need no model weights, as CI does |
-| `docs/` | design and decision log, capture and ground-truth protocols, walk-in runbook, module contracts, technical report, benchmark report, fix loop, requirements and compliance matrix |
+| `docs/` | design and decision log, capture and ground-truth protocols, benchmark capture plan, walk-in runbook, module contracts, device matrix, technical report, benchmark report (generated reports in `docs/benchmark/`), fix loop, requirements and compliance matrix |
+| `docs/testdata_validation.md`, `docs/testdata/` | runs on the three Stray Scanner test recordings provided with the problem statement: write-up, and `result.json` and plans per recording |
 
 ## Models, data and tools
 
@@ -127,6 +132,7 @@ Two analyses are not scripted in this repository. The ARKitScenes runs that meas
 | Benchmark data `bedroom`, `bedroom_whatsapp` | GitHub release `benchmark-data-v1`: 6 zips, 331 MB | our own captures | the real-room benchmark; laptop screens blurred with `scripts/blur_screens.py` before publishing, the original photos keep their EXIF (no GPS); every real-room number is computed from these files |
 | [ARKitScenes](https://github.com/apple/ARKitScenes) raw data, 3 Validation scans (45663154, 47332885, 48018560) | v1 | Apple ARKitScenes licence (non-commercial grant; commercial use capped by user count) | development only: photo and video geometry checked against iPad Pro LiDAR depth, and MapAnything's scale error measured for the photo and video priors; kept local, not redistributed |
 | Stray Scanner recording `4e41d0a7da` from [vslamlab/strayscanner](https://huggingface.co/datasets/vslamlab/strayscanner) | dataset revision 25370e3 | none stated | a real LiDAR run without ground truth; kept local, not redistributed |
+| Stray Scanner recordings `c7d28f72c6`, `1a8384c3f6`, `c00a170fe1` | as provided | provided with the problem statement as test data | real LiDAR runs without ground truth; outputs in `docs/testdata/`, recordings not redistributed |
 | magicplan | free Starter plan; app version not recorded | proprietary app | planned head-to-head; its IFC export (`bench/data/bedroom/magicplan/room.ifc`) had no room geometry, so no comparison was made |
 
 No paid tools or services are used, and nothing calls our own infrastructure. Besides installing, only `fetch-weights` (Hugging Face and GitHub), `benchmark_data.py fetch` (GitHub release assets) and the optional recording download use the network; a full photo run completed on 2026-10-04 with the HTTP and HTTPS proxy variables pointed at a closed port, so runs need no network.
@@ -134,16 +140,16 @@ No paid tools or services are used, and nothing calls our own infrastructure. Be
 ## Limitations and deviations from the brief
 
 - The real benchmark is one furnished bedroom. Photo stitching is shown only in unit tests on synthetic rooms, and multi-room adjacency and the drift ablation are scored only on the synthetic LiDAR captures.
-- No LiDAR phone was available. The LiDAR tier is scored on 12 synthetic Stray Scanner captures and run on one public real recording that has no tape ground truth.
+- No LiDAR phone was available. The LiDAR tier is scored on 12 synthetic Stray Scanner captures, and run without tape ground truth on four real recordings: the public office recording and the three test recordings provided with the problem statement.
 - One damage class was staged (a paper sheet with a drawn crack). The real room's openings and damage extents were not measured, so neither is scored on real data.
 - The ground truth is whole-inch tape readings with one ceiling reading, where [docs/ground_truth_protocol.md](docs/ground_truth_protocol.md) asks for millimetres, two readings each and three ceiling points.
 - The benchmark capture departs from the capture protocol: both clips were filmed in portrait, video_2 at 4K and aimed at furniture, and the room has 5 photos where 6 to 8 are recommended.
 - There is no head-to-head. The magicplan free-plan IFC export contained no room geometry, and no other app data was captured.
 - No Round 1 schema or gate list was provided, so `schema/` and `bench/gates.yaml` are ours; thresholds the brief does not state are marked `assumed: true`.
-- The intervals are not calibrated. The interval multiplier q stays at its prior of 1.0 in every tier (`uncertainty/calibration.yaml`): no tier has 9 real rooms, and q is not fitted on synthetic rooms. The real-room intervals contain 39 of the 42 tape values, but they are wide, with a mean half-width of 33% of the true value at the photo tier and 27% at the video tier. The synthetic LiDAR intervals contain 85.5% of values against the nominal 90%.
+- The intervals are not calibrated. The interval multiplier q stays at its prior of 1.0 in every tier (`src/scan2scope/uncertainty/calibration.yaml`): no tier has 9 real rooms, and q is not fitted on synthetic rooms. The real-room intervals contain 39 of the 42 tape values, but they are wide, with a mean half-width of 33% of the true value at the photo tier and 27% at the video tier. The synthetic LiDAR intervals contain 85.5% of values against the nominal 90%.
 - Photo and video metric scale comes from MapAnything alone, so a scale error moves every number of a capture together. Ceilings in the real room came out 44 to 103 cm low on all 6 captures. Media sent as ordinary messaging-app attachments lose EXIF and are recompressed; JPEG quality-70 re-saves of the ARKitScenes kitchen photos cut MapAnything's predicted depth by 35%, so the capture protocol asks for captures sent as files.
 - Drift correction is on by default, but on the 12 synthetic LiDAR captures it lowered the mean wall error on 4 and raised it on 8, including all 4 strong-drift captures, and the share of walls in tolerance went up on 4 and down on 5 (drift ablation in the benchmark report).
 
 ## AI assistance
 
-The code, tests and documents were written with Claude Code (Anthropic). Claude Code agents also ran the error analyses on the real room and on ARKitScenes, wrote the fixes that followed and ran the benchmarks. The owner took the captures and the tape measurements. The decision log in [docs/design.md](docs/design.md) records each design decision, the alternatives considered and the reason.
+The code, tests and documents were written with Claude Code (Anthropic). Claude Code agents also ran the error analyses on the real room and on ARKitScenes, wrote the fixes that followed, and ran the benchmarks and the test recordings. The owner took the captures and the tape measurements. The decision log in [docs/design.md](docs/design.md) records each design decision, the alternatives considered and the reason.

@@ -18,14 +18,16 @@ Layout, stitch and semantics produce `Measurement` objects with `value` and `evi
 
 ## ingest
 
-- `detect.detect_capture(path, tier=None, work_dir) -> (tier, root, CaptureInfo)`. A zip is extracted into `work_dir/input` first. A folder with `odometry.csv` and `depth/` (at most one level down) is `lidar`; a video file, or a folder with exactly one video, is `video`; a folder of image subfolders is `photo` (one room per subfolder); a folder of images only is `photo` with one room. Anything else raises `ValueError` with a message saying what was expected.
+- `detect.detect_capture(path, tier=None, work_dir=None) -> (tier, root, CaptureInfo)`. A zip is extracted into `work_dir/input` first. A folder with `odometry.csv` and `depth/` (at most one level down) is `lidar`; a video file, or a folder with exactly one video, is `video`; a folder of image subfolders is `photo` (one room per subfolder); a folder of images only is `photo` with one room. Anything else raises `ValueError` with a message saying what was expected.
 - `images.load_image(path) -> (rgb uint8 HxWx3 upright, ExifInfo)`, `images.intrinsics_from_exif(exif, width, height) -> K | None` (35 mm equivalent focal length on the image diagonal), `images.list_room_folders(root) -> list[tuple[str, list[Path]]]` sorted by folder name, skipping hidden files and Live Photo `.MOV` companions.
 - `video.probe(path) -> VideoInfo`, `video.sample_frames(path, out_dir, target_fps, max_frames) -> list[FrameRecord]` writing upright frames with rotation applied and blurred frames dropped.
 - `stray.load_stray(root) -> StrayCapture`: per-frame timestamps, camera-to-world poses in OpenCV axes and ARKit world, per-frame intrinsics at RGB resolution, depth and confidence readers (`read_depth(i)` in metres, `read_conf(i)`), RGB frame extraction, count checks.
 
+The pipeline calls `detect_capture` (which uses `probe` and the EXIF reader for the input summary), `load_image` (semantics and doorway stitching) and `load_stray` (LiDAR geometry). The photo and video backends list room folders, read the EXIF focal length and sample video frames themselves (`geometry.photo`, `geometry.video`), so `video.sample_frames` here is not on the pipeline path.
+
 ## geometry
 
-- `lidar.build_scene(root, work_dir, *, drift_correction=True) -> Scene`
+- `lidar.build_scene(root, work_dir, *, drift_correction=True, drift_options=None) -> Scene` (`drift_options` switches single correction stages off, e.g. `{"manhattan_anchoring": False}`; the CLI does not expose it)
 - `video.build_scene(video_path, work_dir, *, drift_correction=True, cache) -> Scene`
 - `photo.build_room_scenes(root, work_dir, *, cache) -> list[Scene]` (one per room folder, `room_hint` = folder name)
 - `mapanything_backend.MapAnythingRunner.get().infer(images, intrinsics, key) -> list[ViewPrediction]`
@@ -57,4 +59,4 @@ The returned Scene is gravity-aligned (z up). Views carry point maps in world co
 
 ## bench and synth
 
-`bench.runner.run_benchmark(data_root, out_dir, *, cache_mode, only, skip_run)` runs every capture listed in each property's `ground_truth.yaml`, matches results to ground truth, evaluates `bench/gates.yaml` per tier, and writes `benchmark_report.md` and `metrics.json`. `synth.generate.generate_benchmark(out, n_properties, seed)` writes synthetic Stray Scanner captures with exact ground truth in the same layout.
+`bench.runner.run_benchmark(data_root, out_dir, *, cache_mode, only, skip_run, semantics)` runs every capture listed in each property's `ground_truth.yaml`, runs each multi-room video or LiDAR capture again with drift correction off, matches results to ground truth, evaluates `bench/gates.yaml` per tier, and writes `benchmark_report.md`, `metrics.json` and `gates.json`. `synth.generate.generate_benchmark(out, n_properties, seed)` writes synthetic Stray Scanner captures with exact ground truth in the same layout.

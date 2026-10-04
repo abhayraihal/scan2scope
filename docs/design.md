@@ -1,6 +1,6 @@
 # scan2scope design
 
-Status: approved 2026-10-03. This is the working design for the case study submission. Decisions that changed during the build are logged at the bottom with the reason.
+Status: approved 2026-10-03. This is the working design for the case study submission. Decisions that changed during the build are logged at the bottom with the reason. The constraints, capture route and data plan are as planned; what was actually captured is at the end of the data plan, and the deviations are in `docs/technical_report.md` section 10.
 
 ## Constraints that shape everything
 
@@ -29,8 +29,8 @@ capture path ──> ingest (tier detection, decoding, EXIF intrinsics, keyframe
              ──> layout core (floor/ceiling, Manhattan walls, cell complex, rooms, openings)
              ──> stitch (photo tier: per-room plans placed into one property; other tiers: single frame already)
              ──> semantics (doors/windows/mirrors/fixtures/damage detections lifted onto surfaces)
-             ──> rules (concealed-damage flags) ──> scope (line items keyed to surfaces)
-             ──> uncertainty (interval on every number) ──> result.json + plan.svg/png + console table
+             ──> rules (concealed-damage flags) ──> uncertainty (interval on every number)
+             ──> scope (line items keyed to surfaces, quantities with intervals) ──> result.json + plan.svg/png + console table
 ```
 
 One command per capture: `scan2scope run <capture_path>`. The tier is detected from the files and can be forced with `--tier`.
@@ -51,7 +51,7 @@ Metric scale for photo and video comes from MapAnything. No independent scale cu
 
 1. Gravity: LiDAR from ARKit; photo and video from the floor plane normal nearest the mean camera down vector.
 2. Floor and ceiling: height histogram of near-horizontal surfaces, refined by least squares on inliers.
-3. Wall directions: histogram of horizontal normal angles modulo 90 degrees gives the Manhattan frame; walls within a few degrees snap to it, others keep their angle.
+3. Wall directions: histogram of horizontal normal angles modulo 90 degrees gives the Manhattan frame; a wall 0.3 to 8 degrees off it is fitted as a slanted line, and larger angles are not modelled.
 4. Wall lines: 1-D density peaks of wall points along each axis, refined to the inlier mean.
 5. Cell complex: the wall lines cut the plan into cells. A cell is inside when 2-D free-space evidence (camera-to-point rays) covers it. Inside cells separated by strong wall evidence form different rooms; a wall gap of door width between two inside regions is an opening that connects them.
 6. Openings: per wall, an occupancy grid in (along-wall, height). A door is a gap from the floor to about 2 m, a window is a gap with wall below it, and points seen through the gap confirm it. Width is measured between the two jamb edges.
@@ -64,11 +64,11 @@ Each room is reconstructed on its own, so rooms must be placed relative to each 
 1. Doorway photos: a photo taken in room A through an open door shows part of room B. Running MapAnything on that photo plus B's photos registers it in B's frame; it is already registered in A's frame, which gives the A-to-B transform including scale.
 2. Door matching: a door in A and a door in B with similar widths are hypothesised to be the same door; B is placed so the two door centres coincide across a wall-thickness gap, in two possible orientations.
 
-Hypotheses are scored by registration quality, door width agreement, no room overlap (hard constraint), and Manhattan alignment. A maximum spanning tree over the best pairwise transforms places all rooms. Adjacencies with low score margins are flagged as uncertain rather than guessed.
+Hypotheses are scored by registration quality, door width agreement, no room overlap (hard constraint), and Manhattan alignment. A maximum spanning tree over the best pairwise transforms places all rooms. A room whose placement has an alternative scoring within a margin of the chosen one is flagged `placement_uncertain`.
 
 ## Drift handling
 
-Multi-room LiDAR and video captures accumulate drift. Correction has three parts, each with an on/off switch for the ablation:
+Multi-room LiDAR and video captures accumulate drift. Correction has three parts. For LiDAR each part has its own on/off switch for the ablation (`drift_options` of `geometry.lidar.build_scene`); for video one switch turns all three on or off.
 
 1. Loop closure: the protocol ends the capture where it started. The first and last segments are registered (ICP for LiDAR, MapAnything for video), and the error is distributed over the trajectory by pose-graph optimisation.
 2. Plane anchoring: every segment is levelled to a shared floor plane and gravity direction, which removes roll, pitch and height drift.
@@ -82,11 +82,11 @@ Detection: Grounding DINO (tiny) proposes boxes for damage prompts (water stain,
 
 Rules: `rules/concealed_damage.yaml` holds rules with an id, trigger conditions, a cited basis (EPA mold guide, IICRC S500/S520 paraphrased) and an action. Examples: ceiling stain implies possible moisture above the ceiling; wall stain touching the floor implies wicking into the cavity; stain within 1 m of a wet fixture implies a supply or drain leak; mold area over 10 sq ft needs containment; crack starting at an opening corner suggests movement. Every flag records the rule id and the inputs that fired it.
 
-Scope: each damage region and flag maps to line items keyed to a surface id, with an Xactimate-style category (DRY, PNT, WTR, CLN, HMR, INS), an activity code (`&` remove and replace, `-` remove, `+` replace, `R` detach and reset), a quantity with interval and a unit. Codes are labelled Xactimate-style, not an official price list.
+Scope: each damage region and flag maps to line items keyed to a surface id, with an Xactimate-style category (DRY, PNT, WTR, CLN, HMR, INS, DMO), an activity code (`&` remove and replace, `-` remove, `+` replace, `R` detach and reset), a quantity with interval and a unit. Codes are labelled Xactimate-style, not an official price list.
 
 ## Uncertainty
 
-Every number in the output is `{value, lo, hi}` at a 90% nominal level. The error model per tier has a per-capture log-scale term shared by every measurement and a per-measurement additive term that grows with thin evidence (fewer views, low observed fraction of a wall, low light, missing EXIF). Interval width is the model's standard deviation times a multiplier `q` fitted per tier by split conformal on ground-truth rooms, with the room as the unit and leave-one-room-out for reported coverage. Where a tier has fewer than 9 independent rooms, `q` stays at its prior and the report says so; it does not claim calibration it cannot show.
+Every number in the output is `{value, lo, hi}` at a 90% nominal level. The error model per tier has a per-capture log-scale term shared by every measurement and a per-measurement additive term that grows with thin evidence (fewer views, low observed fraction of a wall, low light, missing EXIF). The interval is value -/+ 1.645 `q` sigma, where sigma is the model's standard deviation and `q` a multiplier fitted per tier by split conformal on ground-truth rooms, with the room as the unit and leave-one-room-out for reported coverage. Where a tier has fewer than 9 independent rooms, `q` stays at its prior and the report says so; it does not claim calibration it cannot show.
 
 ## Output contract
 
@@ -98,15 +98,16 @@ Ground truth lives in `bench/data/<property>/ground_truth.yaml` (format in `docs
 
 Assumed thresholds where the brief is silent are marked `assumed: true` in `gates.yaml`: LiDAR wall length within max(2 cm, 1%), floor area within 2% (LiDAR), 6% (video), 16% (photo), and video and photo ceiling and opening widths within the tier's wall-length bound. The five gates listed in the brief are used as written.
 
-## Data plan (as planned on 2026-10-03; what was carried out is listed under deviations in docs/technical_report.md)
+## Data plan (as planned on 2026-10-03)
 
 - Real (iPhone 17): the home captured at the photo and video tiers, one room captured twice at each of those tiers, one furnished room with staged damage of two classes, tape or laser ground truth for every reported dimension, magicplan scans of two rooms chosen before scanning.
 - Synthetic LiDAR: generated apartments with exact ground truth, captures rendered in the Stray Scanner format with ARKit-like depth noise, confidence and pose drift, including repeat captures and drift injection.
 - Head-to-head deviation: with no LiDAR phone, magicplan runs in its non-LiDAR AR mode on the iPhone 17 and is compared against our video and photo tiers on the same two rooms. The compliance matrix records this as a deviation from "LiDAR tier".
+- What was captured: one furnished bedroom on the iPhone 17 (5 photos, a 57 s 1080p clip and a 49 s 4K clip, each also as a WhatsApp copy), whole-inch tape readings of its walls and ceiling, one staged damage class (a drawn crack), no repeat photo or dim-room capture, and a magicplan IFC export with no room geometry, so no head-to-head. Three real Stray Scanner recordings provided with the problem statement were later run without ground truth (`docs/testdata_validation.md`).
 
 ## Reproducibility
 
-`uv` with a lockfile, Python 3.12. `scan2scope fetch-weights` downloads pinned Hugging Face revisions with parallel range requests and checks SHA-256. Model outputs are cached by SHA-256 of the input bytes, model revision and preprocessing parameters; `--cache replay` reproduces the reported numbers from the cache and the default live path recomputes them. Raw benchmark data goes to GitHub Release assets (no Git LFS), with GPS removed from photos and videos. CI runs unit tests on synthetic data on Ubuntu.
+`uv` with a lockfile, Python 3.12. `scan2scope fetch-weights` downloads pinned Hugging Face revisions with parallel range requests and checks SHA-256. Model outputs are cached by SHA-256 of the input bytes, model revision and preprocessing parameters; `--cache replay` reproduces the reported numbers from a cache that a live run wrote on the same machine (the cache is not published); on a clean machine the default live mode recomputes them. Raw benchmark data goes to GitHub Release assets (no Git LFS), with GPS removed from photos and videos. CI runs unit tests on synthetic data on Ubuntu.
 
 ## Decision log
 
@@ -124,5 +125,5 @@ Assumed thresholds where the brief is silent are marked `assumed: true` in `gate
 | 2026-10-03 | Scale priors from measured real-room error: photo 0.15, video 0.08 (log) | 0.05 and 0.03 | MapAnything's metric scale was 7-10% off per room on real captures and the error does not average out over chunks |
 | 2026-10-03 | Interval widening from end walls, fragments, unobserved ceilings, chunk scale spread | Per-measurement evidence only | Confident misses on the real room all came from structure the per-measurement terms could not see |
 | 2026-10-03 | Ceiling accepted only when its points spread over the room | Highest strong horizontal peak | Door and window heads were taken as the ceiling when the camera never looked up |
-| 2026-10-03 | Hand-off by USB cable or send-as-document | AirDrop | AirDrop is disabled on the demo Mac; messaging apps recompress media, which shrank MapAnything's depth by up to a third |
+| 2026-10-03 | Hand-off by USB cable or send-as-document | AirDrop | AirDrop is disabled on the demo Mac; messaging apps recompress media and strip EXIF, and JPEG quality-70 re-saves cut MapAnything's depth by 35% on ARKitScenes |
 | 2026-10-03 | Head-to-head dropped | magicplan free plan | Its IFC export contained no room geometry and no other app data was captured |

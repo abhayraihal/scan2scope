@@ -1,6 +1,6 @@
 # Benchmark report
 
-This report is curated from two generated reports, copied unchanged into `docs/benchmark/`: [real_report.md](benchmark/real_report.md) scores the photo and video tiers on a real room, and [synthetic_report.md](benchmark/synthetic_report.md) scores the LiDAR tier on synthetic captures. Their gate results are `real_gates.json` and `synthetic_gates.json` in the same folder.
+This report is curated from two generated reports in `docs/benchmark/`: [real_report.md](benchmark/real_report.md) scores the photo and video tiers on a real room, and [synthetic_report.md](benchmark/synthetic_report.md) scores the LiDAR tier on synthetic captures. Their gate results are `real_gates.json` and `synthetic_gates.json` in the same folder. The copies differ from the generated files in two ways. The gates path is shortened to `bench/gates.yaml`. And after a fix to `src/scan2scope/bench/report.py`, which had printed area errors in the worst-item lists with a cm label, both reports were re-rendered from the same `metrics.json` and gates, so those errors now print in m2; no other line changed. The fix-loop reports in `docs/fixloop/` come from the tagged commits and keep the old label on their floor_area line, where +995.4 cm means +9.954 m2.
 
 - The real-room report was generated on 2026-10-03 at 19:20 UTC by commit 7d26d19 from the committed `bench/data`, in cache mode `mixed`. Its MapAnything outputs came from the cache written by the live run on the same files at commit 226bcff, whose report was generated at 18:37 UTC, and its damage detection was recomputed with the changes merged at 8df5f97. Compared value by value, every wall, ceiling, floor area and interval is identical in the two runs. The live run's own report is kept on the build machine in `runs/final_real_pre_damage_fix/` (not committed); it is the source of the live stage times under "Timing".
 - The synthetic report was generated on 2026-10-03 at 18:30 UTC by commit 226bcff. It calls no model: LiDAR geometry needs none, and damage detection was skipped with `--no-semantics`.
@@ -18,7 +18,7 @@ The real room is one furnished bedroom, captured with an iPhone 17 (the only pho
 
 The synthetic LiDAR set has 4 generated properties of 4 to 6 rooms, each with a hallway, and 3 captures per property in the Stray Scanner 1.4 format with exact ground truth: 12 captures, 20 rooms, 252 walls and 192 openings. lidar_1 has ordinary pose drift (1 to 3 degrees of yaw over 3 minutes, 1 to 2 cm per minute), lidar_2 repeats the property with a different route and different noise and drift seeds, and lidar_drift is lidar_1 with strong drift (4 degrees and 10 cm by the end) for the drift ablation. Each capture is 200 to 206 s at 10 fps, with depth noise of 0.4 cm plus 0.6% of range. No phone produced them, and every LiDAR number below is synthetic.
 
-Not in the benchmark: the public Stray Scanner office recording (vslamlab/strayscanner 4e41d0a7da, real iPhone LiDAR, no tape ground truth; see "Real LiDAR without ground truth") and three ARKitScenes development rooms (iPad Pro LiDAR, Apple's ARKitScenes licence), which were used to find failure causes during the build. Neither is redistributed.
+Not in the benchmark: the public Stray Scanner office recording (vslamlab/strayscanner 4e41d0a7da, real iPhone LiDAR, no tape ground truth; see "Real LiDAR without ground truth") and three ARKitScenes development rooms (iPad Pro LiDAR, Apple's ARKitScenes licence), which were used to find failure causes during the build. The three Stray Scanner recordings provided with the problem statement are not in it either, since they have no measurements (see "Test recordings provided with the problem statement"). None of these is redistributed.
 
 ## How to regenerate
 
@@ -225,17 +225,21 @@ Drift correction has three stages: loop closure, plane anchoring and Manhattan y
 
 A self-check was tried to choose between corrected and raw poses: keep whichever set gives sharper walls (fewer occupied voxels for wall points). It preferred the corrected poses on all 6 captures it was run on, including synth_3/lidar_drift, synth_2/lidar_1 and synth_3/lidar_1, where the corrected poses give the larger mean wall error and fewer walls in tolerance, so it was not shipped.
 
-No CLI flag switches single stages, so the per-stage runs came from a short script. It wraps `scan2scope.geometry.lidar.build_scene` with `drift_options` (`{"manhattan_anchoring": False}`, `{"plane_anchoring": False}`, or both for loop closure only), runs `scan2scope.pipeline.run_capture(..., cache_mode="off", semantics=False)` and scores walls with `scan2scope.bench.metrics.capture_metrics`; "off" is `drift_correction=False`.
+No CLI flag switches single stages, so the per-stage runs came from `scripts/drift_stage_ablation.py`, whose output is `docs/benchmark/drift_stages.txt`. It wraps `scan2scope.geometry.lidar.build_scene` with `drift_options` (`{"manhattan_anchoring": False}`, `{"plane_anchoring": False}`, or both for loop closure only), runs `scan2scope.pipeline.run_capture(..., cache_mode="off", semantics=False)` and scores walls with `scan2scope.bench.metrics.capture_metrics`; "off" is `drift_correction=False`. Each line of `drift_stages.txt` gives the property, capture, configuration, mean wall-length error in cm, walls within max(2 cm, 1%) out of the matched walls, and the number of ground-truth values left unmatched.
 
 ### Real LiDAR without ground truth
 
 The public Stray Scanner office recording is 232 s, 3,481 frames at 15 fps; README, "Reproduce the reported numbers", has the pinned download. Drift correction accepted 71 of 122 loop closures, and the spread of floor height across its 76 segments fell from 47.9 cm to 5.5 cm; the largest correction was 0.54 m and 2.15 degrees. Rerun on 2026-10-04 at d766d21, whose pipeline source is the same as 226bcff, the open-plan office came out as one room with 16 walls, 17 openings and 189.6 m2 [177.4, 258.0]. A run at 4b544c2, before the fix loop's layout changes, gave one room with 32 walls and 191.5 m2 (log on the build machine). With `--no-drift` the same recording gives one room with 10 walls, 19 openings and 184.8 m2 [176.7, 215.4]. There are no tape readings for it, so neither plan can be scored.
 
+## Test recordings provided with the problem statement
+
+Three Stray Scanner recordings of one apartment came with the problem statement as test data. They have no measurements, so nothing in them is scored; [testdata_validation.md](testdata_validation.md) has the results and `docs/testdata/` the outputs. Each ran once at 5b09a11 with the default settings. c7d28f72c6 (215 s) gave 7 rooms linked through doorways, a footprint of 61.8 m2 [58.6, 90.4] and ceilings of 3.07 to 3.09 m in every room. In 1a8384c3f6 (115 s) and c00a170fe1 (37 s) the camera never points above horizontal, and each came out as one merged room (70.3 and 24.4 m2) flagged `ceiling_not_observed`, with a ceiling interval reaching 4.0 m. Drift correction accepted 38 of 122, 10 of 32 and 1 of 3 loop closures in the three, in that order, and flagged one pose jump in 1a8384c3f6. The runs took 203 to 230 s, 194 to 209 s of it damage detection.
+
 ## Head-to-head against magicplan: not done
 
 The brief asks for our LiDAR-tier output against one consumer app on 2 benchmark rooms, in one table of both errors per dimension, beating or tying on at least 70% of shared dimensions. None of this was done:
 
-- No LiDAR phone was available, so there is no LiDAR-tier output of a real room. The fallback in `docs/design.md` was magicplan on its free Starter plan, in its camera mode without LiDAR on the iPhone 17, against our photo and video tiers.
+- No LiDAR phone was available, so there is no LiDAR-tier output of a benchmark room; the provided test recordings have neither measurements nor an app export. The fallback in `docs/design.md` was magicplan on its free Starter plan, in its camera mode without LiDAR on the iPhone 17, against our photo and video tiers.
 - The one magicplan export, `bench/data/bedroom/magicplan/room.ifc`, is 1,978 bytes and has no room geometry to score: it holds a project and a building and no IfcSpace, IfcWall, IfcSlab, IfcDoor or IfcWindow. The Statistics CSV and Sketch PDF that the harness reads (`bench/data/<property>/magicplan/statistics.csv` and `dimensions.yaml`) were not exported, and the app version was not recorded.
 - No data from any other app was captured.
 
@@ -258,14 +262,17 @@ MapAnything loads once per process, on the first capture that needs it (bedroom/
 
 The last column adds the live geometry, layout and ingest of the first run to the damage detection of the rerun. Two captures were later run live at 7d26d19 with the cache off and other jobs running: bedroom/photo_1 took 65 s (32 s geometry including the model load, 32 s damage detection) and bedroom/video_1 264 s (142 s geometry, 120 s damage detection). Video geometry took 2.1 to 2.7 minutes per minute of clip, so at 7d26d19 a clip of about a minute takes about 3.5 to 4.5 minutes. The damage-detection changes merged at 8df5f97 made that stage 1.5 to 2.3 times slower.
 
-LiDAR, with no damage detection on any capture (it was not timed for this tier):
+LiDAR, with damage detection off on the synthetic and office runs and on for the three provided test recordings:
 
-| Captures | Input | Geometry | Layout | Total | Runner |
-|---|---|---|---|---|---|
-| 12 synthetic captures, 226bcff | 200 to 206 s at 10 fps | 11.3 to 17.0 | 2.9 to 5.0 | 14.5 to 22.3 | 14.8 to 22.6 |
-| the same 12, drift correction off | as above | 4.0 to 6.1 | 3.2 to 4.6 | 7.7 to 10.4 | 8.1 to 10.9 |
-| office recording, rerun at d766d21 | 232 s at 15 fps | 21.3 | 2.7 | 24.8 | 25.8 (whole process) |
-| the same, drift correction off | as above | 11.8 | 3.2 | 15.8 | 16.7 (whole process) |
+| Captures | Input | Geometry | Layout | Damage detection | Total | Runner |
+|---|---|---|---|---|---|---|
+| 12 synthetic captures, 226bcff | 200 to 206 s at 10 fps | 11.3 to 17.0 | 2.9 to 5.0 | off | 14.5 to 22.3 | 14.8 to 22.6 |
+| the same 12, drift correction off | as above | 4.0 to 6.1 | 3.2 to 4.6 | off | 7.7 to 10.4 | 8.1 to 10.9 |
+| office recording, rerun at d766d21 | 232 s at 15 fps | 21.3 | 2.7 | off | 24.8 | 25.8 (whole process) |
+| the same, drift correction off | as above | 11.8 | 3.2 | off | 15.8 | 16.7 (whole process) |
+| 3 provided test recordings, 5b09a11 | 37 to 215 s at 60 fps (45 to 46 on average) | 6.6 to 21.9 | 1.4 to 3.4 | 194.3 to 208.8 | 202.6 to 230.2 | not timed |
+
+On the provided recordings damage detection ran on 37 to 40 views and took 194 to 209 s of each run; the other stages took 8.3 to 25.5 s, about what a run with `--no-semantics` would take.
 
 Clean-machine setup, measured on 2026-10-03 from a fresh clone with empty caches at about 11 MB/s: clone 6 s, `uv sync --all-extras` 75 s, `fetch-weights` 579 s (5.8 GB of weights), `doctor` 19 s. With the first photo run (about 50 s, README; 65 s at 7d26d19) that is 12 to 12.5 minutes from clone to a result, most of it the weight download.
 
@@ -276,9 +283,16 @@ Clean-machine setup, measured on 2026-10-03 from a fresh clone with empty caches
 - video_2 broke the plan into 8 walls (original) and 6 walls (WhatsApp copy) for a 4-wall room, with errors up to -58.1%. In the WhatsApp copy one chunk link was refused, because the two runs placed the shared cameras 14.4% of scene depth apart (the bound is 10%), and the loop closure bridged it. Technical report section 4.
 - Video repeatability cannot pass with scale from MapAnything alone: the allowance is 0.5% of the wall (1.8 to 2.1 cm), while MapAnything's scale is 7 to 10% off per room and is not the same from run to run (video_1 W1 came out 3.855 m from the original file and 3.758 m from the WhatsApp copy, 2.5% apart).
 - LiDAR misses half the openings: 97 of the 192 synthetic openings, all 84 windows among them, since an opening needs depth seen through it and the synthetic windows have nothing behind them; 10 are phantoms. These are the same numbers as in the fix-loop after run.
-- LiDAR repeatability and wall length fail on drift that correction leaves behind and on lost rooms. After correction the synthetic camera centres are still 0.9 to 5.9 cm RMS from the truth and yaw is off by 0.11 to 0.73 degrees (post-mortem), against a 1 cm allowance. In 2 of the 4 strong-drift captures a room is not found (the synth_0 hallway, the synth_3 bathroom) and a neighbouring room runs on through its space; these two captures hold all 10 missing walls and the worst wall error (3.89 m). The post-mortem also finds 15 of 116 room instances with the wrong wall count, mostly where a doorway opens onto free space and the room continues through it (`docs/fixloop/postmortem.md`). Technical report section 7.
+- LiDAR repeatability and wall length fail on drift that correction leaves behind and on lost rooms. After correction the synthetic camera centres are still 0.9 to 5.9 cm RMS from the truth and yaw is off by 0.11 to 0.73 degrees (post-mortem), against a 1 cm allowance. In 2 of the 4 strong-drift captures a room is not found (the synth_0 hallway, the synth_3 bathroom) and a neighbouring room runs on through its space; these two captures hold all 10 missing walls and the worst wall error (3.89 m). The post-mortem also finds 15 of 116 room instances with the wrong wall count (the 12 captures, each run with and without drift correction), mostly where a doorway opens onto free space and the room continues through it (`docs/fixloop/postmortem.md`). Technical report section 7.
 - The LiDAR intervals are too narrow: 85.5% coverage with 38 confident misses, opening-width intervals covering 64.2% and wall-length intervals 82.2%. Technical report section 5.
 - Drift correction helps on some synthetic captures and hurts on others, and Manhattan yaw anchoring causes the largest regression (synth_3/lidar_drift, 2.15 cm with correction off against 19.93 cm with it on). Technical report section 4.
-- Not measured or not shown: openings and damage extents in the real room; photo stitching, which no benchmark capture exercises (no real or synthetic capture has more than one photo room, so it is covered by unit tests only); adjacency and a video drift ablation on real data, which need a real multi-room capture; the LiDAR tier on a phone with tape ground truth; the head-to-head; a second staged damage class.
+- Two of the three provided LiDAR recordings were filmed with the camera below horizontal throughout, and each came out as one merged room (48 and 16 walls) flagged `ceiling_not_observed`. The likely cause is that the door heads and upper walls, which the layout uses to split rooms, were never in view; this was not tested further, and there are no measurements to score them (`docs/testdata_validation.md`).
+- Not measured or not shown:
+  - openings and damage extents in the real room;
+  - photo stitching on a capture: no real or synthetic capture has more than one photo room, so stitching is covered by unit tests only;
+  - adjacency and a video drift ablation on real data, which need a measured real multi-room capture (the provided 7-room LiDAR recording has no measurements);
+  - the LiDAR tier on a phone with tape ground truth;
+  - the head-to-head;
+  - a second staged damage class.
 
 Known failure modes (mirrors, glass, wet floors, low light, furniture against walls) are in `docs/technical_report.md` section 9. The fix loop is in `docs/fixloop/`.

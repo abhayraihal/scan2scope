@@ -22,13 +22,13 @@ Doors and open passages. Clear width between the two jamb faces (the inner faces
 
 Windows. Width and height of the opening inside the frame, sill height from the floor, the wall it sits in and its offset from the left end of that wall.
 
-Damage. For each damaged region: class (`water_stain`, `mold`, `crack`, `hole`, `peeling_paint`), the surface (wall id, `ceiling` or `floor`), width and height of its bounding box, its offset from the left end of the wall and its height of the lowest point above the floor. For a crack, also record its length.
+Damage. For each damaged region: class (`water_stain`, `mold`, `crack`, `hole`, `peeling_paint`), the surface (wall id, `ceiling` or `floor`), width and height of its bounding box, its offset from the left end of the wall and the height of its lowest point above the floor. For a crack, also record its length.
 
-Footprint. The harness computes the property footprint as the sum of room floor areas from the wall lengths. For a room that is not a rectangle, also measure one diagonal so the shape is fixed.
+Footprint. The harness computes the property footprint as the sum of room floor areas from the wall lengths. For a room that is not a rectangle, also measure one diagonal, from the left end of W1 to the corner farthest from it (the far end of W2 in a four-wall room), so the shape is fixed.
 
 ## Staged damage (benchmark room)
 
-Two removable classes, both disclosed as staged in the report:
+Two removable classes, both disclosed as staged in the report. The benchmark bedroom has only the crack, and its size was not measured (`docs/technical_report.md` section 10).
 
 - Water stain: dab cold strong tea or coffee onto a sheet of white paper in an irregular blotch with a darker rim, let it dry, and tape it flat to the wall or ceiling with clear tape.
 - Crack: on a strip of white paper or masking tape, draw a thin jagged dark line 30 to 60 cm long, and tape it to the wall, ideally starting at a corner of a door or window frame.

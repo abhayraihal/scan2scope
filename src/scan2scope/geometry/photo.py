@@ -1,7 +1,7 @@
 """Photo tier: one MapAnything run per room folder; each room gets its own gravity-aligned metric frame.
 
-The image loading and folder listing here are thin stand-ins for scan2scope.ingest.images; integration can
-switch to the ingest versions once they land.
+Image loading and folder listing here are separate from scan2scope.ingest.images, whose listing the input
+summary uses: this one keeps second copies of a photo, and photos next to the room folders become a room.
 """
 
 from __future__ import annotations
@@ -84,11 +84,11 @@ def _number(v: Any) -> float | None:
 def read_exif(im: Image.Image) -> PhotoExif:
     try:
         exif = im.getexif()
-    except Exception:
+    except Exception:  # noqa: BLE001 - malformed EXIF: the photo is used without it
         return PhotoExif()
     try:
         sub = exif.get_ifd(0x8769)
-    except Exception:
+    except Exception:  # noqa: BLE001 - same for a malformed Exif IFD
         sub = {}
 
     def tag(t: int) -> Any:
@@ -304,7 +304,7 @@ def build_room_scene(name: str, paths: list[Path], *, cache: OutputCacheLike | N
     for p in paths:
         try:
             img, exif, size = load_photo(p)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - an unreadable photo is flagged and skipped
             log.warning("room %s: cannot read %s: %s", name, p.name, exc)
             flags.append(f"unreadable_photo:{p.name}")
             continue

@@ -251,7 +251,7 @@ def evaluate(plan: Plan, damage: list[DamageRegion], objects: list[Any] | None =
         for d in damage:
             try:
                 inputs = _region_conditions(when, d, idx, objects)
-            except Exception as exc:  # odd geometry on one region must not stop the other rules
+            except Exception as exc:  # noqa: BLE001 - odd geometry on one region must not stop the rest
                 log.warning("rule %s skipped %s: %s", rule.get("id"), d.id, exc)
                 continue
             if inputs is not None:
