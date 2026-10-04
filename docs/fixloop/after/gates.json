@@ -2293,5 +2293,5 @@
   "video": "n.a.",
   "lidar": "none (2 rooms not found)"
  },
- "config": "/private/tmp/scan2scope-fixloop.Sdzy1H/after/bench/gates.yaml"
+ "config": "bench/gates.yaml"
 }

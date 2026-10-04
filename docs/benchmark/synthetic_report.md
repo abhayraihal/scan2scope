@@ -1,6 +1,6 @@
 # Benchmark report
 
-Generated 2026-10-03 18:30 UTC from `bench/synthetic` with gates from `/Users/rsabhay/code/scan2scope/bench/gates.yaml`. Pipeline commit(s) in the results: 226bcff50e. Cache mode: none.
+Generated 2026-10-03 18:30 UTC from `bench/synthetic` with gates from `bench/gates.yaml`. Pipeline commit(s) in the results: 226bcff50e. Cache mode: none.
 
 Properties: synth_0, synth_1, synth_2, synth_3; 12 captures scored.
 

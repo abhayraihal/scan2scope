@@ -1,6 +1,6 @@
 # Benchmark report
 
-Generated 2026-10-03 19:20 UTC from `bench/data` with gates from `/Users/rsabhay/code/scan2scope/bench/gates.yaml`. Pipeline commit(s) in the results: 7d26d19657. Cache mode: mixed.
+Generated 2026-10-03 19:20 UTC from `bench/data` with gates from `bench/gates.yaml`. Pipeline commit(s) in the results: 7d26d19657. Cache mode: mixed.
 
 Properties: bedroom, bedroom_whatsapp; 6 captures scored.
 

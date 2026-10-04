@@ -11,6 +11,7 @@ from typing import Any
 
 import numpy as np
 
+from scan2scope.bench.gates import _display_path
 from scan2scope.types import TIERS
 
 log = logging.getLogger("scan2scope.bench")
@@ -394,7 +395,7 @@ def render(bench: dict[str, Any]) -> str:
     props = bench.get("properties", [])
     synth = [p["property"] for p in props if p.get("synthetic")]
     commits = sorted({c for c in bench.get("commits", []) if c})
-    head = (f"Generated {bench.get('generated', '')} from `{bench.get('data_root', '')}` with gates from "
+    head = (f"Generated {bench.get('generated', '')} from `{_display_path(bench.get('data_root', ''))}` with gates from "
             f"`{bench['gates'].get('config') or 'bench/gates.yaml'}`. Pipeline commit(s) in the results: "
             f"{', '.join(c[:10] for c in commits) or 'not recorded'}. "
             f"Cache mode: {bench.get('cache_mode', '')}.")

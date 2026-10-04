@@ -1,0 +1,2945 @@
+{
+ "schema_version": "1.0.0",
+ "capture": {
+  "id": "1a8384c3f6",
+  "tier": "lidar",
+  "path": "testdata/1a8384c3f6",
+  "device": {
+   "app": "Stray Scanner",
+   "make": null,
+   "model": null,
+   "source": "stray"
+  },
+  "input_stats": {
+   "lidar_frames": 5251,
+   "odometry_rows": 5251,
+   "depth_frames": 5251,
+   "confidence_frames": 5251,
+   "duration_s": 114.783,
+   "rgb_video": true,
+   "camera_matrix": true,
+   "imu": true,
+   "rgb_width": 1920,
+   "rgb_height": 1440,
+   "rgb_fps": 45.747,
+   "rgb_frames": 5251
+  },
+  "flags": [
+   "drift_pose_jumps:1",
+   "semantics_surface_evidence_dropped:10",
+   "semantics_single_view_dropped:40"
+  ]
+ },
+ "conventions": {
+  "units": {
+   "length": "m",
+   "area": "m2",
+   "plan": "x and y in metres in the capture's world frame, z up; room polygons counter-clockwise",
+   "scope_quantity": "the unit named on each line item (SF, LF, EA, m2 or m)",
+   "score": "detector score in [0, 1] after cross-view merge, not a calibrated probability"
+  },
+  "interval": {
+   "level": 0.9,
+   "method": "lidar tier error model. Lengths: sigma = sqrt((v*s)^2 + a^2) with a scale term s = 0.003 shared by every measurement (the larger of the tier floor and the geometry's estimate, with the scale spread across video chunks or the scale error of a rejected loop closure) and additive terms a = 0.008 m (walls), 0.006 m (heights), 0.012 m (openings), 0.020 m (damage), inflated for thin evidence on the measurement and on a wall's two end walls (low observed fraction, few face points, fit residuals in quadrature, low light, fewer than 4 photos or views, missing focal length). A wall ending at a wall with no face of its own may run on by 0.15 of the room's extent along it (at most 3 times the wall's length) and is no shorter than the part of its face that was seen. A wall ending at an unobserved wall or a step (shorter than 0.50 m, or shorter than 1.00 m and low) may be a fragment: its upper bound reaches the pieces beyond the step or the room's extent along the wall. Heights add a vertical term of 0.00 (log); an unobserved floor or ceiling widens the upper side by z*0.50 m, an unobserved ceiling up to 4.0 m; a door with no head edge found reaches down to 1.90 m. Areas: sqrt((2*A*s)^2 + (sum of L_i*a_i)^2) plus unobserved wall positions, and upward to the bounding box when a wall may be a fragment. Footprint: scale term fully correlated across rooms plus independent per-room terms; unplaced rooms widen footprint and extents 1.5x. Interval = value - z*q*sigma to value + z*q*sigma_hi with z = 1.645, the one-sided terms widening only their side, lo clipped at 0; q = 1.00, prior value: not calibrated, this tier has fewer than 9 ground-truth rooms. Wall surface areas combine the length, height and opening intervals by interval arithmetic.",
+   "q": 1.0,
+   "calibration": "prior"
+  },
+  "definitions": {
+   "wall_length": "face to face at 1 m height between the two neighbouring walls, along the room polygon edge",
+   "wall_height": "floor plane to ceiling plane distance at the wall",
+   "ceiling_height": "floor plane to ceiling plane distance inside the room",
+   "opening_width": "clear width between the jamb faces",
+   "opening_height": "floor to the underside of the head for doors and passages; inside the frame for windows",
+   "opening_offset": "along the wall, from the wall start to the near jamb of the opening",
+   "sill": "floor to the window sill",
+   "floor_area": "polygon area of the interior wall faces",
+   "perimeter": "sum of the room's wall lengths",
+   "wall_surface_area": "wall length times wall height minus the areas of the openings in that wall",
+   "ceiling_surface_area": "equal to the floor area (flat ceiling assumed)",
+   "footprint": "sum of the room floor areas; walls between rooms are not included",
+   "extent": "size of the bounding box of all room polygons along plan x and plan y",
+   "damage_extent": "width along the surface u axis and height along v of the damage region; area of its mask projected onto the surface; walls use u from the wall start and v from the floor, floors and ceilings use plan x and y"
+  }
+ },
+ "property": {
+  "footprint_area": {
+   "value": 70.3307,
+   "lo": 53.6307,
+   "hi": 152.6229,
+   "unit": "m2"
+  },
+  "extent_x": {
+   "value": 9.8935,
+   "lo": 9.8429,
+   "hi": 9.9441,
+   "unit": "m"
+  },
+  "extent_y": {
+   "value": 13.7346,
+   "lo": 13.6656,
+   "hi": 13.8037,
+   "unit": "m"
+  },
+  "adjacency": [],
+  "drift_correction": {
+   "enabled": true,
+   "segments": 39,
+   "loop_closures_tried": 32,
+   "loop_closures_accepted": 10,
+   "max_translation_correction_m": 0.6482,
+   "max_yaw_correction_deg": 4.955,
+   "floor_z_spread_before_m": 0.0513,
+   "floor_z_spread_after_m": 0.0138,
+   "stages": {
+    "loop_closure": true,
+    "plane_anchoring": true,
+    "manhattan_anchoring": true
+   },
+   "loop_closures": [
+    {
+     "round": 1,
+     "segments": [
+      0,
+      38
+     ],
+     "screen_overlap": 1.0,
+     "rmse_m": 0.0228,
+     "overlap": 0.611,
+     "shift_m": 0.0797,
+     "yaw_deg": -1.141,
+     "dof": 5,
+     "accepted": false,
+     "reason": "rmse"
+    },
+    {
+     "round": 1,
+     "segments": [
+      0,
+      37
+     ],
+     "screen_overlap": 0.77,
+     "rmse_m": 0.0317,
+     "overlap": 0.386,
+     "shift_m": 0.2712,
+     "yaw_deg": -8.783,
+     "dof": 6,
+     "accepted": false,
+     "reason": "rmse"
+    },
+    {
+     "round": 1,
+     "segments": [
+      14,
+      27
+     ],
+     "screen_overlap": 0.662,
+     "rmse_m": 0.0129,
+     "overlap": 0.466,
+     "shift_m": 0.0215,
+     "yaw_deg": 0.997,
+     "dof": 5,
+     "accepted": true,
+     "reason": null
+    },
+    {
+     "round": 1,
+     "segments": [
+      15,
+      27
+     ],
+     "screen_overlap": 0.662,
+     "rmse_m": 0.0126,
+     "overlap": 0.451,
+     "shift_m": 0.0272,
+     "yaw_deg": 0.638,
+     "dof": 5,
+     "accepted": true,
+     "reason": null
+    },
+    {
+     "round": 1,
+     "segments": [
+      3,
+      33
+     ],
+     "screen_overlap": 0.618,
+     "rmse_m": 0.0205,
+     "overlap": 0.445,
+     "shift_m": 0.2932,
+     "yaw_deg": 4.887,
+     "dof": 5,
+     "accepted": false,
+     "reason": "rmse"
+    },
+    {
+     "round": 1,
+     "segments": [
+      8,
+      33
+     ],
+     "screen_overlap": 0.588,
+     "rmse_m": 0.0098,
+     "overlap": 0.199,
+     "shift_m": 0.0359,
+     "yaw_deg": -4.639,
+     "dof": 4,
+     "accepted": false,
+     "reason": "overlap"
+    },
+    {
+     "round": 1,
+     "segments": [
+      10,
+      27
+     ],
+     "screen_overlap": 0.555,
+     "rmse_m": 0.0107,
+     "overlap": 0.395,
+     "shift_m": 0.1702,
+     "yaw_deg": 5.248,
+     "dof": 4,
+     "accepted": true,
+     "reason": null
+    },
+    {
+     "round": 1,
+     "segments": [
+      9,
+      27
+     ],
+     "screen_overlap": 0.517,
+     "rmse_m": 0.0134,
+     "overlap": 0.369,
+     "shift_m": 0.1903,
+     "yaw_deg": 3.207,
+     "dof": 5,
+     "accepted": true,
+     "reason": null
+    },
+    {
+     "round": 1,
+     "segments": [
+      11,
+      27
+     ],
+     "screen_overlap": 0.482,
+     "rmse_m": 0.0158,
+     "overlap": 0.382,
+     "shift_m": 0.0855,
+     "yaw_deg": 3.186,
+     "dof": 5,
+     "accepted": true,
+     "reason": null
+    },
+    {
+     "round": 1,
+     "segments": [
+      4,
+      34
+     ],
+     "screen_overlap": 0.45,
+     "rmse_m": 0.0188,
+     "overlap": 0.26,
+     "shift_m": 0.2319,
+     "yaw_deg": 1.287,
+     "dof": 5,
+     "accepted": false,
+     "reason": "overlap"
+    },
+    {
+     "round": 1,
+     "segments": [
+      9,
+      16
+     ],
+     "screen_overlap": 0.415,
+     "rmse_m": 0.0126,
+     "overlap": 0.358,
+     "shift_m": 0.1947,
+     "yaw_deg": 1.314,
+     "dof": 6,
+     "accepted": true,
+     "reason": null
+    },
+    {
+     "round": 1,
+     "segments": [
+      8,
+      28
+     ],
+     "screen_overlap": 0.385,
+     "rmse_m": 0.0171,
+     "overlap": 0.225,
+     "shift_m": 0.2903,
+     "yaw_deg": 4.501,
+     "dof": 5,
+     "accepted": false,
+     "reason": "overlap"
+    },
+    {
+     "round": 1,
+     "segments": [
+      9,
+      28
+     ],
+     "screen_overlap": 0.365,
+     "rmse_m": 0.0161,
+     "overlap": 0.271,
+     "shift_m": 0.2973,
+     "yaw_deg": 3.474,
+     "dof": 6,
+     "accepted": false,
+     "reason": "overlap"
+    },
+    {
+     "round": 1,
+     "segments": [
+      3,
+      32
+     ],
+     "screen_overlap": 0.357,
+     "rmse_m": 0.0131,
+     "overlap": 0.12,
+     "shift_m": 0.5029,
+     "yaw_deg": 7.055,
+     "dof": 5,
+     "accepted": false,
+     "reason": "overlap"
+    },
+    {
+     "round": 1,
+     "segments": [
+      3,
+      34
+     ],
+     "screen_overlap": 0.352,
+     "rmse_m": 0.0262,
+     "overlap": 0.277,
+     "shift_m": 0.2392,
+     "yaw_deg": -4.828,
+     "dof": 5,
+     "accepted": false,
+     "reason": "rmse"
+    },
+    {
+     "round": 1,
+     "segments": [
+      21,
+      29
+     ],
+     "screen_overlap": 0.33,
+     "rmse_m": null,
+     "overlap": 0.0,
+     "shift_m": 0.0,
+     "yaw_deg": 0.0,
+     "dof": 0,
+     "accepted": false,
+     "reason": "rmse"
+    },
+    {
+     "round": 1,
+     "segments": [
+      9,
+      26
+     ],
+     "screen_overlap": 0.323,
+     "rmse_m": 0.0185,
+     "overlap": 0.054,
+     "shift_m": 0.1934,
+     "yaw_deg": -5.809,
+     "dof": 4,
+     "accepted": false,
+     "reason": "overlap"
+    },
+    {
+     "round": 1,
+     "segments": [
+      16,
+      26
+     ],
+     "screen_overlap": 0.32,
+     "rmse_m": 0.0082,
+     "overlap": 0.072,
+     "shift_m": 0.157,
+     "yaw_deg": 3.534,
+     "dof": 3,
+     "accepted": false,
+     "reason": "overlap"
+    },
+    {
+     "round": 1,
+     "segments": [
+      8,
+      32
+     ],
+     "screen_overlap": 0.312,
+     "rmse_m": 0.0093,
+     "overlap": 0.071,
+     "shift_m": 0.0525,
+     "yaw_deg": -1.876,
+     "dof": 4,
+     "accepted": false,
+     "reason": "overlap"
+    },
+    {
+     "round": 2,
+     "segments": [
+      0,
+      38
+     ],
+     "screen_overlap": 1.0,
+     "rmse_m": 0.0245,
+     "overlap": 0.627,
+     "shift_m": 0.0382,
+     "yaw_deg": -1.985,
+     "dof": 5,
+     "accepted": false,
+     "reason": "rmse"
+    },
+    {
+     "round": 2,
+     "segments": [
+      8,
+      33
+     ],
+     "screen_overlap": 0.838,
+     "rmse_m": 0.0099,
+     "overlap": 0.52,
+     "shift_m": 0.1783,
+     "yaw_deg": 1.918,
+     "dof": 5,
+     "accepted": true,
+     "reason": null
+    },
+    {
+     "round": 2,
+     "segments": [
+      0,
+      37
+     ],
+     "screen_overlap": 0.83,
+     "rmse_m": 0.0294,
+     "overlap": 0.416,
+     "shift_m": 0.1996,
+     "yaw_deg": 21.381,
+     "dof": 6,
+     "accepted": false,
+     "reason": "rmse"
+    },
+    {
+     "round": 2,
+     "segments": [
+      9,
+      33
+     ],
+     "screen_overlap": 0.802,
+     "rmse_m": 0.0103,
+     "overlap": 0.638,
+     "shift_m": 0.1597,
+     "yaw_deg": 2.388,
+     "dof": 5,
+     "accepted": true,
+     "reason": null
+    },
+    {
+     "round": 2,
+     "segments": [
+      3,
+      33
+     ],
+     "screen_overlap": 0.787,
+     "rmse_m": 0.0201,
+     "overlap": 0.446,
+     "shift_m": 0.1567,
+     "yaw_deg": 4.988,
+     "dof": 5,
+     "accepted": false,
+     "reason": "rmse"
+    },
+    {
+     "round": 2,
+     "segments": [
+      4,
+      34
+     ],
+     "screen_overlap": 0.56,
+     "rmse_m": 0.0144,
+     "overlap": 0.45,
+     "shift_m": 0.3326,
+     "yaw_deg": 5.017,
+     "dof": 6,
+     "accepted": true,
+     "reason": null
+    },
+    {
+     "round": 2,
+     "segments": [
+      3,
+      34
+     ],
+     "screen_overlap": 0.465,
+     "rmse_m": 0.0102,
+     "overlap": 0.353,
+     "shift_m": 0.345,
+     "yaw_deg": 4.596,
+     "dof": 6,
+     "accepted": true,
+     "reason": null
+    },
+    {
+     "round": 2,
+     "segments": [
+      8,
+      28
+     ],
+     "screen_overlap": 0.37,
+     "rmse_m": 0.016,
+     "overlap": 0.227,
+     "shift_m": 0.0843,
+     "yaw_deg": 2.994,
+     "dof": 6,
+     "accepted": false,
+     "reason": "overlap"
+    },
+    {
+     "round": 2,
+     "segments": [
+      9,
+      28
+     ],
+     "screen_overlap": 0.37,
+     "rmse_m": 0.0161,
+     "overlap": 0.271,
+     "shift_m": 0.0566,
+     "yaw_deg": 2.145,
+     "dof": 6,
+     "accepted": false,
+     "reason": "overlap"
+    },
+    {
+     "round": 2,
+     "segments": [
+      3,
+      32
+     ],
+     "screen_overlap": 0.355,
+     "rmse_m": 0.0134,
+     "overlap": 0.12,
+     "shift_m": 0.4293,
+     "yaw_deg": 8.073,
+     "dof": 5,
+     "accepted": false,
+     "reason": "overlap"
+    },
+    {
+     "round": 2,
+     "segments": [
+      0,
+      36
+     ],
+     "screen_overlap": 0.318,
+     "rmse_m": 0.027,
+     "overlap": 0.221,
+     "shift_m": 0.1472,
+     "yaw_deg": 22.844,
+     "dof": 6,
+     "accepted": false,
+     "reason": "rmse"
+    },
+    {
+     "round": 2,
+     "segments": [
+      8,
+      32
+     ],
+     "screen_overlap": 0.315,
+     "rmse_m": 0.0083,
+     "overlap": 0.076,
+     "shift_m": 0.0228,
+     "yaw_deg": 0.041,
+     "dof": 3,
+     "accepted": false,
+     "reason": "overlap"
+    },
+    {
+     "round": 2,
+     "segments": [
+      8,
+      27
+     ],
+     "screen_overlap": 0.31,
+     "rmse_m": 0.0116,
+     "overlap": 0.195,
+     "shift_m": 0.0525,
+     "yaw_deg": 3.169,
+     "dof": 5,
+     "accepted": false,
+     "reason": "overlap"
+    }
+   ],
+   "flags": [
+    "pose_jumps:1"
+   ],
+   "plane_anchoring": {
+    "floor_z_m": -1.4168,
+    "segments_anchored": 36,
+    "segments_tilt_corrected": 7,
+    "max_tilt_deg": 0.71
+   },
+   "manhattan_anchoring": {
+    "global_angle_deg": 6.532,
+    "concentration": 0.719,
+    "segments_snapped": 34
+   }
+  },
+  "stitch": null,
+  "flags": [
+   "ceiling_candidates_rejected:2",
+   "ceiling_not_observed",
+   "closure_lines:1"
+  ]
+ },
+ "rooms": [
+  {
+   "id": "R1",
+   "label": "Room 1",
+   "source_hint": null,
+   "polygon": [
+    [
+     -3.4591,
+     -9.3502
+    ],
+    [
+     -2.2889,
+     -9.2167
+    ],
+    [
+     -2.7311,
+     -5.342
+    ],
+    [
+     -2.0078,
+     -5.2594
+    ],
+    [
+     -1.9196,
+     -6.0317
+    ],
+    [
+     0.2077,
+     -5.789
+    ],
+    [
+     0.1276,
+     -5.0873
+    ],
+    [
+     0.4717,
+     -5.048
+    ],
+    [
+     0.5524,
+     -5.7544
+    ],
+    [
+     3.0375,
+     -5.4709
+    ],
+    [
+     2.7345,
+     -2.8157
+    ],
+    [
+     1.773,
+     -2.9254
+    ],
+    [
+     1.8156,
+     -3.299
+    ],
+    [
+     1.145,
+     -3.3756
+    ],
+    [
+     1.0553,
+     -2.5898
+    ],
+    [
+     2.6073,
+     -2.4127
+    ],
+    [
+     2.2669,
+     0.5698
+    ],
+    [
+     -1.161,
+     0.1787
+    ],
+    [
+     -1.0927,
+     -0.4199
+    ],
+    [
+     -2.5516,
+     -0.5864
+    ],
+    [
+     -2.5919,
+     -0.2337
+    ],
+    [
+     -4.2255,
+     -0.4202
+    ],
+    [
+     -4.3755,
+     0.8944
+    ],
+    [
+     -4.9543,
+     0.8283
+    ],
+    [
+     -5.3419,
+     4.2248
+    ],
+    [
+     -6.0351,
+     4.1457
+    ],
+    [
+     -5.656,
+     0.8229
+    ],
+    [
+     -7.0076,
+     0.6687
+    ],
+    [
+     -7.3906,
+     4.0249
+    ],
+    [
+     -7.747,
+     3.9842
+    ],
+    [
+     -7.004,
+     -2.5278
+    ],
+    [
+     -5.1415,
+     -2.3153
+    ],
+    [
+     -5.044,
+     -3.1693
+    ],
+    [
+     -7.1553,
+     -3.4102
+    ],
+    [
+     -7.0952,
+     -3.9373
+    ],
+    [
+     -6.8338,
+     -3.9075
+    ],
+    [
+     -6.7155,
+     -4.9444
+    ],
+    [
+     -6.2918,
+     -4.896
+    ],
+    [
+     -6.2188,
+     -5.536
+    ],
+    [
+     -6.9038,
+     -5.6141
+    ],
+    [
+     -6.8728,
+     -5.8861
+    ],
+    [
+     -5.5607,
+     -5.7364
+    ],
+    [
+     -5.5004,
+     -6.2643
+    ],
+    [
+     -6.2073,
+     -6.3449
+    ],
+    [
+     -6.0122,
+     -8.0544
+    ],
+    [
+     -6.4014,
+     -8.0988
+    ],
+    [
+     -6.2815,
+     -9.1496
+    ],
+    [
+     -3.518,
+     -8.8343
+    ]
+   ],
+   "floor_area": {
+    "value": 70.3307,
+    "lo": 53.6307,
+    "hi": 152.6229,
+    "unit": "m2"
+   },
+   "perimeter": {
+    "value": 69.337,
+    "lo": 62.5112,
+    "hi": 93.0369,
+    "unit": "m"
+   },
+   "ceiling_height": {
+    "value": 2.1992,
+    "lo": 2.1766,
+    "hi": 4.0001,
+    "unit": "m"
+   },
+   "walls": [
+    {
+     "id": "R1-W1",
+     "start": [
+      -3.4591,
+      -9.3502
+     ],
+     "end": [
+      -2.2889,
+      -9.2167
+     ],
+     "length": {
+      "value": 1.1778,
+      "lo": 1.1634,
+      "hi": 1.1922,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.7536,
+     "flags": []
+    },
+    {
+     "id": "R1-W2",
+     "start": [
+      -2.2889,
+      -9.2167
+     ],
+     "end": [
+      -2.7311,
+      -5.342
+     ],
+     "length": {
+      "value": 3.8999,
+      "lo": 2.6379,
+      "hi": 11.7652,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.6766,
+     "flags": []
+    },
+    {
+     "id": "R1-W3",
+     "start": [
+      -2.7311,
+      -5.342
+     ],
+     "end": [
+      -2.0078,
+      -5.2594
+     ],
+     "length": {
+      "value": 0.728,
+      "lo": 0.1867,
+      "hi": 3.2687,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.0,
+     "flags": [
+      "wall_face_missing",
+      "wall_not_refined",
+      "wall_unobserved"
+     ]
+    },
+    {
+     "id": "R1-W4",
+     "start": [
+      -2.0078,
+      -5.2594
+     ],
+     "end": [
+      -1.9196,
+      -6.0317
+     ],
+     "length": {
+      "value": 0.7773,
+      "lo": 0.0,
+      "hi": 1.5931,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.0,
+     "flags": [
+      "wall_face_missing",
+      "wall_not_refined",
+      "wall_unobserved"
+     ]
+    },
+    {
+     "id": "R1-W5",
+     "start": [
+      -1.9196,
+      -6.0317
+     ],
+     "end": [
+      0.2077,
+      -5.789
+     ],
+     "length": {
+      "value": 2.1411,
+      "lo": 0.0,
+      "hi": 6.4895,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.0,
+     "flags": [
+      "wall_face_missing",
+      "wall_not_refined",
+      "wall_unobserved"
+     ]
+    },
+    {
+     "id": "R1-W6",
+     "start": [
+      0.2077,
+      -5.789
+     ],
+     "end": [
+      0.1276,
+      -5.0873
+     ],
+     "length": {
+      "value": 0.7062,
+      "lo": 0.0,
+      "hi": 1.4478,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.0,
+     "flags": [
+      "wall_face_missing",
+      "wall_not_refined",
+      "wall_unobserved"
+     ]
+    },
+    {
+     "id": "R1-W7",
+     "start": [
+      0.1276,
+      -5.0873
+     ],
+     "end": [
+      0.4717,
+      -5.048
+     ],
+     "length": {
+      "value": 0.3464,
+      "lo": 0.085,
+      "hi": 3.2687,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.0,
+     "flags": [
+      "wall_face_missing",
+      "wall_not_refined",
+      "wall_unobserved"
+     ]
+    },
+    {
+     "id": "R1-W8",
+     "start": [
+      0.4717,
+      -5.048
+     ],
+     "end": [
+      0.5524,
+      -5.7544
+     ],
+     "length": {
+      "value": 0.711,
+      "lo": 0.4534,
+      "hi": 2.1672,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.6407,
+     "flags": []
+    },
+    {
+     "id": "R1-W9",
+     "start": [
+      0.5524,
+      -5.7544
+     ],
+     "end": [
+      3.0375,
+      -5.4709
+     ],
+     "length": {
+      "value": 2.5013,
+      "lo": 2.4773,
+      "hi": 2.5253,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.5133,
+     "flags": []
+    },
+    {
+     "id": "R1-W10",
+     "start": [
+      3.0375,
+      -5.4709
+     ],
+     "end": [
+      2.7345,
+      -2.8157
+     ],
+     "length": {
+      "value": 2.6724,
+      "lo": 1.5446,
+      "hi": 8.07,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.5782,
+     "flags": []
+    },
+    {
+     "id": "R1-W11",
+     "start": [
+      2.7345,
+      -2.8157
+     ],
+     "end": [
+      1.773,
+      -2.9254
+     ],
+     "length": {
+      "value": 0.9678,
+      "lo": 0.2495,
+      "hi": 1.695,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.0017,
+     "flags": [
+      "wall_face_missing",
+      "wall_not_refined",
+      "wall_unobserved"
+     ]
+    },
+    {
+     "id": "R1-W12",
+     "start": [
+      1.773,
+      -2.9254
+     ],
+     "end": [
+      1.8156,
+      -3.299
+     ],
+     "length": {
+      "value": 0.3761,
+      "lo": 0.0929,
+      "hi": 0.6592,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.0,
+     "flags": [
+      "wall_face_missing",
+      "wall_not_refined",
+      "wall_unobserved"
+     ]
+    },
+    {
+     "id": "R1-W13",
+     "start": [
+      1.8156,
+      -3.299
+     ],
+     "end": [
+      1.145,
+      -3.3756
+     ],
+     "length": {
+      "value": 0.675,
+      "lo": 0.2473,
+      "hi": 1.6876,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.3698,
+     "flags": []
+    },
+    {
+     "id": "R1-W14",
+     "start": [
+      1.145,
+      -3.3756
+     ],
+     "end": [
+      1.0553,
+      -2.5898
+     ],
+     "length": {
+      "value": 0.7909,
+      "lo": 0.7441,
+      "hi": 0.8377,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.0014,
+     "flags": [
+      "wall_face_missing",
+      "wall_not_refined",
+      "wall_unobserved"
+     ]
+    },
+    {
+     "id": "R1-W15",
+     "start": [
+      1.0553,
+      -2.5898
+     ],
+     "end": [
+      2.6073,
+      -2.4127
+     ],
+     "length": {
+      "value": 1.562,
+      "lo": 0.8997,
+      "hi": 4.7317,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.5768,
+     "flags": []
+    },
+    {
+     "id": "R1-W16",
+     "start": [
+      2.6073,
+      -2.4127
+     ],
+     "end": [
+      2.2669,
+      0.5698
+     ],
+     "length": {
+      "value": 3.0019,
+      "lo": 2.9501,
+      "hi": 3.0537,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.35,
+     "flags": [
+      "wall_slanted:-1.3deg"
+     ]
+    },
+    {
+     "id": "R1-W17",
+     "start": [
+      2.2669,
+      0.5698
+     ],
+     "end": [
+      -1.161,
+      0.1787
+     ],
+     "length": {
+      "value": 3.4502,
+      "lo": 3.4193,
+      "hi": 9.9487,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.6829,
+     "flags": []
+    },
+    {
+     "id": "R1-W18",
+     "start": [
+      -1.161,
+      0.1787
+     ],
+     "end": [
+      -1.0927,
+      -0.4199
+     ],
+     "length": {
+      "value": 0.6025,
+      "lo": 0.5359,
+      "hi": 0.669,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.5903,
+     "flags": [
+      "wall_slanted:-3.0deg"
+     ]
+    },
+    {
+     "id": "R1-W19",
+     "start": [
+      -1.0927,
+      -0.4199
+     ],
+     "end": [
+      -2.5516,
+      -0.5864
+     ],
+     "length": {
+      "value": 1.4684,
+      "lo": 1.4486,
+      "hi": 6.6001,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.6688,
+     "flags": []
+    },
+    {
+     "id": "R1-W20",
+     "start": [
+      -2.5516,
+      -0.5864
+     ],
+     "end": [
+      -2.5919,
+      -0.2337
+     ],
+     "length": {
+      "value": 0.3549,
+      "lo": 0.2984,
+      "hi": 0.4114,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.5434,
+     "flags": []
+    },
+    {
+     "id": "R1-W21",
+     "start": [
+      -2.5919,
+      -0.2337
+     ],
+     "end": [
+      -4.2255,
+      -0.4202
+     ],
+     "length": {
+      "value": 1.6442,
+      "lo": 1.6241,
+      "hi": 6.6001,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.7788,
+     "flags": []
+    },
+    {
+     "id": "R1-W22",
+     "start": [
+      -4.2255,
+      -0.4202
+     ],
+     "end": [
+      -4.3755,
+      0.8944
+     ],
+     "length": {
+      "value": 1.323,
+      "lo": 1.2908,
+      "hi": 4.7809,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.5417,
+     "flags": []
+    },
+    {
+     "id": "R1-W23",
+     "start": [
+      -4.3755,
+      0.8944
+     ],
+     "end": [
+      -4.9543,
+      0.8283
+     ],
+     "length": {
+      "value": 0.5825,
+      "lo": 0.3649,
+      "hi": 0.8002,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.5391,
+     "flags": []
+    },
+    {
+     "id": "R1-W24",
+     "start": [
+      -4.9543,
+      0.8283
+     ],
+     "end": [
+      -5.3419,
+      4.2248
+     ],
+     "length": {
+      "value": 3.4186,
+      "lo": 0.8875,
+      "hi": 10.3229,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.0574,
+     "flags": [
+      "wall_slanted:-6.7deg"
+     ]
+    },
+    {
+     "id": "R1-W25",
+     "start": [
+      -5.3419,
+      4.2248
+     ],
+     "end": [
+      -6.0351,
+      4.1457
+     ],
+     "length": {
+      "value": 0.6978,
+      "lo": 0.118,
+      "hi": 1.2775,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.0,
+     "flags": [
+      "wall_face_sparse",
+      "wall_not_refined",
+      "wall_unobserved"
+     ]
+    },
+    {
+     "id": "R1-W26",
+     "start": [
+      -6.0351,
+      4.1457
+     ],
+     "end": [
+      -5.656,
+      0.8229
+     ],
+     "length": {
+      "value": 3.3443,
+      "lo": 1.406,
+      "hi": 10.1022,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.4206,
+     "flags": [
+      "wall_face_missing",
+      "wall_not_refined",
+      "openings_not_checked"
+     ]
+    },
+    {
+     "id": "R1-W27",
+     "start": [
+      -5.656,
+      0.8229
+     ],
+     "end": [
+      -7.0076,
+      0.6687
+     ],
+     "length": {
+      "value": 1.3604,
+      "lo": 0.6939,
+      "hi": 4.1192,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.5107,
+     "flags": []
+    },
+    {
+     "id": "R1-W28",
+     "start": [
+      -7.0076,
+      0.6687
+     ],
+     "end": [
+      -7.3906,
+      4.0249
+     ],
+     "length": {
+      "value": 3.378,
+      "lo": 3.3267,
+      "hi": 10.2037,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.428,
+     "flags": [
+      "wall_face_sparse",
+      "wall_not_refined",
+      "openings_not_checked"
+     ]
+    },
+    {
+     "id": "R1-W29",
+     "start": [
+      -7.3906,
+      4.0249
+     ],
+     "end": [
+      -7.747,
+      3.9842
+     ],
+     "length": {
+      "value": 0.3588,
+      "lo": 0.1198,
+      "hi": 0.6258,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.3384,
+     "flags": []
+    },
+    {
+     "id": "R1-W30",
+     "start": [
+      -7.747,
+      3.9842
+     ],
+     "end": [
+      -7.004,
+      -2.5278
+     ],
+     "length": {
+      "value": 6.5543,
+      "lo": 6.5074,
+      "hi": 13.8105,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.3738,
+     "flags": []
+    },
+    {
+     "id": "R1-W31",
+     "start": [
+      -7.004,
+      -2.5278
+     ],
+     "end": [
+      -5.1415,
+      -2.3153
+     ],
+     "length": {
+      "value": 1.8746,
+      "lo": 1.856,
+      "hi": 1.8931,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.6116,
+     "flags": [
+      "wall_slanted:1.2deg"
+     ]
+    },
+    {
+     "id": "R1-W32",
+     "start": [
+      -5.1415,
+      -2.3153
+     ],
+     "end": [
+      -5.044,
+      -3.1693
+     ],
+     "length": {
+      "value": 0.8595,
+      "lo": 0.8149,
+      "hi": 0.9042,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.7943,
+     "flags": [
+      "wall_slanted:1.1deg"
+     ]
+    },
+    {
+     "id": "R1-W33",
+     "start": [
+      -5.044,
+      -3.1693
+     ],
+     "end": [
+      -7.1553,
+      -3.4102
+     ],
+     "length": {
+      "value": 2.125,
+      "lo": 1.2674,
+      "hi": 6.4211,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.5968,
+     "flags": [
+      "wall_slanted:-6.6deg"
+     ]
+    },
+    {
+     "id": "R1-W34",
+     "start": [
+      -7.1553,
+      -3.4102
+     ],
+     "end": [
+      -7.0952,
+      -3.9373
+     ],
+     "length": {
+      "value": 0.5305,
+      "lo": 0.1323,
+      "hi": 2.5592,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.0108,
+     "flags": [
+      "wall_face_missing",
+      "wall_not_refined",
+      "wall_unobserved"
+     ]
+    },
+    {
+     "id": "R1-W35",
+     "start": [
+      -7.0952,
+      -3.9373
+     ],
+     "end": [
+      -6.8338,
+      -3.9075
+     ],
+     "length": {
+      "value": 0.263,
+      "lo": 0.0616,
+      "hi": 0.4645,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.0078,
+     "flags": [
+      "wall_face_sparse",
+      "wall_not_refined",
+      "wall_unobserved"
+     ]
+    },
+    {
+     "id": "R1-W36",
+     "start": [
+      -6.8338,
+      -3.9075
+     ],
+     "end": [
+      -6.7155,
+      -4.9444
+     ],
+     "length": {
+      "value": 1.0436,
+      "lo": 0.3723,
+      "hi": 3.169,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.3576,
+     "flags": [
+      "wall_slanted:1.2deg"
+     ]
+    },
+    {
+     "id": "R1-W37",
+     "start": [
+      -6.7155,
+      -4.9444
+     ],
+     "end": [
+      -6.2918,
+      -4.896
+     ],
+     "length": {
+      "value": 0.4264,
+      "lo": 0.4038,
+      "hi": 0.449,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.5607,
+     "flags": []
+    },
+    {
+     "id": "R1-W38",
+     "start": [
+      -6.2918,
+      -4.896
+     ],
+     "end": [
+      -6.2188,
+      -5.536
+     ],
+     "length": {
+      "value": 0.6441,
+      "lo": 0.3448,
+      "hi": 2.529,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.5386,
+     "flags": []
+    },
+    {
+     "id": "R1-W39",
+     "start": [
+      -6.2188,
+      -5.536
+     ],
+     "end": [
+      -6.9038,
+      -5.6141
+     ],
+     "length": {
+      "value": 0.6894,
+      "lo": 0.1765,
+      "hi": 1.2024,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.0475,
+     "flags": [
+      "wall_face_missing",
+      "wall_not_refined",
+      "wall_unobserved"
+     ]
+    },
+    {
+     "id": "R1-W40",
+     "start": [
+      -6.9038,
+      -5.6141
+     ],
+     "end": [
+      -6.8728,
+      -5.8861
+     ],
+     "length": {
+      "value": 0.2737,
+      "lo": 0.0,
+      "hi": 2.5474,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.0,
+     "flags": [
+      "wall_face_missing",
+      "wall_not_refined",
+      "wall_unobserved"
+     ]
+    },
+    {
+     "id": "R1-W41",
+     "start": [
+      -6.8728,
+      -5.8861
+     ],
+     "end": [
+      -5.5607,
+      -5.7364
+     ],
+     "length": {
+      "value": 1.3206,
+      "lo": 0.4583,
+      "hi": 4.0153,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.3482,
+     "flags": [
+      "wall_face_missing",
+      "wall_not_refined"
+     ]
+    },
+    {
+     "id": "R1-W42",
+     "start": [
+      -5.5607,
+      -5.7364
+     ],
+     "end": [
+      -5.5004,
+      -6.2643
+     ],
+     "length": {
+      "value": 0.5313,
+      "lo": 0.0,
+      "hi": 3.366,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.0,
+     "flags": [
+      "wall_face_missing",
+      "wall_not_refined",
+      "wall_unobserved"
+     ]
+    },
+    {
+     "id": "R1-W43",
+     "start": [
+      -5.5004,
+      -6.2643
+     ],
+     "end": [
+      -6.2073,
+      -6.3449
+     ],
+     "length": {
+      "value": 0.7114,
+      "lo": 0.0,
+      "hi": 1.4585,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.0,
+     "flags": [
+      "wall_face_missing",
+      "wall_not_refined",
+      "wall_unobserved"
+     ]
+    },
+    {
+     "id": "R1-W44",
+     "start": [
+      -6.2073,
+      -6.3449
+     ],
+     "end": [
+      -6.0122,
+      -8.0544
+     ],
+     "length": {
+      "value": 1.7205,
+      "lo": 0.4457,
+      "hi": 5.2222,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.1206,
+     "flags": [
+      "wall_face_sparse",
+      "wall_not_refined",
+      "openings_not_checked"
+     ]
+    },
+    {
+     "id": "R1-W45",
+     "start": [
+      -6.0122,
+      -8.0544
+     ],
+     "end": [
+      -6.4014,
+      -8.0988
+     ],
+     "length": {
+      "value": 0.3918,
+      "lo": 0.0985,
+      "hi": 0.685,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.185,
+     "flags": []
+    },
+    {
+     "id": "R1-W46",
+     "start": [
+      -6.4014,
+      -8.0988
+     ],
+     "end": [
+      -6.2815,
+      -9.1496
+     ],
+     "length": {
+      "value": 1.0577,
+      "lo": 1.0321,
+      "hi": 3.3395,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.6009,
+     "flags": []
+    },
+    {
+     "id": "R1-W47",
+     "start": [
+      -6.2815,
+      -9.1496
+     ],
+     "end": [
+      -3.518,
+      -8.8343
+     ],
+     "length": {
+      "value": 2.7815,
+      "lo": 2.7624,
+      "hi": 2.8005,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.619,
+     "flags": []
+    },
+    {
+     "id": "R1-W48",
+     "start": [
+      -3.518,
+      -8.8343
+     ],
+     "end": [
+      -3.4591,
+      -9.3502
+     ],
+     "length": {
+      "value": 0.5193,
+      "lo": 0.5059,
+      "hi": 0.5327,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 2.1766,
+      "hi": 4.0001,
+      "unit": "m"
+     },
+     "observed_fraction": 0.7203,
+     "flags": []
+    }
+   ],
+   "openings": [
+    {
+     "id": "R1-O1",
+     "type": "door",
+     "wall_id": "R1-W10",
+     "offset": {
+      "value": 0.9383,
+      "lo": 0.8985,
+      "hi": 0.978,
+      "unit": "m"
+     },
+     "width": {
+      "value": 0.5941,
+      "lo": 0.5545,
+      "hi": 0.6337,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.1992,
+      "lo": 1.8972,
+      "hi": 2.2401,
+      "unit": "m"
+     },
+     "sill": null,
+     "center": [
+      2.8975,
+      -4.2435
+     ],
+     "connects_to": null,
+     "confidence": 0.3528,
+     "flags": [
+      "raised_threshold"
+     ]
+    },
+    {
+     "id": "R1-O2",
+     "type": "window",
+     "wall_id": "R1-W21",
+     "offset": {
+      "value": 0.9141,
+      "lo": 0.8938,
+      "hi": 0.9343,
+      "unit": "m"
+     },
+     "width": {
+      "value": 0.3986,
+      "lo": 0.3787,
+      "hi": 0.4184,
+      "unit": "m"
+     },
+     "height": {
+      "value": 0.6677,
+      "lo": 0.6477,
+      "hi": 0.6877,
+      "unit": "m"
+     },
+     "sill": {
+      "value": 0.2623,
+      "lo": 0.2425,
+      "hi": 0.2821,
+      "unit": "m"
+     },
+     "center": [
+      -3.698,
+      -0.36
+     ],
+     "connects_to": null,
+     "confidence": 0.8661,
+     "flags": []
+    },
+    {
+     "id": "R1-O3",
+     "type": "window",
+     "wall_id": "R1-W24",
+     "offset": {
+      "value": 1.98,
+      "lo": 1.9347,
+      "hi": 2.0253,
+      "unit": "m"
+     },
+     "width": {
+      "value": 0.28,
+      "lo": 0.2358,
+      "hi": 0.3242,
+      "unit": "m"
+     },
+     "height": {
+      "value": 1.1183,
+      "lo": 1.0737,
+      "hi": 1.1628,
+      "unit": "m"
+     },
+     "sill": {
+      "value": 1.0809,
+      "lo": 1.0363,
+      "hi": 1.1254,
+      "unit": "m"
+     },
+     "center": [
+      -5.1946,
+      2.9346
+     ],
+     "connects_to": null,
+     "confidence": 0.6967,
+     "flags": [
+      "edge_unobserved:left",
+      "edge_unobserved:right"
+     ]
+    },
+    {
+     "id": "R1-O4",
+     "type": "window",
+     "wall_id": "R1-W27",
+     "offset": {
+      "value": 0.0531,
+      "lo": 0.0255,
+      "hi": 0.0807,
+      "unit": "m"
+     },
+     "width": {
+      "value": 0.5916,
+      "lo": 0.5638,
+      "hi": 0.6194,
+      "unit": "m"
+     },
+     "height": {
+      "value": 1.1141,
+      "lo": 1.086,
+      "hi": 1.1423,
+      "unit": "m"
+     },
+     "sill": {
+      "value": 1.085,
+      "lo": 1.0569,
+      "hi": 1.1132,
+      "unit": "m"
+     },
+     "center": [
+      -6.0026,
+      0.7834
+     ],
+     "connects_to": null,
+     "confidence": 0.9479,
+     "flags": []
+    }
+   ],
+   "surfaces": [
+    {
+     "id": "R1-W1",
+     "kind": "wall",
+     "wall_id": "R1-W1",
+     "area": {
+      "value": 2.5902,
+      "lo": 2.5323,
+      "hi": 4.7689,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W2",
+     "kind": "wall",
+     "wall_id": "R1-W2",
+     "area": {
+      "value": 8.5767,
+      "lo": 5.7417,
+      "hi": 47.062,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W3",
+     "kind": "wall",
+     "wall_id": "R1-W3",
+     "area": {
+      "value": 1.601,
+      "lo": 0.4064,
+      "hi": 13.0751,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W4",
+     "kind": "wall",
+     "wall_id": "R1-W4",
+     "area": {
+      "value": 1.7094,
+      "lo": 0.0,
+      "hi": 6.3726,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W5",
+     "kind": "wall",
+     "wall_id": "R1-W5",
+     "area": {
+      "value": 4.7087,
+      "lo": 0.0,
+      "hi": 25.9586,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W6",
+     "kind": "wall",
+     "wall_id": "R1-W6",
+     "area": {
+      "value": 1.5531,
+      "lo": 0.0,
+      "hi": 5.7913,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W7",
+     "kind": "wall",
+     "wall_id": "R1-W7",
+     "area": {
+      "value": 0.7618,
+      "lo": 0.185,
+      "hi": 13.0751,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W8",
+     "kind": "wall",
+     "wall_id": "R1-W8",
+     "area": {
+      "value": 1.5636,
+      "lo": 0.9869,
+      "hi": 8.669,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W9",
+     "kind": "wall",
+     "wall_id": "R1-W9",
+     "area": {
+      "value": 5.5009,
+      "lo": 5.3921,
+      "hi": 10.1015,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W10",
+     "kind": "wall",
+     "wall_id": "R1-W10",
+     "area": {
+      "value": 4.5706,
+      "lo": 1.9424,
+      "hi": 31.2288,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W11",
+     "kind": "wall",
+     "wall_id": "R1-W11",
+     "area": {
+      "value": 2.1284,
+      "lo": 0.5431,
+      "hi": 6.7802,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W12",
+     "kind": "wall",
+     "wall_id": "R1-W12",
+     "area": {
+      "value": 0.8271,
+      "lo": 0.2022,
+      "hi": 2.6369,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W13",
+     "kind": "wall",
+     "wall_id": "R1-W13",
+     "area": {
+      "value": 1.4845,
+      "lo": 0.5383,
+      "hi": 6.7506,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W14",
+     "kind": "wall",
+     "wall_id": "R1-W14",
+     "area": {
+      "value": 1.7393,
+      "lo": 1.6196,
+      "hi": 3.3509,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W15",
+     "kind": "wall",
+     "wall_id": "R1-W15",
+     "area": {
+      "value": 3.4352,
+      "lo": 1.9583,
+      "hi": 18.9273,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W16",
+     "kind": "wall",
+     "wall_id": "R1-W16",
+     "area": {
+      "value": 6.6018,
+      "lo": 6.4212,
+      "hi": 12.2151,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W17",
+     "kind": "wall",
+     "wall_id": "R1-W17",
+     "area": {
+      "value": 7.5877,
+      "lo": 7.4424,
+      "hi": 39.7958,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W18",
+     "kind": "wall",
+     "wall_id": "R1-W18",
+     "area": {
+      "value": 1.325,
+      "lo": 1.1664,
+      "hi": 2.6761,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W19",
+     "kind": "wall",
+     "wall_id": "R1-W19",
+     "area": {
+      "value": 3.2293,
+      "lo": 3.153,
+      "hi": 26.4011,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W20",
+     "kind": "wall",
+     "wall_id": "R1-W20",
+     "area": {
+      "value": 0.7805,
+      "lo": 0.6495,
+      "hi": 1.6456,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W21",
+     "kind": "wall",
+     "wall_id": "R1-W21",
+     "area": {
+      "value": 3.3498,
+      "lo": 3.2473,
+      "hi": 26.1558,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W22",
+     "kind": "wall",
+     "wall_id": "R1-W22",
+     "area": {
+      "value": 2.9095,
+      "lo": 2.8096,
+      "hi": 19.1241,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W23",
+     "kind": "wall",
+     "wall_id": "R1-W23",
+     "area": {
+      "value": 1.281,
+      "lo": 0.7942,
+      "hi": 3.2009,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W24",
+     "kind": "wall",
+     "wall_id": "R1-W24",
+     "area": {
+      "value": 7.2051,
+      "lo": 1.5548,
+      "hi": 41.0395,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W25",
+     "kind": "wall",
+     "wall_id": "R1-W25",
+     "area": {
+      "value": 1.5346,
+      "lo": 0.2568,
+      "hi": 5.1101,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W26",
+     "kind": "wall",
+     "wall_id": "R1-W26",
+     "area": {
+      "value": 7.3548,
+      "lo": 3.0603,
+      "hi": 40.4098,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W27",
+     "kind": "wall",
+     "wall_id": "R1-W27",
+     "area": {
+      "value": 2.3327,
+      "lo": 0.8028,
+      "hi": 15.8649,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W28",
+     "kind": "wall",
+     "wall_id": "R1-W28",
+     "area": {
+      "value": 7.4289,
+      "lo": 7.2409,
+      "hi": 40.8158,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W29",
+     "kind": "wall",
+     "wall_id": "R1-W29",
+     "area": {
+      "value": 0.7891,
+      "lo": 0.2608,
+      "hi": 2.5033,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W30",
+     "kind": "wall",
+     "wall_id": "R1-W30",
+     "area": {
+      "value": 14.4142,
+      "lo": 14.164,
+      "hi": 55.2434,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W31",
+     "kind": "wall",
+     "wall_id": "R1-W31",
+     "area": {
+      "value": 4.1226,
+      "lo": 4.0398,
+      "hi": 7.5726,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W32",
+     "kind": "wall",
+     "wall_id": "R1-W32",
+     "area": {
+      "value": 1.8902,
+      "lo": 1.7737,
+      "hi": 3.6169,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W33",
+     "kind": "wall",
+     "wall_id": "R1-W33",
+     "area": {
+      "value": 4.6733,
+      "lo": 2.7586,
+      "hi": 25.685,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W34",
+     "kind": "wall",
+     "wall_id": "R1-W34",
+     "area": {
+      "value": 1.1667,
+      "lo": 0.288,
+      "hi": 10.2371,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W35",
+     "kind": "wall",
+     "wall_id": "R1-W35",
+     "area": {
+      "value": 0.5784,
+      "lo": 0.1341,
+      "hi": 1.858,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W36",
+     "kind": "wall",
+     "wall_id": "R1-W36",
+     "area": {
+      "value": 2.2951,
+      "lo": 0.8103,
+      "hi": 12.6763,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W37",
+     "kind": "wall",
+     "wall_id": "R1-W37",
+     "area": {
+      "value": 0.9377,
+      "lo": 0.8789,
+      "hi": 1.796,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W38",
+     "kind": "wall",
+     "wall_id": "R1-W38",
+     "area": {
+      "value": 1.4165,
+      "lo": 0.7505,
+      "hi": 10.1163,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W39",
+     "kind": "wall",
+     "wall_id": "R1-W39",
+     "area": {
+      "value": 1.5161,
+      "lo": 0.3842,
+      "hi": 4.8097,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W40",
+     "kind": "wall",
+     "wall_id": "R1-W40",
+     "area": {
+      "value": 0.6019,
+      "lo": 0.0,
+      "hi": 10.1899,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W41",
+     "kind": "wall",
+     "wall_id": "R1-W41",
+     "area": {
+      "value": 2.9043,
+      "lo": 0.9975,
+      "hi": 16.0616,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W42",
+     "kind": "wall",
+     "wall_id": "R1-W42",
+     "area": {
+      "value": 1.1684,
+      "lo": 0.0,
+      "hi": 13.4643,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W43",
+     "kind": "wall",
+     "wall_id": "R1-W43",
+     "area": {
+      "value": 1.5645,
+      "lo": 0.0,
+      "hi": 5.8341,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W44",
+     "kind": "wall",
+     "wall_id": "R1-W44",
+     "area": {
+      "value": 3.7837,
+      "lo": 0.9701,
+      "hi": 20.8893,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W45",
+     "kind": "wall",
+     "wall_id": "R1-W45",
+     "area": {
+      "value": 0.8616,
+      "lo": 0.2144,
+      "hi": 2.7401,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W46",
+     "kind": "wall",
+     "wall_id": "R1-W46",
+     "area": {
+      "value": 2.3261,
+      "lo": 2.2465,
+      "hi": 13.3583,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W47",
+     "kind": "wall",
+     "wall_id": "R1-W47",
+     "area": {
+      "value": 6.1171,
+      "lo": 6.0126,
+      "hi": 11.2023,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W48",
+     "kind": "wall",
+     "wall_id": "R1-W48",
+     "area": {
+      "value": 1.142,
+      "lo": 1.1011,
+      "hi": 2.1309,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-FLOOR",
+     "kind": "floor",
+     "wall_id": null,
+     "area": {
+      "value": 70.3307,
+      "lo": 53.6307,
+      "hi": 152.6229,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-CEIL",
+     "kind": "ceiling",
+     "wall_id": null,
+     "area": {
+      "value": 70.3307,
+      "lo": 53.6307,
+      "hi": 152.6229,
+      "unit": "m2"
+     }
+    }
+   ],
+   "flags": [
+    "holes_filled:1.89",
+    "intervals_widened:ceiling_not_observed",
+    "intervals_widened:opening_head_unobserved",
+    "intervals_widened:wall_end_sparse",
+    "intervals_widened:wall_end_step",
+    "intervals_widened:wall_end_unobserved",
+    "intervals_widened:wall_fragment",
+    "intervals_widened:wall_unobserved"
+   ]
+  }
+ ],
+ "damage": [
+  {
+   "id": "D1",
+   "room_id": "R1",
+   "surface_id": "R1-W33",
+   "class": "crack",
+   "score": 0.4333,
+   "area": {
+    "value": 0.0151,
+    "lo": 0.0,
+    "hi": 0.078,
+    "unit": "m2"
+   },
+   "width": {
+    "value": 0.1904,
+    "lo": 0.1575,
+    "hi": 0.2233,
+    "unit": "m"
+   },
+   "height": {
+    "value": 0.7667,
+    "lo": 0.7336,
+    "hi": 0.7998,
+    "unit": "m"
+   },
+   "length": {
+    "value": 0.7667,
+    "lo": 0.7336,
+    "hi": 0.7998,
+    "unit": "m"
+   },
+   "u_range": [
+    1.8741,
+    2.0645
+   ],
+   "v_range": [
+    0.9734,
+    1.7401
+   ],
+   "view_ids": [
+    "F002876",
+    "F002851"
+   ]
+  }
+ ],
+ "concealed_damage_flags": [],
+ "scope": [
+  {
+   "id": "L1",
+   "room_id": "R1",
+   "surface_id": "R1-W33",
+   "category": "DRY",
+   "selector": "TAPE",
+   "activity": "+",
+   "description": "Tape, float and texture drywall crack",
+   "quantity": {
+    "value": 3.0076,
+    "lo": 2.899,
+    "hi": 3.1163,
+    "unit": "LF"
+   },
+   "unit": "LF",
+   "damage_ids": [
+    "D1"
+   ],
+   "flag_ids": [],
+   "rule_id": null
+  },
+  {
+   "id": "L2",
+   "room_id": "R1",
+   "surface_id": "R1-W33",
+   "category": "PNT",
+   "selector": "P",
+   "activity": "+",
+   "description": "Paint the whole surface, two coats",
+   "quantity": {
+    "value": 50.301,
+    "lo": 29.6936,
+    "hi": 276.4725,
+    "unit": "SF"
+   },
+   "unit": "SF",
+   "damage_ids": [
+    "D1"
+   ],
+   "flag_ids": [],
+   "rule_id": null
+  }
+ ],
+ "timing": {
+  "total_s": 225.65,
+  "stages": {
+   "ingest": 0.149,
+   "geometry": 14.314,
+   "layout": 2.294,
+   "semantics": 208.815,
+   "rules": 0.004,
+   "uncertainty": 0.004,
+   "scope": 0.005
+  }
+ },
+ "provenance": {
+  "pipeline_version": "0.1.0",
+  "git_commit": "5b09a11af9c1ed269c32c161f4a1e4d38dd31cca",
+  "models": [
+   {
+    "name": "facebook/map-anything-apache",
+    "revision": "00f9c245bbcb60522d1ed7f9e9d88462c6e3f38a",
+    "license": "Apache-2.0"
+   },
+   {
+    "name": "IDEA-Research/grounding-dino-tiny",
+    "revision": "a2bb814dd30d776dcf7e30523b00659f4f141c71",
+    "license": "Apache-2.0"
+   },
+   {
+    "name": "facebook/sam2.1-hiera-small",
+    "revision": "ee5bba1d82bb8749febdf90f45e84b687142ba03",
+    "license": "Apache-2.0"
+   }
+  ],
+  "cache_mode": "live",
+  "device": "mps"
+ }
+}

@@ -996,5 +996,5 @@
   "video": "both",
   "lidar": "n.a."
  },
- "config": "/Users/rsabhay/code/scan2scope/bench/gates.yaml"
+ "config": "bench/gates.yaml"
 }

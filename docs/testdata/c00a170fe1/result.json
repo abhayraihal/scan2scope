@@ -1,0 +1,1050 @@
+{
+ "schema_version": "1.0.0",
+ "capture": {
+  "id": "c00a170fe1",
+  "tier": "lidar",
+  "path": "testdata/c00a170fe1",
+  "device": {
+   "app": "Stray Scanner",
+   "make": null,
+   "model": null,
+   "source": "stray"
+  },
+  "input_stats": {
+   "lidar_frames": 1715,
+   "odometry_rows": 1715,
+   "depth_frames": 1715,
+   "confidence_frames": 1715,
+   "duration_s": 37.172,
+   "rgb_video": true,
+   "camera_matrix": true,
+   "imu": true,
+   "rgb_width": 1920,
+   "rgb_height": 1440,
+   "rgb_fps": 46.123,
+   "rgb_frames": 1715
+  },
+  "flags": [
+   "semantics_surface_evidence_dropped:9",
+   "semantics_single_view_dropped:21"
+  ]
+ },
+ "conventions": {
+  "units": {
+   "length": "m",
+   "area": "m2",
+   "plan": "x and y in metres in the capture's world frame, z up; room polygons counter-clockwise",
+   "scope_quantity": "the unit named on each line item (SF, LF, EA, m2 or m)",
+   "score": "detector score in [0, 1] after cross-view merge, not a calibrated probability"
+  },
+  "interval": {
+   "level": 0.9,
+   "method": "lidar tier error model. Lengths: sigma = sqrt((v*s)^2 + a^2) with a scale term s = 0.003 shared by every measurement (the larger of the tier floor and the geometry's estimate, with the scale spread across video chunks or the scale error of a rejected loop closure) and additive terms a = 0.008 m (walls), 0.006 m (heights), 0.012 m (openings), 0.020 m (damage), inflated for thin evidence on the measurement and on a wall's two end walls (low observed fraction, few face points, fit residuals in quadrature, low light, fewer than 4 photos or views, missing focal length). A wall ending at a wall with no face of its own may run on by 0.15 of the room's extent along it (at most 3 times the wall's length) and is no shorter than the part of its face that was seen. A wall ending at an unobserved wall or a step (shorter than 0.50 m, or shorter than 1.00 m and low) may be a fragment: its upper bound reaches the pieces beyond the step or the room's extent along the wall. Heights add a vertical term of 0.00 (log); an unobserved floor or ceiling widens the upper side by z*0.50 m, an unobserved ceiling up to 4.0 m; a door with no head edge found reaches down to 1.90 m. Areas: sqrt((2*A*s)^2 + (sum of L_i*a_i)^2) plus unobserved wall positions, and upward to the bounding box when a wall may be a fragment. Footprint: scale term fully correlated across rooms plus independent per-room terms; unplaced rooms widen footprint and extents 1.5x. Interval = value - z*q*sigma to value + z*q*sigma_hi with z = 1.645, the one-sided terms widening only their side, lo clipped at 0; q = 1.00, prior value: not calibrated, this tier has fewer than 9 ground-truth rooms. Wall surface areas combine the length, height and opening intervals by interval arithmetic.",
+   "q": 1.0,
+   "calibration": "prior"
+  },
+  "definitions": {
+   "wall_length": "face to face at 1 m height between the two neighbouring walls, along the room polygon edge",
+   "wall_height": "floor plane to ceiling plane distance at the wall",
+   "ceiling_height": "floor plane to ceiling plane distance inside the room",
+   "opening_width": "clear width between the jamb faces",
+   "opening_height": "floor to the underside of the head for doors and passages; inside the frame for windows",
+   "opening_offset": "along the wall, from the wall start to the near jamb of the opening",
+   "sill": "floor to the window sill",
+   "floor_area": "polygon area of the interior wall faces",
+   "perimeter": "sum of the room's wall lengths",
+   "wall_surface_area": "wall length times wall height minus the areas of the openings in that wall",
+   "ceiling_surface_area": "equal to the floor area (flat ceiling assumed)",
+   "footprint": "sum of the room floor areas; walls between rooms are not included",
+   "extent": "size of the bounding box of all room polygons along plan x and plan y",
+   "damage_extent": "width along the surface u axis and height along v of the damage region; area of its mask projected onto the surface; walls use u from the wall start and v from the floor, floors and ceilings use plan x and y"
+  }
+ },
+ "property": {
+  "footprint_area": {
+   "value": 24.3824,
+   "lo": 18.2045,
+   "hi": 53.6111,
+   "unit": "m2"
+  },
+  "extent_x": {
+   "value": 7.8245,
+   "lo": 7.7837,
+   "hi": 7.8653,
+   "unit": "m"
+  },
+  "extent_y": {
+   "value": 6.0605,
+   "lo": 6.0278,
+   "hi": 6.0932,
+   "unit": "m"
+  },
+  "adjacency": [],
+  "drift_correction": {
+   "enabled": true,
+   "segments": 13,
+   "loop_closures_tried": 3,
+   "loop_closures_accepted": 1,
+   "max_translation_correction_m": 0.1109,
+   "max_yaw_correction_deg": 0.496,
+   "floor_z_spread_before_m": 0.0488,
+   "floor_z_spread_after_m": 0.0117,
+   "stages": {
+    "loop_closure": true,
+    "plane_anchoring": true,
+    "manhattan_anchoring": true
+   },
+   "loop_closures": [
+    {
+     "round": 1,
+     "segments": [
+      4,
+      12
+     ],
+     "screen_overlap": 0.552,
+     "rmse_m": 0.0078,
+     "overlap": 0.467,
+     "shift_m": 0.091,
+     "yaw_deg": 0.967,
+     "dof": 6,
+     "accepted": true,
+     "reason": null
+    },
+    {
+     "round": 1,
+     "segments": [
+      0,
+      12
+     ],
+     "screen_overlap": 0.0,
+     "rmse_m": null,
+     "overlap": 0.0,
+     "shift_m": 0.0,
+     "yaw_deg": 0.0,
+     "dof": 0,
+     "accepted": false,
+     "reason": "rmse"
+    },
+    {
+     "round": 2,
+     "segments": [
+      0,
+      12
+     ],
+     "screen_overlap": 0.0,
+     "rmse_m": null,
+     "overlap": 0.0,
+     "shift_m": 0.0,
+     "yaw_deg": 0.0,
+     "dof": 0,
+     "accepted": false,
+     "reason": "rmse"
+    }
+   ],
+   "flags": [],
+   "plane_anchoring": {
+    "floor_z_m": -1.4839,
+    "segments_anchored": 13,
+    "segments_tilt_corrected": 5,
+    "max_tilt_deg": 1.171
+   },
+   "manhattan_anchoring": {
+    "global_angle_deg": 67.278,
+    "concentration": 0.73,
+    "segments_snapped": 12
+   }
+  },
+  "stitch": null,
+  "flags": [
+   "ceiling_not_observed"
+  ]
+ },
+ "rooms": [
+  {
+   "id": "R1",
+   "label": "Room 1",
+   "source_hint": null,
+   "polygon": [
+    [
+     -2.0512,
+     -4.4821
+    ],
+    [
+     0.283,
+     -5.4593
+    ],
+    [
+     2.6052,
+     0.087
+    ],
+    [
+     0.9667,
+     0.773
+    ],
+    [
+     0.6489,
+     0.0139
+    ],
+    [
+     0.1838,
+     0.2086
+    ],
+    [
+     0.5201,
+     1.0117
+    ],
+    [
+     0.2811,
+     1.1117
+    ],
+    [
+     -0.0558,
+     0.307
+    ],
+    [
+     -0.5973,
+     0.5338
+    ],
+    [
+     -1.4288,
+     -1.4521
+    ],
+    [
+     -4.4841,
+     -0.1729
+    ],
+    [
+     -4.8767,
+     -1.1106
+    ],
+    [
+     -6.1548,
+     -0.5755
+    ],
+    [
+     -6.4689,
+     -1.3257
+    ],
+    [
+     -1.5856,
+     -3.3702
+    ]
+   ],
+   "floor_area": {
+    "value": 24.3824,
+    "lo": 18.2045,
+    "hi": 53.6111,
+    "unit": "m2"
+   },
+   "perimeter": {
+    "value": 29.4159,
+    "lo": 26.5932,
+    "hi": 38.854,
+    "unit": "m"
+   },
+   "ceiling_height": {
+    "value": 2.5016,
+    "lo": 2.4784,
+    "hi": 4.0002,
+    "unit": "m"
+   },
+   "walls": [
+    {
+     "id": "R1-W1",
+     "start": [
+      -2.0512,
+      -4.4821
+     ],
+     "end": [
+      0.283,
+      -5.4593
+     ],
+     "length": {
+      "value": 2.5305,
+      "lo": 2.5029,
+      "hi": 2.5581,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.5016,
+      "lo": 2.4784,
+      "hi": 4.0002,
+      "unit": "m"
+     },
+     "observed_fraction": 0.5502,
+     "flags": []
+    },
+    {
+     "id": "R1-W2",
+     "start": [
+      0.283,
+      -5.4593
+     ],
+     "end": [
+      2.6052,
+      0.087
+     ],
+     "length": {
+      "value": 6.0129,
+      "lo": 5.9678,
+      "hi": 6.058,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.5016,
+      "lo": 2.4784,
+      "hi": 4.0002,
+      "unit": "m"
+     },
+     "observed_fraction": 0.4582,
+     "flags": []
+    },
+    {
+     "id": "R1-W3",
+     "start": [
+      2.6052,
+      0.087
+     ],
+     "end": [
+      0.9667,
+      0.773
+     ],
+     "length": {
+      "value": 1.7763,
+      "lo": 0.7421,
+      "hi": 5.3738,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.5016,
+      "lo": 2.4784,
+      "hi": 4.0002,
+      "unit": "m"
+     },
+     "observed_fraction": 0.4181,
+     "flags": []
+    },
+    {
+     "id": "R1-W4",
+     "start": [
+      0.9667,
+      0.773
+     ],
+     "end": [
+      0.6489,
+      0.0139
+     ],
+     "length": {
+      "value": 0.823,
+      "lo": 0.2112,
+      "hi": 1.4348,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.5016,
+      "lo": 2.4784,
+      "hi": 4.0002,
+      "unit": "m"
+     },
+     "observed_fraction": 0.1136,
+     "flags": [
+      "wall_face_sparse",
+      "wall_not_refined"
+     ]
+    },
+    {
+     "id": "R1-W5",
+     "start": [
+      0.6489,
+      0.0139
+     ],
+     "end": [
+      0.1838,
+      0.2086
+     ],
+     "length": {
+      "value": 0.5042,
+      "lo": 0.0,
+      "hi": 2.3337,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.5016,
+      "lo": 2.4784,
+      "hi": 4.0002,
+      "unit": "m"
+     },
+     "observed_fraction": 0.0,
+     "flags": [
+      "wall_face_missing",
+      "wall_not_refined",
+      "wall_unobserved"
+     ]
+    },
+    {
+     "id": "R1-W6",
+     "start": [
+      0.1838,
+      0.2086
+     ],
+     "end": [
+      0.5201,
+      1.0117
+     ],
+     "length": {
+      "value": 0.8706,
+      "lo": 0.7535,
+      "hi": 2.6504,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.5016,
+      "lo": 2.4784,
+      "hi": 4.0002,
+      "unit": "m"
+     },
+     "observed_fraction": 0.8723,
+     "flags": [
+      "wall_face_missing",
+      "wall_not_refined",
+      "openings_not_checked"
+     ]
+    },
+    {
+     "id": "R1-W7",
+     "start": [
+      0.5201,
+      1.0117
+     ],
+     "end": [
+      0.2811,
+      1.1117
+     ],
+     "length": {
+      "value": 0.259,
+      "lo": 0.0828,
+      "hi": 0.8821,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.5016,
+      "lo": 2.4784,
+      "hi": 4.0002,
+      "unit": "m"
+     },
+     "observed_fraction": 0.3339,
+     "flags": []
+    },
+    {
+     "id": "R1-W8",
+     "start": [
+      0.2811,
+      1.1117
+     ],
+     "end": [
+      -0.0558,
+      0.307
+     ],
+     "length": {
+      "value": 0.8723,
+      "lo": 0.8281,
+      "hi": 3.0718,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.5016,
+      "lo": 2.4784,
+      "hi": 4.0002,
+      "unit": "m"
+     },
+     "observed_fraction": 0.0011,
+     "flags": [
+      "wall_face_missing",
+      "wall_not_refined",
+      "wall_unobserved"
+     ]
+    },
+    {
+     "id": "R1-W9",
+     "start": [
+      -0.0558,
+      0.307
+     ],
+     "end": [
+      -0.5973,
+      0.5338
+     ],
+     "length": {
+      "value": 0.5871,
+      "lo": 0.2444,
+      "hi": 1.0745,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.5016,
+      "lo": 2.4784,
+      "hi": 4.0002,
+      "unit": "m"
+     },
+     "observed_fraction": 0.4198,
+     "flags": []
+    },
+    {
+     "id": "R1-W10",
+     "start": [
+      -0.5973,
+      0.5338
+     ],
+     "end": [
+      -1.4288,
+      -1.4521
+     ],
+     "length": {
+      "value": 2.153,
+      "lo": 0.657,
+      "hi": 6.1102,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.5016,
+      "lo": 2.4784,
+      "hi": 4.0002,
+      "unit": "m"
+     },
+     "observed_fraction": 0.0987,
+     "flags": [
+      "wall_slanted:-2.2deg"
+     ]
+    },
+    {
+     "id": "R1-W11",
+     "start": [
+      -1.4288,
+      -1.4521
+     ],
+     "end": [
+      -4.4841,
+      -0.1729
+     ],
+     "length": {
+      "value": 3.3123,
+      "lo": 2.3457,
+      "hi": 7.8847,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.5016,
+      "lo": 2.4784,
+      "hi": 4.0002,
+      "unit": "m"
+     },
+     "observed_fraction": 0.0395,
+     "flags": [
+      "wall_face_sparse",
+      "wall_not_refined"
+     ]
+    },
+    {
+     "id": "R1-W12",
+     "start": [
+      -4.4841,
+      -0.1729
+     ],
+     "end": [
+      -4.8767,
+      -1.1106
+     ],
+     "length": {
+      "value": 1.0166,
+      "lo": 0.3401,
+      "hi": 3.0963,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.5016,
+      "lo": 2.4784,
+      "hi": 4.0002,
+      "unit": "m"
+     },
+     "observed_fraction": 0.336,
+     "flags": []
+    },
+    {
+     "id": "R1-W13",
+     "start": [
+      -4.8767,
+      -1.1106
+     ],
+     "end": [
+      -6.1548,
+      -0.5755
+     ],
+     "length": {
+      "value": 1.3856,
+      "lo": 1.3408,
+      "hi": 4.2056,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.5016,
+      "lo": 2.4784,
+      "hi": 4.0002,
+      "unit": "m"
+     },
+     "observed_fraction": 0.0,
+     "flags": [
+      "wall_face_missing",
+      "wall_not_refined",
+      "wall_unobserved"
+     ]
+    },
+    {
+     "id": "R1-W14",
+     "start": [
+      -6.1548,
+      -0.5755
+     ],
+     "end": [
+      -6.4689,
+      -1.3257
+     ],
+     "length": {
+      "value": 0.8133,
+      "lo": 0.3838,
+      "hi": 1.4163,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.5016,
+      "lo": 2.4784,
+      "hi": 4.0002,
+      "unit": "m"
+     },
+     "observed_fraction": 0.4737,
+     "flags": []
+    },
+    {
+     "id": "R1-W15",
+     "start": [
+      -6.4689,
+      -1.3257
+     ],
+     "end": [
+      -1.5856,
+      -3.3702
+     ],
+     "length": {
+      "value": 5.294,
+      "lo": 5.2595,
+      "hi": 7.8692,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.5016,
+      "lo": 2.4784,
+      "hi": 4.0002,
+      "unit": "m"
+     },
+     "observed_fraction": 0.3809,
+     "flags": []
+    },
+    {
+     "id": "R1-W16",
+     "start": [
+      -1.5856,
+      -3.3702
+     ],
+     "end": [
+      -2.0512,
+      -4.4821
+     ],
+     "length": {
+      "value": 1.2054,
+      "lo": 1.1783,
+      "hi": 1.2324,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.5016,
+      "lo": 2.4784,
+      "hi": 4.0002,
+      "unit": "m"
+     },
+     "observed_fraction": 0.5947,
+     "flags": []
+    }
+   ],
+   "openings": [
+    {
+     "id": "R1-O1",
+     "type": "opening",
+     "wall_id": "R1-W15",
+     "offset": {
+      "value": 1.34,
+      "lo": 1.3,
+      "hi": 1.38,
+      "unit": "m"
+     },
+     "width": {
+      "value": 0.85,
+      "lo": 0.8103,
+      "hi": 0.8897,
+      "unit": "m"
+     },
+     "height": {
+      "value": 2.5016,
+      "lo": 1.8986,
+      "hi": 2.543,
+      "unit": "m"
+     },
+     "sill": null,
+     "center": [
+      -4.8408,
+      -2.0073
+     ],
+     "connects_to": null,
+     "confidence": 0.6762,
+     "flags": [
+      "edge_unobserved:left"
+     ]
+    }
+   ],
+   "surfaces": [
+    {
+     "id": "R1-W1",
+     "kind": "wall",
+     "wall_id": "R1-W1",
+     "area": {
+      "value": 6.3303,
+      "lo": 6.2032,
+      "hi": 10.2329,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W2",
+     "kind": "wall",
+     "wall_id": "R1-W2",
+     "area": {
+      "value": 15.0419,
+      "lo": 14.7906,
+      "hi": 24.2332,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W3",
+     "kind": "wall",
+     "wall_id": "R1-W3",
+     "area": {
+      "value": 4.4436,
+      "lo": 1.8392,
+      "hi": 21.4963,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W4",
+     "kind": "wall",
+     "wall_id": "R1-W4",
+     "area": {
+      "value": 2.0588,
+      "lo": 0.5234,
+      "hi": 5.7395,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W5",
+     "kind": "wall",
+     "wall_id": "R1-W5",
+     "area": {
+      "value": 1.2613,
+      "lo": 0.0,
+      "hi": 9.3353,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W6",
+     "kind": "wall",
+     "wall_id": "R1-W6",
+     "area": {
+      "value": 2.1779,
+      "lo": 1.8675,
+      "hi": 10.6021,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W7",
+     "kind": "wall",
+     "wall_id": "R1-W7",
+     "area": {
+      "value": 0.6479,
+      "lo": 0.2052,
+      "hi": 3.5286,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W8",
+     "kind": "wall",
+     "wall_id": "R1-W8",
+     "area": {
+      "value": 2.1821,
+      "lo": 2.0524,
+      "hi": 12.2878,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W9",
+     "kind": "wall",
+     "wall_id": "R1-W9",
+     "area": {
+      "value": 1.4687,
+      "lo": 0.6057,
+      "hi": 4.2982,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W10",
+     "kind": "wall",
+     "wall_id": "R1-W10",
+     "area": {
+      "value": 5.3859,
+      "lo": 1.6283,
+      "hi": 24.442,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W11",
+     "kind": "wall",
+     "wall_id": "R1-W11",
+     "area": {
+      "value": 8.286,
+      "lo": 5.8136,
+      "hi": 31.5404,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W12",
+     "kind": "wall",
+     "wall_id": "R1-W12",
+     "area": {
+      "value": 2.5431,
+      "lo": 0.8429,
+      "hi": 12.3858,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W13",
+     "kind": "wall",
+     "wall_id": "R1-W13",
+     "area": {
+      "value": 3.4662,
+      "lo": 3.323,
+      "hi": 16.8232,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W14",
+     "kind": "wall",
+     "wall_id": "R1-W14",
+     "area": {
+      "value": 2.0346,
+      "lo": 0.9512,
+      "hi": 5.6655,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W15",
+     "kind": "wall",
+     "wall_id": "R1-W15",
+     "area": {
+      "value": 11.1171,
+      "lo": 10.7726,
+      "hi": 29.9399,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-W16",
+     "kind": "wall",
+     "wall_id": "R1-W16",
+     "area": {
+      "value": 3.0154,
+      "lo": 2.9203,
+      "hi": 4.9298,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-FLOOR",
+     "kind": "floor",
+     "wall_id": null,
+     "area": {
+      "value": 24.3824,
+      "lo": 18.2045,
+      "hi": 53.6111,
+      "unit": "m2"
+     }
+    },
+    {
+     "id": "R1-CEIL",
+     "kind": "ceiling",
+     "wall_id": null,
+     "area": {
+      "value": 24.3824,
+      "lo": 18.2045,
+      "hi": 53.6111,
+      "unit": "m2"
+     }
+    }
+   ],
+   "flags": [
+    "holes_filled:1.52",
+    "ceiling_assumed",
+    "intervals_widened:ceiling_not_observed",
+    "intervals_widened:opening_head_unobserved",
+    "intervals_widened:wall_end_sparse",
+    "intervals_widened:wall_end_step",
+    "intervals_widened:wall_end_unobserved",
+    "intervals_widened:wall_fragment",
+    "intervals_widened:wall_unobserved"
+   ]
+  }
+ ],
+ "damage": [
+  {
+   "id": "D1",
+   "room_id": "R1",
+   "surface_id": "R1-W1",
+   "class": "crack",
+   "score": 0.4111,
+   "area": {
+    "value": 0.0027,
+    "lo": 0.0,
+    "hi": 0.0241,
+    "unit": "m2"
+   },
+   "width": {
+    "value": 0.2528,
+    "lo": 0.2198,
+    "hi": 0.2857,
+    "unit": "m"
+   },
+   "height": {
+    "value": 0.0724,
+    "lo": 0.0395,
+    "hi": 0.1053,
+    "unit": "m"
+   },
+   "length": {
+    "value": 0.253,
+    "lo": 0.2201,
+    "hi": 0.286,
+    "unit": "m"
+   },
+   "u_range": [
+    0.0093,
+    0.267
+   ],
+   "v_range": [
+    0.6813,
+    0.7562
+   ],
+   "view_ids": [
+    "F001327",
+    "F001339"
+   ]
+  }
+ ],
+ "concealed_damage_flags": [],
+ "scope": [
+  {
+   "id": "L1",
+   "room_id": "R1",
+   "surface_id": "R1-W1",
+   "category": "DRY",
+   "selector": "TAPE",
+   "activity": "+",
+   "description": "Tape, float and texture drywall crack",
+   "quantity": {
+    "value": 1.3223,
+    "lo": 1.2143,
+    "hi": 1.4303,
+    "unit": "LF"
+   },
+   "unit": "LF",
+   "damage_ids": [
+    "D1"
+   ],
+   "flag_ids": [],
+   "rule_id": null
+  },
+  {
+   "id": "L2",
+   "room_id": "R1",
+   "surface_id": "R1-W1",
+   "category": "PNT",
+   "selector": "P",
+   "activity": "+",
+   "description": "Paint the whole surface, two coats",
+   "quantity": {
+    "value": 68.1396,
+    "lo": 66.7687,
+    "hi": 110.1455,
+    "unit": "SF"
+   },
+   "unit": "SF",
+   "damage_ids": [
+    "D1"
+   ],
+   "flag_ids": [],
+   "rule_id": null
+  }
+ ],
+ "timing": {
+  "total_s": 202.586,
+  "stages": {
+   "ingest": 0.139,
+   "geometry": 6.605,
+   "layout": 1.396,
+   "semantics": 194.279,
+   "rules": 0.005,
+   "uncertainty": 0.004,
+   "scope": 0.005
+  }
+ },
+ "provenance": {
+  "pipeline_version": "0.1.0",
+  "git_commit": "5b09a11af9c1ed269c32c161f4a1e4d38dd31cca",
+  "models": [
+   {
+    "name": "facebook/map-anything-apache",
+    "revision": "00f9c245bbcb60522d1ed7f9e9d88462c6e3f38a",
+    "license": "Apache-2.0"
+   },
+   {
+    "name": "IDEA-Research/grounding-dino-tiny",
+    "revision": "a2bb814dd30d776dcf7e30523b00659f4f141c71",
+    "license": "Apache-2.0"
+   },
+   {
+    "name": "facebook/sam2.1-hiera-small",
+    "revision": "ee5bba1d82bb8749febdf90f45e84b687142ba03",
+    "license": "Apache-2.0"
+   }
+  ],
+  "cache_mode": "live",
+  "device": "mps"
+ }
+}

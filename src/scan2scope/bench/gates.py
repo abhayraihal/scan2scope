@@ -433,7 +433,7 @@ def evaluate(metrics: list[dict[str, Any]], repeat: dict[str, Any] | None, ablat
     ranked = sorted((r for r in rows if r["status"] == "fail"), key=lambda r: -r["score"])
     keys = ("gate", "tier", "score", "shortfall", "measured_text", "threshold")
     return {"rows": rows, "ranked_failures": [{k: r[k] for k in keys} for r in ranked], "calibration": cal,
-            "ceiling_mode": modes, "config": cfg.get("_path")}
+            "ceiling_mode": modes, "config": _display_path(cfg.get("_path"))}
 
 
 def _synthetic_label(ms: list[dict[str, Any]]) -> str:
@@ -554,3 +554,18 @@ def h2h_gate(tier: str, h2h: dict[str, Any], cfg: dict[str, Any]) -> dict[str, A
                measured_text=f"{k}/{len(dims)} dimensions beat or tie ({_pct(share)}) over "
                              f"{', '.join(sorted({c['capture'] for c in comps}))}")
     return row
+
+
+def _display_path(path: object) -> object:
+    """Repo- or cwd-relative form of a path for reports, so they carry no machine-specific prefix."""
+    if not path:
+        return path
+    from pathlib import Path
+
+    p = Path(str(path)).resolve()
+    for base in (Path.cwd().resolve(), Path(__file__).resolve().parents[3]):
+        try:
+            return str(p.relative_to(base))
+        except ValueError:
+            continue
+    return p.name
